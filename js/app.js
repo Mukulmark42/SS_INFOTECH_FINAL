@@ -1525,6 +1525,7 @@ const App = (() => {
     _renderSlipCompanies();
     _populateDynamicDropdowns();
     updateProjectStorageStats();
+    _initSupabaseUI();
   }
 
   function saveAdminConfig() {
@@ -1666,6 +1667,241 @@ const App = (() => {
       input.value = '';
     };
     reader.readAsText(file);
+  }
+
+  // ── Supabase Cloud Sync Handlers ────────────────────────────
+  let _supabaseEventBound = false;
+
+  async function _initSupabaseUI() {
+    if (typeof SupabaseSync === 'undefined') return;
+    const cfg = SupabaseSync.getConfig();
+    _setVal('supabase-url', cfg.url || '');
+    _setVal('supabase-key', cfg.anonKey || '');
+    _setVal('supabase-table', cfg.tableName || 'ssinfotech_backups');
+    const autoSyncEl = document.getElementById('supabase-autosync');
+    if (autoSyncEl) autoSyncEl.checked = cfg.autoSync !== false;
+
+    // Listen for background auto-sync events
+    if (!_supabaseEventBound && typeof window !== 'undefined') {
+      window.addEventListener('supabase:synced', (e) => {
+        const lastSyncEl = document.getElementById('cloud-last-sync-text');
+        if (lastSyncEl) {
+          const d = new Date().toLocaleTimeString('en-IN');
+          lastSyncEl.innerHTML = `Last Sync: <strong class="text-success">${d} (Auto)</strong>`;
+        }
+      });
+      _supabaseEventBound = true;
+    }
+
+    const lastSyncEl = document.getElementById('cloud-last-sync-text');
+    if (lastSyncEl) {
+      if (cfg.lastSyncAt) {
+        const d = new Date(cfg.lastSyncAt).toLocaleString('en-IN');
+        lastSyncEl.innerHTML = `Last Sync: <strong class="text-success">${d}</strong>`;
+      } else {
+        lastSyncEl.textContent = 'Last Sync: Never';
+      }
+    }
+
+    _updateSupabaseBadge({ status: 'checking', message: 'Checking Cloud Status...' });
+
+    // Test connection asynchronously
+    const res = await SupabaseSync.testConnection();
+    if (res.success) {
+      _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
+    } else if (res.tableMissing) {
+      _updateSupabaseBadge({ status: 'setup', message: '🟡 Table Setup Required (Click SQL Setup)' });
+    } else {
+      _updateSupabaseBadge({ status: 'disconnected', message: '⚪ Cloud Offline / Disconnected' });
+    }
+  }
+
+  function _updateSupabaseBadge({ status, message }) {
+    const badge = document.getElementById('cloud-status-badge');
+    if (!badge) return;
+    badge.className = 'cloud-status-badge';
+    if (status === 'connected') {
+      badge.classList.add('badge-cloud-connected');
+      badge.innerHTML = `<i class="bi bi-cloud-check-fill me-1"></i> ${message}`;
+    } else if (status === 'setup') {
+      badge.classList.add('badge-cloud-setup');
+      badge.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i> ${message}`;
+    } else if (status === 'disconnected') {
+      badge.classList.add('badge-cloud-disconnected');
+      badge.innerHTML = `<i class="bi bi-cloud-slash-fill me-1"></i> ${message}`;
+    } else {
+      badge.innerHTML = `<div class="spinner-border spinner-border-sm me-1" style="width:12px;height:12px"></div> ${message}`;
+    }
+  }
+
+  async function saveSupabaseConfig() {
+    const url = document.getElementById('supabase-url')?.value.trim();
+    const anonKey = document.getElementById('supabase-key')?.value.trim();
+    const tableName = document.getElementById('supabase-table')?.value.trim() || 'ssinfotech_backups';
+    const autoSync = document.getElementById('supabase-autosync')?.checked ?? true;
+
+    if (!url || !anonKey) {
+      alert('⚠️ Please enter both Supabase Project URL and Anon Public Key.');
+      return;
+    }
+
+    SupabaseSync.saveConfig({ url, anonKey, tableName, autoSync });
+    alert('✅ Supabase settings saved. Testing connection...');
+    await testSupabaseConnection();
+  }
+
+  async function testSupabaseConnection() {
+    _updateSupabaseBadge({ status: 'checking', message: 'Testing Connection...' });
+    const res = await SupabaseSync.testConnection();
+    if (res.success) {
+      _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
+      alert('🎉 Connection Successful!\n\nYour Supabase database is connected and ready for cloud backup and sync.');
+    } else if (res.tableMissing) {
+      _updateSupabaseBadge({ status: 'setup', message: '🟡 Table Setup Required' });
+      alert(`⚠️ ${res.message}\n\nPlease click "SQL Setup Script", copy the query, and run it in your Supabase SQL Editor.`);
+      openSupabaseSqlModal();
+    } else {
+      _updateSupabaseBadge({ status: 'disconnected', message: '🔴 Connection Failed' });
+      alert(`❌ Connection Failed:\n${res.message}\n\nPlease verify your Supabase URL and Anon Key.`);
+    }
+  }
+
+  async function pushBackupToCloud() {
+    try {
+      _updateSupabaseBadge({ status: 'checking', message: 'Uploading to Cloud...' });
+      const label = prompt('Enter a label for this cloud snapshot (or leave blank for automatic timestamp):', '');
+      if (label === null) {
+        _initSupabaseUI();
+        return;
+      }
+
+      const res = await SupabaseSync.pushBackup(label);
+      _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
+      _initSupabaseUI();
+      alert(`☁️ Cloud Backup Successful!\n\nUploaded:\n• ${res.stats.clients} Tax Computations (ITRs)\n• ${res.stats.statementRecords} Bank Statements\n• ${res.stats.slipRecords} Salary Slips\n• ${res.stats.slipCompanies} Companies & Logos\n\nYour data is now safely stored on Supabase!`);
+    } catch (err) {
+      _updateSupabaseBadge({ status: 'disconnected', message: 'Upload Failed' });
+      alert(`❌ Cloud Backup Failed:\n${err.message}`);
+    }
+  }
+
+  async function restoreLatestCloudBackup() {
+    if (!confirm('⚠️ Restore Latest Cloud Backup from Supabase?\n\nThis will download the newest snapshot from your Supabase cloud database and replace current local data.\n\nAre you sure you want to proceed?')) {
+      return;
+    }
+    try {
+      const res = await SupabaseSync.restoreBackup();
+      alert(`🎉 Restore Successful!\n\nRestored Snapshot: "${res.label}"\nFrom: ${new Date(res.createdAt).toLocaleString('en-IN')}\n\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips\n\nThe app will now reload.`);
+      window.location.reload();
+    } catch (err) {
+      alert(`❌ Restore Failed:\n${err.message}`);
+    }
+  }
+
+  async function openCloudBackupsModal() {
+    const modalEl = document.getElementById('modal-cloud-backups');
+    if (!modalEl) return;
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    await refreshCloudBackupsList();
+  }
+
+  async function refreshCloudBackupsList() {
+    const tbody = document.getElementById('cloud-backups-tbody');
+    const countEl = document.getElementById('cloud-snapshots-count');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Fetching snapshots from Supabase...</td></tr>';
+    
+    try {
+      const list = await SupabaseSync.listBackups(20);
+      if (countEl) countEl.textContent = `${list.length} cloud snapshot(s) found`;
+
+      if (!list || !list.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-cloud-slash me-2"></i>No cloud backups found yet. Click "Backup to Cloud Now" to create your first snapshot.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(item => {
+        const d = new Date(item.created_at).toLocaleString('en-IN');
+        const device = (item.device_id || 'Unknown').slice(0, 10);
+        return `
+          <tr>
+            <td>
+              <div class="fw-bold text-primary">${_esc(item.label || 'Snapshot')}</div>
+              <small class="text-muted font-monospace" style="font-size: 10px;">ID: ${item.id.slice(0, 8)}...</small>
+            </td>
+            <td><small>${d}</small></td>
+            <td>
+              <span class="badge bg-primary-subtle text-primary me-1">${item.client_count || 0} ITRs</span>
+              <span class="badge bg-info-subtle text-info me-1">${item.statement_count || 0} Stmts</span>
+              <span class="badge bg-success-subtle text-success">${item.slip_count || 0} Slips</span>
+            </td>
+            <td><small class="badge bg-secondary-subtle text-secondary font-monospace">${device}</small></td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-primary btn-sm" onclick="App.restoreSpecificCloudBackup('${item.id}', '${_esc(item.label)}')" title="Restore this snapshot">
+                  <i class="bi bi-download me-1"></i>Restore
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="App.deleteSpecificCloudBackup('${item.id}')" title="Delete from cloud">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      if (countEl) countEl.textContent = 'Error loading backups';
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>${_esc(err.message)}</td></tr>`;
+    }
+  }
+
+  async function restoreSpecificCloudBackup(backupId, label) {
+    if (!confirm(`Restore cloud snapshot "${label}"?\n\nThis will replace your current local data with the selected cloud snapshot.`)) {
+      return;
+    }
+    try {
+      const res = await SupabaseSync.restoreBackup(backupId);
+      alert(`🎉 Restore Successful!\n\nRestored Snapshot: "${res.label}"\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips\n\nThe app will now reload.`);
+      window.location.reload();
+    } catch (err) {
+      alert(`❌ Restore Failed:\n${err.message}`);
+    }
+  }
+
+  async function deleteSpecificCloudBackup(backupId) {
+    if (!confirm('Are you sure you want to delete this cloud backup permanently from Supabase?')) {
+      return;
+    }
+    try {
+      await SupabaseSync.deleteBackup(backupId);
+      await refreshCloudBackupsList();
+    } catch (err) {
+      alert(`❌ Delete Failed:\n${err.message}`);
+    }
+  }
+
+  function openSupabaseSqlModal() {
+    const codeEl = document.getElementById('supabase-sql-code');
+    if (codeEl && typeof SupabaseSync !== 'undefined') {
+      codeEl.textContent = SupabaseSync.getSqlSchema();
+    }
+    const modalEl = document.getElementById('modal-supabase-sql');
+    if (modalEl) {
+      const modal = new bootstrap.Modal(modalEl);
+      modal.show();
+    }
+  }
+
+  function copySupabaseSql() {
+    const sql = typeof SupabaseSync !== 'undefined' ? SupabaseSync.getSqlSchema() : '';
+    if (!sql) return;
+    navigator.clipboard.writeText(sql).then(() => {
+      alert('📋 SQL Setup script copied to clipboard!\n\nPaste it into your Supabase Dashboard -> SQL Editor and click RUN.');
+    }).catch(() => {
+      alert('Please copy the SQL text manually from the box.');
+    });
   }
 
   // ── Project Data Export & Storage Helpers ───────────────────
@@ -5229,6 +5465,9 @@ const App = (() => {
     downloadSlipRecord, downloadAllSlips,
     downloadStatementRecord, downloadAllStatements,
     downloadAllCompanies, updateProjectStorageStats,
+    saveSupabaseConfig, testSupabaseConnection, pushBackupToCloud, restoreLatestCloudBackup,
+    openCloudBackupsModal, refreshCloudBackupsList, restoreSpecificCloudBackup, deleteSpecificCloudBackup,
+    openSupabaseSqlModal, copySupabaseSql,
   };
 
   if (typeof window !== 'undefined') {

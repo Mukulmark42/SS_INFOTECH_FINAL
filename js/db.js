@@ -16,6 +16,10 @@ const DB = (() => {
   function _safeSetItem(key, value) {
     try {
       localStorage.setItem(key, value);
+      // Trigger background auto-sync to Supabase cloud
+      if (typeof SupabaseSync !== 'undefined' && SupabaseSync.isAutoSyncEnabled()) {
+        SupabaseSync.triggerAutoBackup('Auto Sync');
+      }
       return true;
     } catch (e) {
       if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {

@@ -19,6 +19,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
+  <!-- Supabase Client Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- App Styles -->
   <link rel="stylesheet" href="css/styles.css" />
 </head>
@@ -1054,6 +1057,120 @@
 
         <!-- ═══ SECTION: BACKUP & DATA MANAGEMENT ═══ -->
 
+        <!-- Supabase Cloud Storage & Multi-Device Sync -->
+        <div class="col-lg-12 admin-card-item" data-admin-sec="backup">
+          <div class="card-panel cloud-panel mb-4">
+            <div class="panel-header">
+              <div class="panel-header-left">
+                <div class="panel-icon panel-icon-success" aria-hidden="true"><i class="bi bi-cloud-check-fill"></i></div>
+                <div>
+                  <h6 class="panel-title-text">Supabase Cloud Database &amp; Multi-Device Sync</h6>
+                  <p class="panel-subtitle">Store unlimited client ITRs, bank statements, and payslips securely in the cloud with multi-device restore</p>
+                </div>
+              </div>
+              <span id="cloud-status-badge" class="cloud-status-badge">
+                <i class="bi bi-cloud-arrow-up me-1"></i> Checking Cloud Status...
+              </span>
+            </div>
+            <div class="panel-body p-3">
+              <!-- Cloud Actions Grid -->
+              <div class="cloud-action-grid mb-4">
+                <div class="cloud-card-primary">
+                  <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="cloud-icon-box bg-success-subtle text-success">
+                      <i class="bi bi-cloud-upload-fill"></i>
+                    </div>
+                    <div>
+                      <h6 class="mb-0 fw-bold">Push to Supabase Cloud</h6>
+                      <small class="text-muted">Upload a complete cloud snapshot of all your data</small>
+                    </div>
+                  </div>
+                  <p class="small text-muted mb-3">Saves all tax files, salary slips, statements, and company logos to your Supabase PostgreSQL cloud database.</p>
+                  <button type="button" class="btn btn-success btn-sm w-100 fw-bold py-2 shadow-sm" onclick="App.pushBackupToCloud()">
+                    <i class="bi bi-cloud-arrow-up-fill me-1"></i> Backup to Cloud Now
+                  </button>
+                </div>
+
+                <div class="cloud-card-secondary">
+                  <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="cloud-icon-box bg-primary-subtle text-primary">
+                      <i class="bi bi-cloud-download-fill"></i>
+                    </div>
+                    <div>
+                      <h6 class="mb-0 fw-bold">Restore from Cloud</h6>
+                      <small class="text-muted">Pull snapshots to this browser or any device</small>
+                    </div>
+                  </div>
+                  <p class="small text-muted mb-3">View and restore previous cloud snapshots across different laptops, phones, or office computers.</p>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary btn-sm flex-fill fw-bold py-2" onclick="App.restoreLatestCloudBackup()">
+                      <i class="bi bi-arrow-down-circle-fill me-1"></i> Pull Latest
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-3" onclick="App.openCloudBackupsModal()" title="View all cloud backups">
+                      <i class="bi bi-clock-history me-1"></i> History
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick Cloud Tools Bar -->
+              <div class="d-flex flex-wrap align-items-center justify-content-between p-2 px-3 border rounded bg-surface-subtle mb-3 gap-2">
+                <div class="d-flex align-items-center gap-3">
+                  <span class="small fw-bold text-muted"><i class="bi bi-hdd-network me-1 text-primary"></i> Cloud Status:</span>
+                  <span class="small" id="cloud-last-sync-text">Last Sync: Never</span>
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.testSupabaseConnection()">
+                    <i class="bi bi-activity me-1 text-success"></i> Test Connection
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.openSupabaseSqlModal()">
+                    <i class="bi bi-code-slash me-1 text-info"></i> SQL Setup Script
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#collapseSupabaseConfig">
+                    <i class="bi bi-gear-fill me-1"></i> Cloud Settings
+                  </button>
+                </div>
+              </div>
+
+              <!-- Collapsible Supabase Config Form -->
+              <div class="collapse mt-3" id="collapseSupabaseConfig">
+                <div class="p-3 border rounded bg-surface">
+                  <h6 class="fw-bold mb-2"><i class="bi bi-sliders me-1 text-primary"></i> Supabase Cloud Credentials</h6>
+                  <p class="small text-muted mb-3">Configure your Supabase project parameters. These credentials are saved locally in your browser.</p>
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold">Supabase Project URL</label>
+                      <input type="text" id="supabase-url" class="form-control form-control-sm" placeholder="https://your-project.supabase.co" />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold">Supabase Anon Key (Public)</label>
+                      <input type="text" id="supabase-key" class="form-control form-control-sm" placeholder="sb_publishable_..." />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold">Cloud Table Name</label>
+                      <input type="text" id="supabase-table" class="form-control form-control-sm" value="ssinfotech_backups" />
+                    </div>
+                    <div class="col-md-6 d-flex align-items-center pt-3">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="supabase-autosync" checked>
+                        <label class="form-check-label small fw-bold" for="supabase-autosync">
+                          ⚡ Auto-Backup on Every Change <span class="badge bg-success-subtle text-success">Enabled</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                      <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="App.saveSupabaseConfig()">
+                        <i class="bi bi-save me-1"></i> Save Cloud Settings
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
         <!-- Local Backup & Restore -->
         <div class="col-lg-12 admin-card-item" data-admin-sec="backup">
           <div class="card-panel backup-panel">
@@ -1061,8 +1178,8 @@
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-primary" aria-hidden="true"><i class="bi bi-database-fill-gear"></i></div>
                 <div>
-                  <h6 class="panel-title-text">Project Data Hub &amp; Stored Assets</h6>
-                  <p class="panel-subtitle">Manage all local computations, bank statements, payslips, company records, and offline bank logos</p>
+                  <h6 class="panel-title-text">Local Storage &amp; Offline JSON Backup</h6>
+                  <p class="panel-subtitle">Manage browser offline computations, bank statements, payslips, and manual JSON files</p>
                 </div>
               </div>
               <span class="backup-local-badge"><i class="bi bi-check-circle-fill text-success me-1"></i> 100% Stored Locally</span>
@@ -1126,6 +1243,8 @@
                     </button>
                   </div>
                 </div>
+              </div>
+
               <!-- Storage Capacity Usage Meter -->
               <div class="p-3 border rounded mb-4 bg-surface-subtle">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1142,7 +1261,7 @@
                 <div class="backup-action-card">
                   <div class="backup-action-icon"><i class="bi bi-cloud-arrow-down-fill"></i></div>
                   <div class="backup-action-content">
-                    <h6>Download Full Project Backup</h6>
+                    <h6>Download Full JSON Backup</h6>
                     <p>Export all client ITRs, generated bank statements, payslips, company logos, bank masters, and admin configurations into a master JSON backup file.</p>
                     <button type="button" class="btn btn-primary btn-sm" onclick="App.downloadLocalBackup()">
                       <i class="bi bi-download me-1"></i>Download Master Backup
@@ -1152,7 +1271,7 @@
                 <div class="backup-action-card backup-restore-card">
                   <div class="backup-action-icon"><i class="bi bi-cloud-arrow-up-fill"></i></div>
                   <div class="backup-action-content">
-                    <h6>Restore Project Data from File</h6>
+                    <h6>Restore Data from JSON File</h6>
                     <p>Import and restore a previously saved JSON backup file to load all records, statements, payslips, and database settings.</p>
                     <input type="file" id="admin-backup-file" accept="application/json,.json" hidden onchange="App.restoreLocalBackup(this)" />
                     <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('admin-backup-file').click()">
@@ -1818,6 +1937,89 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     MODAL: SUPABASE CLOUD SNAPSHOTS HISTORY
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modal-cloud-backups" tabindex="-1" aria-labelledby="modalCloudBackupsTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content shadow-lg border-0">
+      <div class="modal-header bg-surface border-bottom">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-cloud-arrow-down-fill text-primary fs-5"></i>
+          <h5 class="modal-title fw-bold" id="modalCloudBackupsTitle">Supabase Cloud Snapshots</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="small text-muted" id="cloud-snapshots-count">Loading cloud backups...</span>
+          <button class="btn btn-outline-primary btn-sm" onclick="App.refreshCloudBackupsList()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Refresh List
+          </button>
+        </div>
+        <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+          <table class="table table-hover table-sm align-middle mb-0" id="cloud-backups-table">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th>Backup Snapshot</th>
+                <th>Created At</th>
+                <th>Records</th>
+                <th>Device</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cloud-backups-tbody">
+              <tr><td colspan="5" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Loading snapshots...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer bg-surface-subtle border-top">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL: SUPABASE SQL SETUP SCRIPT
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modal-supabase-sql" tabindex="-1" aria-labelledby="modalSupabaseSqlTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content shadow-lg border-0">
+      <div class="modal-header bg-surface border-bottom">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-code-square text-info fs-5"></i>
+          <h5 class="modal-title fw-bold" id="modalSupabaseSqlTitle">Supabase 1-Click SQL Setup</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="alert alert-info small d-flex align-items-center gap-2 mb-3">
+          <i class="bi bi-info-circle-fill fs-5 flex-shrink-0"></i>
+          <div>
+            Open your <strong>Supabase Dashboard &rarr; SQL Editor</strong>, paste this script, and click <strong>RUN</strong> to create your cloud backup table.
+          </div>
+        </div>
+        <div class="position-relative">
+          <pre class="p-3 rounded bg-dark text-light small mb-0" style="max-height: 280px; overflow-y: auto; font-family: monospace;" id="supabase-sql-code"></pre>
+        </div>
+      </div>
+      <div class="modal-footer bg-surface-subtle border-top d-flex justify-content-between">
+        <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-box-arrow-up-right me-1"></i> Open Supabase Dashboard
+        </a>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="App.copySupabaseSql()">
+            <i class="bi bi-clipboard-check me-1"></i> Copy SQL Script
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      SCRIPTS
      ══════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -1832,6 +2034,7 @@
 <script src="js/salary-slip-engine.js"></script>
 <script src="js/bank-statement-engine.js"></script>
 <script src="js/db.js"></script>
+<script src="js/supabase-sync.js"></script>
 <script src="js/app.js"></script>
 
 <!-- Mobile overlay dismiss -->
