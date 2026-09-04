@@ -155,10 +155,10 @@ const ReportClassic = (() => {
 <div class="rpt-rule"></div>
 
 <!-- INCOME COMPUTATION -->
-${secTitle('CHAPTER IV-D &nbsp; PROFITS &amp; GAINS OF BUSINESS / PROFESSION [Section 44AD]')}
+${secTitle('CHAPTER IV-D &nbsp; PROFITS &amp; GAINS OF BUSINESS / PROFESSION [SECTION ' + (client.presumptiveSection || '44AD') + ']')}
 <div style="padding:2px 0 4px 8px;">
   ${line(`Net Profit from ${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()} [Code: ${client.bcode || '0204'}]`, fmtNum(c.businessIncome))}
-  ${boldLine('Total – Business Income (44AD)', fmtNum(c.businessIncome))}
+  ${boldLine('Total – Business Income (' + (client.presumptiveSection || '44AD') + ')', fmtNum(c.businessIncome))}
 </div>
 
 ${hasSTCG ? `
@@ -210,15 +210,15 @@ ${secTitle('COMPUTATION OF TAX LIABILITY')}
 
 <!-- ANNEXURE: PROFIT & LOSS STATEMENT -->
 <div style="margin-top:12px;">
-${secTitle('PROFIT &amp; LOSS STATEMENT (Estimated u/s 44AD)')}
+${secTitle('PROFIT &amp; LOSS STATEMENT (Estimated u/s ' + (client.presumptiveSection || '44AD') + ')')}
 <table class="rpt-table">
   <thead>
     <tr><th style="width:60%">Particulars</th><th style="width:40%; text-align:right">Amount (₹)</th></tr>
   </thead>
   <tbody>
     <tr><td>Gross Receipts / Turnover</td><td class="num">${fmtNum(turnover)}</td></tr>
-    <tr><td>Less: Presumptive Expenses (80% of Turnover)</td><td class="num">(${fmtNum(Math.round(turnover - c.businessIncome))})</td></tr>
-    <tr style="background:#f0f0f0; font-weight:bold;"><td>Net Profit — Section 44AD (Declared @ ${profitPct}%)</td><td class="num">${fmtNum(c.businessIncome)}</td></tr>
+    <tr><td>Less: Presumptive Expenses (${100 - profitPct}% of Turnover)</td><td class="num">(${fmtNum(Math.round(turnover - c.businessIncome))})</td></tr>
+    <tr style="background:#f0f0f0; font-weight:bold;"><td>Net Profit — Section ${client.presumptiveSection || '44AD'} (Declared @ ${profitPct}%)</td><td class="num">${fmtNum(c.businessIncome)}</td></tr>
     ${c.savingsInterest > 0 ? `<tr><td>Add: Savings Bank Interest</td><td class="num">${fmtNum(c.savingsInterest)}</td></tr>` : ''}
     ${c.stcg > 0 ? `<tr><td>Add: Short Term Capital Gain (u/s 111A)</td><td class="num">${fmtNum(c.stcg)}</td></tr>` : ''}
     ${(c.pl || 0) > 0 ? `<tr><td>Add: Other Income (P&amp;L)</td><td class="num">${fmtNum(c.pl)}</td></tr>` : ''}
@@ -238,7 +238,8 @@ ${(() => {
   const tA = (a.cash||0) + (a.bank||0) + (a.stock||0) + (a.debtors||0) + (a.fixed||0);
   const tL = (l.capital||0) + (l.provtax||0) + (l.creditors||0) + (l.loan||0) + (l.netprofit||0);
   const totalA = tA > 0 ? tA : Math.round(turnover * 0.15 + turnover * 0.20 + bankBal + c.tdsCredit);
-  const totalL = tL > 0 ? tL : Math.round(c.businessIncome + c.taxDue + turnover * 0.10);
+  const totalL = tL > 0 ? tL : Math.round(c.businessIncome + (c.taxDue > 0 ? c.taxDue : (c.totalTaxPayable || 0)) + turnover * 0.10);
+  const provTaxAmt = l.provtax != null ? l.provtax : (c.taxDue > 0 ? c.taxDue : ((c.totalTaxPayable || 0) > 0 ? c.totalTaxPayable : 0));
   return `
 <table class="rpt-table">
   <thead>
@@ -256,7 +257,7 @@ ${(() => {
     </tr>
     <tr>
       <td>Bank Balance</td><td class="num">${fmtNum(bankBal)}</td>
-      <td>Provision for Tax</td><td class="num">${fmtNum(l.provtax || (c.taxDue > 0 ? c.taxDue : 0))}</td>
+      <td>Provision for Tax</td><td class="num">${fmtNum(provTaxAmt)}</td>
     </tr>
     <tr>
       <td>Stock-in-Trade</td><td class="num">${fmtNum(a.stock || Math.round(turnover * 0.15))}</td>
@@ -283,8 +284,8 @@ ${(() => {
 ${pb()}
 <div style="text-align:center; font-weight:700; font-size:12px; text-decoration:underline; margin-bottom:8px;">SCHEDULES &amp; ANNEXURES</div>
 
-<!-- ANNEXURE A: 44AD Statement -->
-${secTitle('ANNEXURE A &nbsp; STATEMENT UNDER SECTION 44AD – TURNOVER &amp; PROFIT')}
+<!-- ANNEXURE A: Presumptive Statement -->
+${secTitle('ANNEXURE A &nbsp; STATEMENT UNDER SECTION ' + (client.presumptiveSection || '44AD') + ' – TURNOVER &amp; PROFIT')}
 <table class="rpt-table">
   <thead>
     <tr>
@@ -305,7 +306,7 @@ ${secTitle('ANNEXURE A &nbsp; STATEMENT UNDER SECTION 44AD – TURNOVER &amp; PR
     </tr>
     <tr style="font-style:italic; font-size:9px; color:#666;">
       <td colspan="5">
-        * Under Section 44AD, assessee declares profit at ${profitPct}% of gross turnover.
+        * Under Section ${client.presumptiveSection || '44AD'}, assessee declares profit at ${profitPct}% of gross turnover.
         No books of account are required to be maintained (u/s 44AA).
         Turnover = Declared Profit ÷ ${profitPct}% = ₹${fmtNum(c.businessIncome)} ÷ ${profitPct/100} = ₹${fmtNum(turnover)}
       </td>
@@ -458,7 +459,7 @@ ${secTitle('ANNEXURE G &nbsp; HEAD-WISE INCOME SUMMARY')}
   </thead>
   <tbody>
     <tr>
-      <td>Business / Profession (44AD – ${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()})</td>
+      <td>Business / Profession (${client.presumptiveSection || '44AD'} – ${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()})</td>
       <td class="num">${fmtNum(c.businessIncome)}</td>
       <td class="num">—</td>
       <td class="num">${fmtNum(c.businessIncome)}</td>
@@ -499,7 +500,7 @@ ${secTitle('ANNEXURE H &nbsp; TAXPAYER INFORMATION SUMMARY (TIS) – COMPARISON 
   </thead>
   <tbody>
     <tr>
-      <td>Business Income (44AD)</td>
+      <td>Business Income (${client.presumptiveSection || '44AD'})</td>
       <td class="num">${fmtNum(c.businessIncome)}</td>
       <td class="num">${fmtNum(c.businessIncome)}</td>
       <td style="color:green">✓ Matches</td>

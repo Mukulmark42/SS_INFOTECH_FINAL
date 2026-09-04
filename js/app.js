@@ -518,31 +518,76 @@ const App = (() => {
       savings = InterestEngine.autoGenerate(total, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
     }
     const businessIncome = Math.max(0, total - savings - stcg - pl);
-    const profitPct = admin.profitPct || 20;
+    const presumptiveSection = _v('f-presumptive-section') || '44AD';
+    const is44ADA = presumptiveSection === '44ADA';
+    const profitPct = is44ADA ? 50 : (admin.profitPct || 20);
     const turnover = profitPct > 0 ? Math.round(businessIncome / (profitPct / 100)) : 0;
+    const ay = _v('f-ay') || '2026-27';
+    const taxRegime = _v('f-regime') || 'New';
+    const natureOfBiz = _v('f-nature');
 
-    const taxDue = Math.max(0, businessIncome * 0.05);
+    // Compute accurate tax liability for Provision for Tax
+    const tdsData = TDSEngine.generate(turnover, natureOfBiz, {
+      rate194H: admin.rate194H,
+      rate194C: admin.rate194C,
+    }, banks, ay, presumptiveSection);
 
-    const assets = {
-      cash: Math.round((10000 + Math.random() * 40000) / 100) * 100,   // 10k to 50k
-      bank: Math.round((30000 + Math.random() * 70000) / 100) * 100,  // 30k to 1 lakh
-      stock: Math.round(turnover * 0.15),
-      debtors: Math.round(turnover * 0.20),
-      fixed: Math.round(turnover * 0.05),
+    const comp = TaxEngine.compute({
+      ay,
+      businessIncome,
+      savingsInterest: savings,
+      stcg,
+      pl,
+      tds: tdsData.totalTDS,
+      presumptiveSection,
+      adminOverrides: { regime: taxRegime },
+    });
+
+    const taxLiability = (comp && comp.taxDue != null && comp.taxDue > 0)
+      ? comp.taxDue
+      : ((comp && comp.taxTotal != null && comp.taxTotal > 0) ? comp.taxTotal : 0);
+
+    const isService = (natureOfBiz && natureOfBiz.toLowerCase().includes('service')) || is44ADA;
+
+    // 1. Net Profit MUST match the declared business profit from P&L statement
+    const netprofit = businessIncome;
+    const provTax = Math.round(taxLiability);
+    const loan = 0;
+
+    // 2. Varied Capital Account & Creditors (Dynamic on every click)
+    const openingCapital = Math.round(turnover * (0.15 + Math.random() * 0.08));
+    const drawings = Math.round(netprofit * (0.32 + Math.random() * 0.12));
+    const capital = Math.max(50000, Math.round(openingCapital - drawings + turnover * (0.03 + Math.random() * 0.04)));
+    const creditors = Math.max(25000, Math.round(turnover * (isService ? (0.05 + Math.random() * 0.04) : (0.07 + Math.random() * 0.05))));
+
+    const totalLiabilities = capital + provTax + creditors + loan + netprofit;
+
+    // 3. Varied Healthy Operational Assets (Dynamic on every click)
+    const bankBal = (banks || []).reduce((s, b) => s + (parseFloat(b.balance) || 0), 0);
+    let bank = bankBal > 0 ? bankBal : Math.round(Math.max(40000, turnover * (isService ? (0.09 + Math.random() * 0.06) : (0.06 + Math.random() * 0.05))) / 100) * 100;
+    const cash = Math.round(Math.max(15000, turnover * (0.012 + Math.random() * 0.015)) / 100) * 100;
+    const fixed = Math.round(Math.max(30000, turnover * (isService ? (0.06 + Math.random() * 0.04) : (0.05 + Math.random() * 0.03))) / 100) * 100;
+    const stock = Math.round(Math.max(15000, turnover * (isService ? (0.03 + Math.random() * 0.03) : (0.13 + Math.random() * 0.06))) / 100) * 100;
+
+    // Debtors absorbs the balancing difference to guarantee exact balance
+    let debtors = totalLiabilities - (cash + bank + stock + fixed);
+    if (debtors < 25000) {
+      debtors = Math.round(turnover * 0.15);
+      bank = totalLiabilities - (cash + stock + fixed + debtors);
+    }
+
+    const assets = { cash, bank, stock, debtors, fixed };
+    const liabilities = { capital, provtax: provTax, creditors, loan, netprofit };
+
+    const el = (id, v) => {
+      const e = document.getElementById(id);
+      if (e) {
+        e.value = v;
+        e.classList.remove('bs-pulse');
+        void e.offsetWidth; // trigger reflow for animation
+        e.classList.add('bs-pulse');
+      }
     };
-    const totalAssets = Object.values(assets).reduce((a, b) => a + b, 0);
-
-    const liabilities = {
-      capital: businessIncome,
-      provtax: Math.round(taxDue),
-      creditors: 0,
-      loan: 0,
-      netprofit: businessIncome,
-    };
-
-    liabilities.creditors = Math.max(0, totalAssets - liabilities.capital - liabilities.provtax - liabilities.loan - liabilities.netprofit);
-
-    const el = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
     el('bal-cash', assets.cash);
     el('bal-bank', assets.bank);
     el('bal-stock', assets.stock);
@@ -755,12 +800,12 @@ const App = (() => {
       });
     }
 
-    // TDS – pass business nature for type-aware generation
+    // TDS – pass business nature, AY, and presumptive section for type-aware & FY-compliant generation
     const tdsData = TDSEngine.generate(turnover, natureOfBiz, {
       rate194H:  admin.rate194H,
       rate194C:  admin.rate194C,
       selectedDeductors: selectedDeductors
-    }, banks);
+    }, banks, ay, presumptiveSection);
 
     // Compute tax with regime & 44AD/44ADA support
     const computation = TaxEngine.compute({
@@ -920,7 +965,7 @@ const App = (() => {
       data.client.ackNo = ReportAck.getAckNo(data.client, data.compNo);
       _setVal('f-ack-no', data.client.ackNo);
     }
-    data.profitPct = data.profitPct || 20;
+    data.profitPct = data.profitPct || (data.client?.presumptiveSection === '44ADA' ? 50 : 20);
 
     // Automatically save/update client in database
     _saveClientRecord(data);
@@ -941,7 +986,11 @@ const App = (() => {
     const c        = data.computation;
     const tds      = data.tds;
     const admin    = DB.getAdmin();
-    const profitPct = (admin.profitPct || 20) / 100;
+    const is44ADA  = (data.client && data.client.presumptiveSection === '44ADA') || c.presumptiveSection === '44ADA';
+    const profitPctNum = (data.profitPct != null && data.profitPct > 0)
+      ? data.profitPct
+      : (is44ADA ? 50 : (admin.profitPct || 20));
+    const profitPct = profitPctNum / 100;
     const cfg       = TaxEngine.getConfig(data.client.ay || '2025-26');
 
     // 1. Profit % check

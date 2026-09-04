@@ -38,17 +38,17 @@ const TaxEngine = (() => {
       regime:         'New',
       slabs: [
         { upto: 300000,   rate: 0    },
-        { upto: 700000,   rate: 0.05 },
-        { upto: 1000000,  rate: 0.10 },
+        { upto: 600000,   rate: 0.05 },
+        { upto: 900000,   rate: 0.10 },
         { upto: 1200000,  rate: 0.15 },
         { upto: 1500000,  rate: 0.20 },
         { upto: Infinity, rate: 0.30 },
       ],
-      rebateLimit:    700000,
-      rebateMax:      25000,
+      rebateLimit:    700000,    // 87A: full rebate if income <= ₹7L
+      rebateMax:      25000,     // Max rebate ₹25,000
       basicExemption: 300000,
       cess:           0.04,
-      stdDeduction:   75000,
+      stdDeduction:   50000,
       tttaLimit:      10000,
       allow80TTA:     false,
       stcgRate:       0.15,
@@ -58,17 +58,16 @@ const TaxEngine = (() => {
       label:          'AY 2025-26 (FY 2024-25)',
       regime:         'New',
       slabs: [
-        { upto: 400000,   rate: 0    },
-        { upto: 800000,   rate: 0.05 },
-        { upto: 1200000,  rate: 0.10 },
-        { upto: 1600000,  rate: 0.15 },
-        { upto: 2000000,  rate: 0.20 },
-        { upto: 2400000,  rate: 0.25 },
+        { upto: 300000,   rate: 0    },
+        { upto: 700000,   rate: 0.05 },
+        { upto: 1000000,  rate: 0.10 },
+        { upto: 1200000,  rate: 0.15 },
+        { upto: 1500000,  rate: 0.20 },
         { upto: Infinity, rate: 0.30 },
       ],
-      rebateLimit:    1200000,   // 87A: full rebate if income ≤ ₹12L
-      rebateMax:      60000,     // Max rebate ₹60,000
-      basicExemption: 400000,
+      rebateLimit:    700000,   // 87A: full rebate if income ≤ ₹7L
+      rebateMax:      25000,     // Max rebate ₹25,000
+      basicExemption: 300000,
       cess:           0.04,
       stdDeduction:   75000,
       tttaLimit:      10000,

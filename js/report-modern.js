@@ -226,7 +226,7 @@ const ReportModern = (() => {
   <div style="text-align:center;position:relative;z-index:1;">
     <div class="mrpt-cover-chip">📋 Income Tax Computation</div>&nbsp;
     <div class="mrpt-cover-chip">🗓 AY ${client.ay || ''} &nbsp;|&nbsp; FY ${fy}</div>&nbsp;
-    <div class="mrpt-cover-chip">🏛 ${cfg.regime || 'New'} Tax Regime &nbsp;|&nbsp; Section 44AD</div>
+    <div class="mrpt-cover-chip">🏛 ${cfg.regime || 'New'} Tax Regime &nbsp;|&nbsp; Section ${client.presumptiveSection || '44AD'}</div>
   </div>
   <div class="mrpt-cover-mid" style="position:relative;z-index:1;">
     <div class="mrpt-avatar">${initials}</div>
@@ -261,7 +261,7 @@ const ReportModern = (() => {
   </div>
   <div class="mrpt-stat" style="--sc:#0891b2">
     <div class="mrpt-stat-val">₹ ${fmtNum(turnover)}</div>
-    <div class="mrpt-stat-lbl">Gross Turnover (44AD)</div>
+    <div class="mrpt-stat-lbl">Gross Turnover (${client.presumptiveSection || '44AD'})</div>
   </div>
   <div class="mrpt-stat" style="--sc:#7c3aed">
     <div class="mrpt-stat-val">₹ ${fmtNum(c.totalTaxPayable)}</div>
@@ -299,7 +299,7 @@ const ReportModern = (() => {
     <div class="mrpt-inc-card ic-biz">
       <div class="mrpt-inc-icon">🏢</div>
       <div>
-        <div class="mrpt-inc-lbl">Business Income${(client.bname || '').toUpperCase() ? ' - ' + (client.bname || '').toUpperCase() : ''} (Section 44AD)</div>
+        <div class="mrpt-inc-lbl">Business/Profession Income${(client.bname || '').toUpperCase() ? ' - ' + (client.bname || '').toUpperCase() : ''} (Section ${client.presumptiveSection || '44AD'})</div>
         <div class="mrpt-inc-amt">₹ ${fmtNum(c.businessIncome)}</div>
         <div class="mrpt-inc-sub">Turnover ₹${fmtNum(turnover)} @ ${profitPct}%</div>
       </div>
@@ -394,14 +394,14 @@ const ReportModern = (() => {
   </div>
 
   <!-- PROFIT & LOSS STATEMENT -->
-  <div class="mrpt-section-header mrpt-keep"><span class="icon">📊</span> Profit &amp; Loss Statement (Estimated u/s 44AD)</div>
+  <div class="mrpt-section-header mrpt-keep"><span class="icon">📊</span> Profit &amp; Loss Statement (Estimated u/s ${client.presumptiveSection || '44AD'})</div>
   <div class="mrpt-keep">
   <table class="mrpt-table">
     <thead><tr><th>Particulars</th><th class="num">Amount (₹)</th></tr></thead>
     <tbody>
       <tr><td>Gross Receipts / Turnover</td><td class="num">${fmtNum(turnover)}</td></tr>
-      <tr><td>Less: Presumptive Expenses (80% of Turnover)</td><td class="num" style="color:#dc2626">(${fmtNum(Math.round(turnover - c.businessIncome))})</td></tr>
-      <tr class="foot"><td><b>Net Profit — Section 44AD (Declared @ ${profitPct}%)</b></td><td class="num"><b>₹ ${fmtNum(c.businessIncome)}</b></td></tr>
+      <tr><td>Less: Presumptive Expenses (${100 - profitPct}% of Turnover)</td><td class="num" style="color:#dc2626">(${fmtNum(Math.round(turnover - c.businessIncome))})</td></tr>
+      <tr class="foot"><td><b>Net Profit — Section ${client.presumptiveSection || '44AD'} (Declared @ ${profitPct}%)</b></td><td class="num"><b>₹ ${fmtNum(c.businessIncome)}</b></td></tr>
       ${c.savingsInterest > 0 ? `<tr><td>Add: Savings Bank Interest</td><td class="num">${fmtNum(c.savingsInterest)}</td></tr>` : ''}
       ${c.stcg > 0 ? `<tr><td>Add: Short Term Capital Gain (u/s 111A)</td><td class="num">${fmtNum(c.stcg)}</td></tr>` : ''}
       ${(c.pl || 0) > 0 ? `<tr><td>Add: Other Income (P&amp;L)</td><td class="num">${fmtNum(c.pl)}</td></tr>` : ''}
@@ -419,7 +419,8 @@ const ReportModern = (() => {
     const tA = (a.cash||0) + (a.bank||0) + (a.stock||0) + (a.debtors||0) + (a.fixed||0);
     const tL = (l.capital||0) + (l.provtax||0) + (l.creditors||0) + (l.loan||0) + (l.netprofit||0);
     const totalA = tA > 0 ? tA : Math.round(turnover * 0.15 + turnover * 0.20 + bankBal + c.tdsCredit);
-    const totalL = tL > 0 ? tL : Math.round(c.businessIncome + c.taxDue + turnover * 0.10);
+    const totalL = tL > 0 ? tL : Math.round(c.businessIncome + (c.taxDue > 0 ? c.taxDue : (c.totalTaxPayable || 0)) + turnover * 0.10);
+    const provTaxAmt = l.provtax != null ? l.provtax : (c.taxDue > 0 ? c.taxDue : ((c.totalTaxPayable || 0) > 0 ? c.totalTaxPayable : 0));
     return `
   <div class="mrpt-section-header mrpt-keep" style="margin-top:18px;"><span class="icon">🏦</span> Balance Sheet (As on 31st March)</div>
   <div class="mrpt-keep">
@@ -432,7 +433,7 @@ const ReportModern = (() => {
       </tr>
       <tr>
         <td>Bank Balance</td><td class="num">${fmtNum(bankBal)}</td>
-        <td>Provision for Tax</td><td class="num">${fmtNum(l.provtax || (c.taxDue > 0 ? c.taxDue : 0))}</td>
+        <td>Provision for Tax</td><td class="num">${fmtNum(provTaxAmt)}</td>
       </tr>
       <tr>
         <td>Stock-in-Trade</td><td class="num">${fmtNum(a.stock || Math.round(turnover * 0.15))}</td>

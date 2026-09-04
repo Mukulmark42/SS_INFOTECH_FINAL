@@ -1519,6 +1519,16 @@ textarea.form-control { min-height: 72px; resize: vertical; }
 .bs-field .form-control {
   font-size: 12px;
   padding: 5px 8px;
+  transition: background-color 0.4s ease, border-color 0.4s ease;
+}
+
+.bs-field .form-control.bs-pulse {
+  animation: bsHighlight 0.5s ease;
+}
+
+@keyframes bsHighlight {
+  0% { background-color: rgba(99, 102, 241, 0.25); border-color: #6366f1; }
+  100% { background-color: inherit; border-color: inherit; }
 }
 
 .bs-total {

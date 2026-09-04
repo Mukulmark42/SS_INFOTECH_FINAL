@@ -43,15 +43,27 @@ const TDSEngine = (() => {
    * @param {Array}  banks           Bank accounts (for deductor names)
    * @returns {Object}               { tds194H, tds194C, tds194N, tds194J, totalTDS, entries }
    */
-  function generate(turnover, natureOfBiz, adminConfig = {}, banks = []) {
-    // FIX 1: Sanitise turnover – must be a valid non-negative number
+  /**
+   * Generate realistic TDS based on turnover, business type, and presumptive section.
+   *
+   * @param {number} turnover            Annual turnover
+   * @param {string} natureOfBiz         Nature of business (from dropdown)
+   * @param {Object} adminConfig         Admin-configured overrides
+   * @param {Array}  banks               Bank accounts (for deductor names)
+   * @param {string} ay                  Assessment Year (e.g. '2026-27')
+   * @param {string} presumptiveSection  '44AD' | '44ADA' | 'none'
+   * @returns {Object}                   { tds194H, tds194C, tds194N, tds194J, totalTDS, entries }
+   */
+  function generate(turnover, natureOfBiz, adminConfig = {}, banks = [], ay = '2026-27', presumptiveSection = '44AD') {
+    // Sanitise turnover – must be a valid non-negative number
     turnover = Math.max(0, parseFloat(turnover) || 0);
 
+    const is44ADA   = presumptiveSection === '44ADA';
+    const is44AD    = presumptiveSection === '44AD';
     const isRetail  = !natureOfBiz || RETAIL_TYPES.includes(natureOfBiz);
-    const isService = SERVICE_TYPES.includes(natureOfBiz);
+    const isService = SERVICE_TYPES.includes(natureOfBiz) || is44ADA;
 
     // Apply admin rate overrides (rates stored as plain %, e.g. 0.20 means 0.20%)
-    // FIX 2: Validate admin rates – must be a positive number, otherwise use default
     const r194H = (adminConfig.rate194H != null && adminConfig.rate194H > 0)
       ? (adminConfig.rate194H / 100)
       : (isRetail ? DEFAULTS.retail194H_rate : DEFAULTS.service194H_rate);
@@ -62,31 +74,29 @@ const TDSEngine = (() => {
 
     let tds194H = 0, tds194C = 0, tds194N = 0, tds194J = 0;
 
-    // ── 194H: Commission / Payment Gateway ──────────────────
-    // Applied on ~60% of turnover (digital payment portion)
-    // FIX 3: Guard zero turnover to avoid generating phantom TDS entries
-    if (turnover > 0) {
+    // ── 194H: Commission / Brokerage ────────────────────────
+    // Note: Section 44AD(6) prohibits 44AD for Commission/Brokerage income.
+    // Therefore, 194H is only generated if NOT under Section 44AD/44ADA or explicitly overridden.
+    if (!is44AD && !is44ADA && turnover > 0) {
       const digitalBase = Math.round(turnover * 0.60);
       tds194H = _roundRealistic(Math.round(digitalBase * r194H));
     }
 
-    // ── 194C: Courier / Transport ────────────────────────────
-    // Only meaningful if turnover crosses ₹15L threshold
-    if (turnover >= DEFAULTS.min194C_turnover) {
-      const logisticsBase = Math.round(turnover * 0.08); // ~8% of turnover is freight
+    // ── 194C: Courier / Transport / Contractor ───────────────
+    // Meaningful if turnover crosses ₹15L threshold or under 44AD trade/logistics
+    if (turnover >= DEFAULTS.min194C_turnover || is44AD) {
+      const logisticsBase = Math.round(turnover * 0.08); // ~8% of turnover is freight/contract
       tds194C = _roundRealistic(Math.round(logisticsBase * r194C));
     }
 
-    // ── 194J: Professional Fee (Services only) ───────────────
-    if (isService && turnover > 0) {
+    // ── 194J: Professional Fee (Section 44ADA / Services) ────
+    // Generated for 44ADA (Professionals) or service businesses not under 44AD
+    if ((is44ADA || (isService && !is44AD)) && turnover > 0) {
       tds194J = _roundRealistic(Math.round(turnover * r194J));
     }
 
     // ── 194N: Cash Withdrawal (only large turnovers) ─────────
-    // Section 194N applies ONLY if cash withdrawal from bank > ₹20L in a year
-    // For most small/medium businesses this doesn't trigger
     if (turnover >= DEFAULTS.min194N_turnover) {
-      // Estimate: 3% of turnover withdrawn as cash, 2% TDS on excess
       const cashWithdrawal = Math.round(turnover * 0.03);
       const excessCash     = Math.max(0, cashWithdrawal - 2000000); // above ₹20L
       if (excessCash > 0) {
@@ -94,7 +104,7 @@ const TDSEngine = (() => {
       }
     }
 
-    // FIX 4: Final NaN guard – all TDS values must be non-negative integers
+    // Final NaN guard – all TDS values must be non-negative integers
     tds194H = Math.max(0, tds194H || 0);
     tds194C = Math.max(0, tds194C || 0);
     tds194N = Math.max(0, tds194N || 0);
@@ -105,7 +115,7 @@ const TDSEngine = (() => {
     // ── Generate deductor entries (26AS format) ──────────────
     const entries = _buildEntries({
       tds194H, tds194C, tds194N, tds194J,
-      banks, turnover, isRetail, isService,
+      banks, turnover, isRetail, isService, is44ADA, ay,
       selectedDeductors: adminConfig.selectedDeductors || [],
     });
 
@@ -115,9 +125,7 @@ const TDSEngine = (() => {
   /**
    * Build individual deductor entries for 26AS-style display.
    */
-  // FIX 5: Added 'isService' to destructured params (was missing, causing 194J entry to
-  //         appear even without a guard; also needed to restrict 194C for service businesses)
-  function _buildEntries({ tds194H, tds194C, tds194N, tds194J, banks, turnover, isRetail, isService, selectedDeductors }) {
+  function _buildEntries({ tds194H, tds194C, tds194N, tds194J, banks, turnover, isRetail, isService, is44ADA, ay, selectedDeductors }) {
     const entries = [];
     const primaryBank = banks.find(b => b.primary) || banks[0] || {};
 
@@ -125,16 +133,15 @@ const TDSEngine = (() => {
     if (tds194H > 0) {
       const parts = _split194H(tds194H);
       const names = ['RAZORPAY PAYMENTS PVT LTD', 'PAYTM PAYMENTS BANK LTD', 'PHONEPE PRIVATE LIMITED'];
-      // FIX 6: Replaced unused 'rates' array with named constant for clarity
-      const commissionRate = 0.002; // 0.2% commission rate (194H statutory rate)
+      const commissionRate = 0.002; // 0.2% commission rate
       parts.forEach((amt, i) => {
         if (amt <= 0) return;
         entries.push({
           section:      '194H',
           deductorName: names[i] || `PAYMENT GATEWAY ${i + 1}`,
           deductorTAN:  _fakeTAN('R'),
-          dateOfCredit: _fakeDate(),
-          amountPaid:   Math.round(amt / commissionRate), // Back-calc amount from TDS
+          dateOfCredit: _fakeDate(ay),
+          amountPaid:   Math.round(amt / commissionRate),
           tdsClaimed:   amt,
           tdsDeposited: amt,
         });
@@ -148,22 +155,20 @@ const TDSEngine = (() => {
         section:      '194C',
         deductorName: logisticsNames[Math.floor(Math.random() * logisticsNames.length)],
         deductorTAN:  _fakeTAN('D'),
-        dateOfCredit: _fakeDate(),
-        // FIX 7: Was 0.001 (0.1%) – incorrect. 194C statutory rate for companies is 2%.
+        dateOfCredit: _fakeDate(ay),
         amountPaid:   Math.round(tds194C / 0.02),
         tdsClaimed:   tds194C,
         tdsDeposited: tds194C,
       });
     }
 
-    // 194J: Professional fee (Services only)
-    // FIX 8: Guard with isService – 194J entries must not appear for retail businesses
-    if (tds194J > 0 && isService) {
+    // 194J: Professional fee (Section 44ADA / Services)
+    if (tds194J > 0) {
       entries.push({
         section:      '194J',
         deductorName: 'CLIENT / PRINCIPAL COMPANY',
         deductorTAN:  _fakeTAN('C'),
-        dateOfCredit: _fakeDate(),
+        dateOfCredit: _fakeDate(ay),
         amountPaid:   Math.round(tds194J / 0.10), // 194J rate is 10%
         tdsClaimed:   tds194J,
         tdsDeposited: tds194J,
@@ -171,8 +176,6 @@ const TDSEngine = (() => {
     }
 
     // 194N: Bank cash withdrawal (only large cases)
-    // FIX 9: Removed '&& primaryBank.name' guard (194N should still appear even if bank name
-    //         is missing, falling back to 'AXIS BANK'). Also prevent duplicate ' LIMITED LIMITED'.
     if (tds194N > 0) {
       const rawBankName  = (primaryBank.name || 'AXIS BANK').toUpperCase();
       const deductorName = rawBankName.includes('LIMITED') ? rawBankName : rawBankName + ' LIMITED';
@@ -180,7 +183,7 @@ const TDSEngine = (() => {
         section:      '194N',
         deductorName: deductorName,
         deductorTAN:  _fakeTAN('B'),
-        dateOfCredit: _fakeDate(),
+        dateOfCredit: _fakeDate(ay),
         amountPaid:   Math.round(tds194N / 0.02) + 2000000,
         tdsClaimed:   tds194N,
         tdsDeposited: tds194N,
@@ -191,10 +194,8 @@ const TDSEngine = (() => {
     if (selectedDeductors && selectedDeductors.length > 0) {
       let deductorIndex = 0;
       entries.forEach(entry => {
-        // Do not override 194N because that is for bank cash withdrawals
         if (entry.section !== '194N') {
           const deductor = selectedDeductors[deductorIndex % selectedDeductors.length];
-          // FIX 10: Null-check deductor before accessing .name/.tan to prevent runtime crash
           if (deductor) {
             entry.deductorName = deductor.name || entry.deductorName;
             entry.deductorTAN  = deductor.tan  || _fakeTAN('O');
@@ -207,11 +208,10 @@ const TDSEngine = (() => {
     return entries;
   }
 
-
   /** Split 194H amount across 2 deductors with realistic proportions */
   function _split194H(total) {
-    if (total <= 500) return [total];                       // too small to split
-    const ratio = 0.55 + (Math.random() * 0.20);           // 55–75% to first deductor
+    if (total <= 500) return [total];
+    const ratio = 0.55 + (Math.random() * 0.20);
     const first = _roundRealistic(Math.round(total * ratio));
     const second = total - first;
     return second > 0 ? [first, second] : [total];
@@ -222,7 +222,6 @@ const TDSEngine = (() => {
    * e.g. 8217 → 8200  |  1543 → 1550  |  342 → 340
    */
   function _roundRealistic(n) {
-    // FIX 11: Added NaN / falsy guard so invalid inputs return 0 instead of NaN
     if (!n || isNaN(n) || n <= 0) return 0;
     if (n < 200)    return Math.round(n / 10)   * 10;
     if (n < 1000)   return Math.round(n / 50)   * 50;
@@ -241,21 +240,31 @@ const TDSEngine = (() => {
     return `${city}${typeChar}${d()}${d()}${d()}${d()}${r()}`;
   }
 
-  /** Generate a plausible credit date within the financial year */
-  function _fakeDate() {
-    // FIX 12: Was hardcoded to FY 2024-25. Now dynamically derives the current financial year.
-    const now     = new Date();
-    const curY    = now.getFullYear();
-    const curM    = now.getMonth() + 1; // 1-based month
-    const fyStart = curM >= 4 ? curY : curY - 1; // FY starts April
-    const fyEnd   = fyStart + 1;
+  /**
+   * Generate a plausible credit date strictly within the Financial Year (FY = AY - 1).
+   * For AY 2026-27, the FY is 2025-26 (01/04/2025 to 31/03/2026).
+   */
+  function _fakeDate(ay = '2026-27') {
+    let ayYear = 2026;
+    if (typeof ay === 'string' && ay.includes('-')) {
+      const parsed = parseInt(ay.split('-')[0], 10);
+      if (!isNaN(parsed) && parsed > 2000) ayYear = parsed;
+    } else if (typeof ay === 'number') {
+      ayYear = ay;
+    }
 
-    const months = [4,5,6,7,8,9,10,11,12,1,2,3];
-    const m = months[Math.floor(Math.random() * 12)];
-    const d = Math.floor(Math.random() * 28) + 1;
+    // Financial Year is the 12 months preceding the Assessment Year
+    const fyStart = ayYear - 1; // e.g. 2025 for AY 2026-27
+    const fyEnd   = ayYear;     // e.g. 2026 for AY 2026-27
+
+    const months = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+    const m = months[Math.floor(Math.random() * months.length)];
+    const maxDays = (m === 2) ? 28 : ([4, 6, 9, 11].includes(m) ? 30 : 31);
+    const d = Math.floor(Math.random() * maxDays) + 1;
     const y = m >= 4 ? fyStart : fyEnd;
-    return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
+
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
   }
 
-  return { generate, _roundRealistic };
+  return { generate, _roundRealistic, _fakeDate };
 })();
