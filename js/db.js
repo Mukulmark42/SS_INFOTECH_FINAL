@@ -205,7 +205,23 @@ const DB = (() => {
 
   // ── Admin Config ──────────────────────────────────────────
   function getAdmin() {
-    try { return JSON.parse(localStorage.getItem(ADMIN_KEY) || '{}'); }
+    try {
+      const config = JSON.parse(localStorage.getItem(ADMIN_KEY) || '{}');
+      if (!config.deductors || !Array.isArray(config.deductors) || config.deductors.length === 0) {
+        config.deductors = [
+          { name: 'Razorpay Payments Pvt Ltd', tan: 'DELR12345E', category: 'Payment Gateway' },
+          { name: 'Paytm Payments Bank Ltd', tan: 'NOIM12345E', category: 'Payment Gateway' },
+          { name: 'PhonePe Private Limited', tan: 'BANP12345E', category: 'Payment Gateway' },
+          { name: 'State Bank of India', tan: 'MUMS12345E', category: 'Bank' },
+          { name: 'HDFC Bank Ltd', tan: 'MUMH12345E', category: 'Bank' },
+          { name: 'ICICI Bank Ltd', tan: 'MUMI12345E', category: 'Bank' },
+          { name: 'Delhivery Limited', tan: 'GREP12345E', category: 'Logistics' },
+          { name: 'BlueDart Express Limited', tan: 'CHEP12345E', category: 'Logistics' },
+        ];
+        _safeSetItem(ADMIN_KEY, JSON.stringify(config));
+      }
+      return config;
+    }
     catch { return {}; }
   }
 
@@ -215,7 +231,32 @@ const DB = (() => {
 
   // ── Salary Slip Companies ──────────────────────────────────
   function getSlipCompanies() {
-    try { return JSON.parse(localStorage.getItem(SLIP_COMP_KEY) || '[]'); }
+    try {
+      const stored = localStorage.getItem(SLIP_COMP_KEY);
+      if (stored) return JSON.parse(stored);
+      const defaults = [
+        {
+          id: 'comp-hullect',
+          name: 'Hullect Services Private Limited',
+          address: 'Office No -SF - 05E, 2nd Floor, Riverview Arcade Plot No - 4/17,\nSector 4, Gomti Nagar Extension, Lucknow, Uttar Pradesh 226010',
+          phone: '0522-3504137',
+          email: 'contact@hullect.com',
+          logoText: 'H',
+          createdAt: Date.now()
+        },
+        {
+          id: 'comp-ss-infotech',
+          name: 'SS INFOTECH SOLUTIONS',
+          address: 'Plot No. 12, Sector 62, Electronic City, Noida, Uttar Pradesh 201301',
+          phone: '0120-4567890',
+          email: 'hr@ssinfotech.com',
+          logoText: 'SS',
+          createdAt: Date.now()
+        }
+      ];
+      _safeSetItem(SLIP_COMP_KEY, JSON.stringify(defaults));
+      return defaults;
+    }
     catch { return []; }
   }
 

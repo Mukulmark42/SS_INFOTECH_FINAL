@@ -716,16 +716,17 @@ const BankStatementEngine = (() => {
     const txs = data.transactions || [];
     const minBalance = parseFloat(data.minBalance) || 25000;
 
-    const bankName = b.name || 'ICICI BANK';
-    const holder = ac.holder || 'MUKUL RAHAMAN';
-    const holderAddress = ac.address || 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA';
-    const branchName = ac.branch || 'BASIRHAT';
-    const branchAddress = b.address || ac.branchAddress || 'ICICI BANK LTD., BASIRHAT BRANCH, BHAWANIPUR, PO.-BASIRHAT COLLEGE, DIST.- 24 PARGANAS (NORTH).743 412, NORTH 24 PARGANAS, WEST BENGAL, INDIA';
-    const acNo = ac.accountNo || '091405003332';
-    const acType = ac.accountType || 'CAA';
-    const custId = ac.custId || '573886835';
-    const branchCode = ac.branchCode || '0914';
-    const ifsc = ac.ifsc || 'ICIC0000914';
+    const U = s => (s == null ? '' : String(s).trim().toUpperCase());
+    const bankName = U(b.name) || 'ICICI BANK';
+    const holder = U(ac.holder) || 'MUKUL RAHAMAN';
+    const holderAddress = U(ac.address) || 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA';
+    const branchName = U(ac.branch) || 'BASIRHAT';
+    const branchAddress = U(b.address || ac.branchAddress) || 'ICICI BANK LTD., BASIRHAT BRANCH, BHAWANIPUR, PO.-BASIRHAT COLLEGE, DIST.- 24 PARGANAS (NORTH).743 412, NORTH 24 PARGANAS, WEST BENGAL, INDIA';
+    const acNo = U(ac.accountNo) || '091405003332';
+    const acType = U(ac.accountType) || 'CAA';
+    const custId = U(ac.custId) || '573886835';
+    const branchCode = U(ac.branchCode) || '0914';
+    const ifsc = U(ac.ifsc) || 'ICIC0000914';
     const currency = 'INR';
 
     const fromDateDisplay = fmtDate(data.fromDate);
@@ -747,11 +748,13 @@ const BankStatementEngine = (() => {
       return {
         ...t,
         slNo: idx + 1,
-        tranId: t.tranId || `S${Math.floor(10000000 + idx * 1000 + Math.random() * 900)}`,
+        tranId: U(t.tranId) || `S${Math.floor(10000000 + idx * 1000 + Math.random() * 900)}`,
+        description: U(t.description || t.narration || t.remark || ''),
         valueDate: fmtICICIDate(t.valueDate || t.txnDate),
         txnDate: fmtICICIDate(t.txnDate),
         postedDate: t.postedDate || `${fmtDate(t.txnDate)} 10:30:00 AM`,
-        refNo: t.refNo || '',
+        refNo: U(t.refNo || ''),
+        channel: U(t.channel || ''),
         dr,
         cr,
         balance
@@ -1135,16 +1138,18 @@ const BankStatementEngine = (() => {
     const txs = (data.transactions || []).slice();
     const minBalance = parseFloat(data.minBalance) > 0 ? parseFloat(data.minBalance) : DEFAULT_MIN_BALANCE;
 
-    const bankName = b.name || 'BANK STATEMENT';
+    const U = s => (s ? String(s).trim().toUpperCase() : '');
+
+    const bankName = U(b.name) || 'BANK STATEMENT';
     const logoText = (b.logoText || bankName).toUpperCase().slice(0, 2);
     const logoData = b.logoData || null;
-    const branch = ac.branch || b.address || 'MAIN BRANCH';
-    const ifsc = ac.ifsc || 'UTIB0000001';
-    const acNo = ac.accountNo || '--';
-    const acType = ac.accountType || 'CAA';
-    const holder = ac.holder || 'ACCOUNT HOLDER';
-    const custId = ac.custId || '--';
-    const holderAddress = ac.address || '';
+    const branch = U(ac.branch || b.address) || 'MAIN BRANCH';
+    const ifsc = U(ac.ifsc) || 'UTIB0000001';
+    const acNo = U(ac.accountNo) || '--';
+    const acType = U(ac.accountType) || 'CAA';
+    const holder = U(ac.holder) || 'ACCOUNT HOLDER';
+    const custId = U(ac.custId) || '--';
+    const holderAddress = U(ac.address) || '';
     const fromDate = fmtDisplayDate(data.fromDate);
     const toDate = fmtDisplayDate(data.toDate);
     const periodText = `${fromDate}  TO  ${toDate}`;
@@ -1163,7 +1168,8 @@ const BankStatementEngine = (() => {
       return {
         ...t,
         slNo: idx + 1,
-        tranId: t.tranId || `TXN${Math.floor(10000000 + idx * 1000 + Math.random() * 900)}`,
+        tranId: U(t.tranId) || `TXN${Math.floor(10000000 + idx * 1000 + Math.random() * 900)}`,
+        description: U(t.description || t.narration || t.remark || ''),
         txnDateFormatted: fmtDate(t.txnDate),
         valueDateFormatted: fmtDate(t.valueDate || t.txnDate),
         dr,

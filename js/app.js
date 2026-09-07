@@ -60,11 +60,44 @@ const App = (() => {
     'UJVN': 'UJJIVAN SMALL FINANCE BANK',
   };
 
+  // ── Live Uppercase Binding ────────────────────────────────
+  function _bindUppercaseInputs() {
+    document.addEventListener('input', (e) => {
+      const el = e.target;
+      if (!el || el.tagName !== 'INPUT') return;
+      if (el.type !== 'text' && el.type !== 'search') return;
+      
+      const isTarget = 
+        el.classList.contains('text-uppercase') ||
+        el.id.startsWith('bs-') ||
+        el.id.startsWith('bss-') ||
+        el.id.startsWith('ss-emp-') ||
+        el.id.startsWith('bank-') ||
+        el.id.startsWith('admin-new-bank-') ||
+        el.id.startsWith('edit-bank-') ||
+        el.classList.contains('stmt-tx-tranid') ||
+        el.classList.contains('stmt-tx-desc');
+
+      if (isTarget) {
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        const upper = el.value.toUpperCase();
+        if (el.value !== upper) {
+          el.value = upper;
+          if (start !== null && end !== null) {
+            el.setSelectionRange(start, end);
+          }
+        }
+      }
+    });
+  }
+
   // ── Init ───────────────────────────────────────────────────
   function init() {
     _bindNav();
     _bindTheme();
     _bindSidebar();
+    _bindUppercaseInputs();
     _initBanks();
     _initBankAutocomplete();
     _bindReportModal();
@@ -273,26 +306,57 @@ const App = (() => {
   }
 
   // ── Deductors ──────────────────────────────────────────────
+  function _getSelectedDeductors() {
+    const admin = DB.getAdmin();
+    const selectedCards = document.querySelectorAll('#f-deductor-container .ded-card.selected:not(.auto-card)');
+    const list = [];
+    selectedCards.forEach(card => {
+      const idx = parseInt(card.dataset.value, 10);
+      if (!isNaN(idx) && admin.deductors && admin.deductors[idx]) {
+        list.push(admin.deductors[idx]);
+      }
+    });
+    return list;
+  }
+
   function onDeductorChange(el) {
+    const container = document.getElementById('f-deductor-container');
+    if (!container || !el) return;
+
     const isAuto = el.dataset.value === 'auto';
-    const wasSelected = el.classList.contains('selected');
 
     if (isAuto) {
-      document.querySelectorAll('.ded-card').forEach(c => c.classList.remove('selected'));
-      if (!wasSelected) el.classList.add('selected');
+      container.querySelectorAll('.ded-card').forEach(c => {
+        c.classList.remove('selected');
+        const icon = c.querySelector('.ded-card-check i');
+        if (icon) icon.className = 'bi bi-circle';
+      });
+      el.classList.add('selected');
+      const autoIcon = el.querySelector('.ded-card-check i');
+      if (autoIcon) autoIcon.className = 'bi bi-check-circle-fill';
     } else {
-      const autoCard = document.querySelector('.ded-card.auto-card');
-      if (autoCard) autoCard.classList.remove('selected');
+      const autoCard = container.querySelector('.ded-card.auto-card');
+      if (autoCard) {
+        autoCard.classList.remove('selected');
+        const autoIcon = autoCard.querySelector('.ded-card-check i');
+        if (autoIcon) autoIcon.className = 'bi bi-circle';
+      }
+
       el.classList.toggle('selected');
+      const icon = el.querySelector('.ded-card-check i');
+      if (icon) {
+        icon.className = el.classList.contains('selected') ? 'bi bi-check-circle-fill' : 'bi bi-circle';
+      }
+
+      const selectedCustom = container.querySelectorAll('.ded-card.selected:not(.auto-card)');
+      if (selectedCustom.length === 0 && autoCard) {
+        autoCard.classList.add('selected');
+        const autoIcon = autoCard.querySelector('.ded-card-check i');
+        if (autoIcon) autoIcon.className = 'bi bi-check-circle-fill';
+      }
     }
 
-    const anySelected = document.querySelectorAll('.ded-card.selected').length > 0;
-    if (!anySelected) {
-      const autoCard = document.querySelector('.ded-card.auto-card');
-      if (autoCard) autoCard.classList.add('selected');
-    }
-
-    _populateDynamicDropdowns();
+    recalcIncome();
   }
 
   // ── Banks ──────────────────────────────────────────────────
@@ -324,8 +388,8 @@ const App = (() => {
 
   function _syncBanks() {
     banks.forEach(b => {
-      b.name      = (document.getElementById(`bank-name-${b.id}`)?.value || '').trim();
-      b.accountNo = (document.getElementById(`bank-acc-${b.id}`)?.value  || '').trim();
+      b.name      = (document.getElementById(`bank-name-${b.id}`)?.value || '').trim().toUpperCase();
+      b.accountNo = (document.getElementById(`bank-acc-${b.id}`)?.value  || '').trim().toUpperCase();
       b.ifsc      = (document.getElementById(`bank-ifsc-${b.id}`)?.value || '').trim().toUpperCase();
       b.type      = (document.getElementById(`bank-type-${b.id}`)?.value || 'SB');
     });
@@ -348,10 +412,10 @@ const App = (() => {
             <input type="text" class="form-control text-uppercase" id="bank-name-${_esc(b.id)}" placeholder="Bank Name *" value="${_esc(b.name)}" oninput="App.syncBanks()" />
           </div>
           <div class="col-md-4">
-            <input type="text" class="form-control" id="bank-acc-${_esc(b.id)}" placeholder="Account Number *" value="${_esc(b.accountNo)}" oninput="App.syncBanks()" />
+            <input type="text" class="form-control text-uppercase font-monospace" id="bank-acc-${_esc(b.id)}" placeholder="Account Number *" value="${_esc(b.accountNo)}" oninput="App.syncBanks()" />
           </div>
           <div class="col-md-2">
-            <input type="text" class="form-control text-uppercase" id="bank-ifsc-${_esc(b.id)}" placeholder="IFSC *" value="${_esc(b.ifsc)}" maxlength="11" oninput="App.syncBanks()" />
+            <input type="text" class="form-control text-uppercase font-monospace" id="bank-ifsc-${_esc(b.id)}" placeholder="IFSC *" value="${_esc(b.ifsc)}" maxlength="11" oninput="App.syncBanks()" />
           </div>
           <div class="col-md-2">
             <select class="form-select" id="bank-type-${_esc(b.id)}" onchange="App.syncBanks()">
@@ -527,9 +591,11 @@ const App = (() => {
     const natureOfBiz = _v('f-nature');
 
     // Compute accurate tax liability for Provision for Tax
+    const selectedDeductors = _getSelectedDeductors();
     const tdsData = TDSEngine.generate(turnover, natureOfBiz, {
       rate194H: admin.rate194H,
       rate194C: admin.rate194C,
+      selectedDeductors: selectedDeductors,
     }, banks, ay, presumptiveSection);
 
     const comp = TaxEngine.compute({
@@ -789,16 +855,7 @@ const App = (() => {
     const taxRegime          = _v('f-regime') || 'New';
 
     // Parse Deductors
-    const selectedCards = document.querySelectorAll('.ded-card.selected:not(.auto-card)');
-    let selectedDeductors = [];
-    if (selectedCards.length > 0) {
-      selectedCards.forEach(card => {
-        const idx = parseInt(card.dataset.value, 10);
-        if (!isNaN(idx) && admin.deductors && admin.deductors[idx]) {
-          selectedDeductors.push(admin.deductors[idx]);
-        }
-      });
-    }
+    const selectedDeductors = _getSelectedDeductors();
 
     // TDS – pass business nature, AY, and presumptive section for type-aware & FY-compliant generation
     const tdsData = TDSEngine.generate(turnover, natureOfBiz, {
@@ -849,6 +906,7 @@ const App = (() => {
       ackNo:       (_v('f-ack-no') || '').trim().replace(/\D/g, ''),
       filingDate:  _v('f-filing-date'),
       evcMode:     _v('f-evc-mode') || 'Aadhaar OTP',
+      selectedDeductors: selectedDeductors,
     };
 
     return {
@@ -1353,6 +1411,28 @@ const App = (() => {
           el('bal-loan', bs.liabilities?.loan);
           el('bal-netprofit', bs.liabilities?.netprofit);
           recalcBS();
+        }
+      }
+
+      if (c.selectedDeductors && c.selectedDeductors.length > 0) {
+        const dedContainer = document.getElementById('f-deductor-container');
+        if (dedContainer) {
+          const autoCard = dedContainer.querySelector('.ded-card.auto-card');
+          if (autoCard) {
+            autoCard.classList.remove('selected');
+            const icon = autoCard.querySelector('.ded-card-check i');
+            if (icon) icon.className = 'bi bi-circle';
+          }
+          const admin = DB.getAdmin();
+          (admin.deductors || []).forEach((d, idx) => {
+            const isMatch = c.selectedDeductors.some(sd => sd.tan === d.tan || sd.name === d.name);
+            const card = dedContainer.querySelector(`.ded-card[data-value="${idx}"]`);
+            if (card && isMatch) {
+              card.classList.add('selected');
+              const icon = card.querySelector('.ded-card-check i');
+              if (icon) icon.className = 'bi bi-check-circle-fill';
+            }
+          });
         }
       }
     }, 100);
@@ -3873,6 +3953,7 @@ const App = (() => {
     const compId = document.getElementById('ss-company')?.value;
     const comps = DB.getSlipCompanies();
     const company = comps.find(c => c.id === compId) || {};
+    const U = s => (s ? String(s).trim().toUpperCase() : '');
 
     // Earnings
     const earnRows = document.querySelectorAll('#ss-earnings-list .ss-earn-row');
@@ -3902,18 +3983,18 @@ const App = (() => {
       month: document.getElementById('ss-month')?.value || 'April',
       year: document.getElementById('ss-year')?.value || new Date().getFullYear(),
       employee: {
-        id: document.getElementById('ss-emp-id')?.value.trim() || '',
-        name: document.getElementById('ss-emp-name')?.value.trim() || '',
-        location: document.getElementById('ss-emp-location')?.value.trim() || '',
-        division: document.getElementById('ss-emp-division')?.value.trim() || '',
-        designation: document.getElementById('ss-emp-designation')?.value.trim() || '',
+        id: U(document.getElementById('ss-emp-id')?.value),
+        name: U(document.getElementById('ss-emp-name')?.value),
+        location: U(document.getElementById('ss-emp-location')?.value),
+        division: U(document.getElementById('ss-emp-division')?.value),
+        designation: U(document.getElementById('ss-emp-designation')?.value),
         doj: document.getElementById('ss-emp-doj')?.value || '',
-        uan: document.getElementById('ss-emp-uan')?.value.trim() || '',
-        esic: document.getElementById('ss-emp-esic')?.value.trim() || '',
-        pan: document.getElementById('ss-emp-pan')?.value.trim() || '',
-        bankName: document.getElementById('ss-emp-bank')?.value.trim() || '',
-        acNo: document.getElementById('ss-emp-acno')?.value.trim() || '',
-        ifsc: document.getElementById('ss-emp-ifsc')?.value.trim() || '',
+        uan: U(document.getElementById('ss-emp-uan')?.value),
+        esic: U(document.getElementById('ss-emp-esic')?.value),
+        pan: U(document.getElementById('ss-emp-pan')?.value),
+        bankName: U(document.getElementById('ss-emp-bank')?.value),
+        acNo: U(document.getElementById('ss-emp-acno')?.value),
+        ifsc: U(document.getElementById('ss-emp-ifsc')?.value),
       },
       attendance: {
         totalDays: document.getElementById('ss-total-days')?.value || '30',
@@ -4533,7 +4614,8 @@ const App = (() => {
   }
 
   function _collectStatementData() {
-    const bankName = (document.getElementById('bs-bank')?.value || '').trim();
+    const U = s => (s ? String(s).trim().toUpperCase() : '');
+    const bankName = U(document.getElementById('bs-bank')?.value);
     const banks = _getBankConfigObjects();
     const bank = _matchBank(bankName, banks) || { name: bankName };
     const savedLogo = bank.logoData || _resolveBankLogo(bank.name || bankName, null);
@@ -4542,11 +4624,11 @@ const App = (() => {
     const transactions = [];
     rows.forEach(row => {
       transactions.push({
-        tranId: row.querySelector('.stmt-tx-tranid')?.value.trim() || '',
+        tranId: U(row.querySelector('.stmt-tx-tranid')?.value),
         txnDate: row.querySelector('.stmt-tx-date')?.value || '',
         valueDate: row.dataset.valueDate || row.querySelector('.stmt-tx-date')?.value || '',
         postedDate: row.dataset.postedDate || '',
-        description: row.querySelector('.stmt-tx-desc')?.value.trim() || '',
+        description: U(row.querySelector('.stmt-tx-desc')?.value),
         debit: row.querySelector('.stmt-tx-dr')?.value || '',
         credit: row.querySelector('.stmt-tx-cr')?.value || '',
       });
@@ -4555,21 +4637,21 @@ const App = (() => {
       persona: 'business',
       style: document.getElementById('bs-style')?.value || 'icici',
       bank: {
-        name: bank.name || bankName,
+        name: U(bank.name) || bankName,
         logoData: effectiveLogo,
         logoText: bank.logoText || (bankName ? bankName.slice(0, 2) : ''),
-        address: document.getElementById('bs-branchaddress')?.value.trim() || bank.address || ''
+        address: U(document.getElementById('bs-branchaddress')?.value || bank.address)
       },
       account: {
-        holder: document.getElementById('bs-holder')?.value.trim() || '',
-        accountNo: document.getElementById('bs-acno')?.value.trim() || '',
-        accountType: document.getElementById('bs-actype')?.value || 'CAA',
-        custId: document.getElementById('bs-custid')?.value.trim() || '',
-        ifsc: document.getElementById('bs-ifsc')?.value.trim() || '',
-        branch: document.getElementById('bs-branch')?.value.trim() || '',
-        branchCode: document.getElementById('bs-branchcode')?.value.trim() || '',
-        address: document.getElementById('bs-holderaddress')?.value.trim() || '',
-        branchAddress: document.getElementById('bs-branchaddress')?.value.trim() || '',
+        holder: U(document.getElementById('bs-holder')?.value),
+        accountNo: U(document.getElementById('bs-acno')?.value),
+        accountType: U(document.getElementById('bs-actype')?.value) || 'CAA',
+        custId: U(document.getElementById('bs-custid')?.value),
+        ifsc: U(document.getElementById('bs-ifsc')?.value),
+        branch: U(document.getElementById('bs-branch')?.value),
+        branchCode: U(document.getElementById('bs-branchcode')?.value),
+        address: U(document.getElementById('bs-holderaddress')?.value),
+        branchAddress: U(document.getElementById('bs-branchaddress')?.value),
         openingBalance: parseFloat(document.getElementById('bs-opening')?.value) || 0,
       },
       fromDate: document.getElementById('bs-from')?.value || '',
@@ -5108,7 +5190,8 @@ const App = (() => {
   }
 
   function _collectSalaryStatementData() {
-    const bankName = (document.getElementById('bss-bank')?.value || '').trim();
+    const U = s => (s ? String(s).trim().toUpperCase() : '');
+    const bankName = U(document.getElementById('bss-bank')?.value);
     const banks = _getBankConfigObjects();
     const bank = _matchBank(bankName, banks) || { name: bankName };
     const savedLogo = bank.logoData || _resolveBankLogo(bank.name || bankName, null);
@@ -5117,11 +5200,11 @@ const App = (() => {
     const transactions = [];
     rows.forEach(row => {
       transactions.push({
-        tranId: row.querySelector('.stmt-tx-tranid')?.value.trim() || '',
+        tranId: U(row.querySelector('.stmt-tx-tranid')?.value),
         txnDate: row.querySelector('.stmt-tx-date')?.value || '',
         valueDate: row.dataset.valueDate || row.querySelector('.stmt-tx-date')?.value || '',
         postedDate: row.dataset.postedDate || '',
-        description: row.querySelector('.stmt-tx-desc')?.value.trim() || '',
+        description: U(row.querySelector('.stmt-tx-desc')?.value),
         debit: row.querySelector('.stmt-tx-dr')?.value || '',
         credit: row.querySelector('.stmt-tx-cr')?.value || '',
       });
@@ -5129,24 +5212,24 @@ const App = (() => {
     return {
       persona: 'salary',
       style: document.getElementById('bss-style')?.value || 'icici',
-      companyName: document.getElementById('bss-company')?.value || 'TECH MAHINDRA LTD',
+      companyName: U(document.getElementById('bss-company')?.value) || 'TECH MAHINDRA LTD',
       salaryAmount: parseFloat(document.getElementById('bss-salary-amount')?.value) || 65000,
       bank: {
-        name: bank.name || bankName,
+        name: U(bank.name) || bankName,
         logoData: effectiveLogo,
         logoText: bank.logoText || (bankName ? bankName.slice(0, 2) : ''),
-        address: document.getElementById('bss-branchaddress')?.value.trim() || bank.address || ''
+        address: U(document.getElementById('bss-branchaddress')?.value || bank.address)
       },
       account: {
-        holder: document.getElementById('bss-holder')?.value.trim() || '',
-        accountNo: document.getElementById('bss-acno')?.value.trim() || '',
-        accountType: document.getElementById('bss-actype')?.value || 'SALARY',
-        custId: document.getElementById('bss-custid')?.value.trim() || '',
-        ifsc: document.getElementById('bss-ifsc')?.value.trim() || '',
-        branch: document.getElementById('bss-branch')?.value.trim() || '',
-        branchCode: document.getElementById('bss-branchcode')?.value.trim() || '',
-        address: document.getElementById('bss-holderaddress')?.value.trim() || '',
-        branchAddress: document.getElementById('bss-branchaddress')?.value.trim() || '',
+        holder: U(document.getElementById('bss-holder')?.value),
+        accountNo: U(document.getElementById('bss-acno')?.value),
+        accountType: U(document.getElementById('bss-actype')?.value) || 'SALARY',
+        custId: U(document.getElementById('bss-custid')?.value),
+        ifsc: U(document.getElementById('bss-ifsc')?.value),
+        branch: U(document.getElementById('bss-branch')?.value),
+        branchCode: U(document.getElementById('bss-branchcode')?.value),
+        address: U(document.getElementById('bss-holderaddress')?.value),
+        branchAddress: U(document.getElementById('bss-branchaddress')?.value),
         openingBalance: parseFloat(document.getElementById('bss-opening')?.value) || 150000,
       },
       fromDate: document.getElementById('bss-from')?.value || '',

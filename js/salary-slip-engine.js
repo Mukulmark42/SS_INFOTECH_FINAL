@@ -1,6 +1,7 @@
 /**
  * ═══════════════════════════════════════════════════════════
- * SALARY SLIP ENGINE – Classic Professional Payslip
+ * SALARY SLIP ENGINE – Standard Professional Payslip
+ * Exact format matching corporate payslip specification
  * Supports single & multi-month batch payslip generation
  * ═══════════════════════════════════════════════════════════
  */
@@ -8,7 +9,7 @@ const SalarySlipEngine = (() => {
 
   function fmt(n) {
     const v = parseFloat(n) || 0;
-    return v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return v.toFixed(2);
   }
 
   function _numToWords(n) {
@@ -26,9 +27,49 @@ const SalarySlipEngine = (() => {
   }
 
   function _esc(str) {
-    const d = document.createElement('div');
-    d.textContent = str || '';
-    return d.innerHTML;
+    if (!str && str !== 0) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function _shortMonth(m) {
+    if (!m) return 'Jan';
+    const map = {
+      January: 'Jan', February: 'Feb', March: 'Mar', April: 'Apr',
+      May: 'May', June: 'Jun', July: 'Jul', August: 'Aug',
+      September: 'Sep', October: 'Oct', November: 'Nov', December: 'Dec'
+    };
+    return map[m] || (m.length > 3 ? m.slice(0, 3) : m);
+  }
+
+  function _formatMonthYear(month, year) {
+    const sm = _shortMonth(month || 'Jan');
+    const yr = year || new Date().getFullYear();
+    return `${sm}-${yr}`;
+  }
+
+  function _formatDoj(d) {
+    if (!d) return '--';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const parts = d.split('-');
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const mIdx = parseInt(parts[1], 10) - 1;
+      return `${parts[2]}-${monthNames[mIdx] || parts[1]}-${parts[0]}`;
+    }
+    return d;
+  }
+
+  function _fmtDays(val, fallback) {
+    if (val === undefined || val === null || val === '') {
+      val = fallback;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) return String(val);
+    return num.toFixed(1);
   }
 
   /**
@@ -42,187 +83,212 @@ const SalarySlipEngine = (() => {
     const deductions = data.deductions || { items: [], total: 0 };
 
     const totalEarn = earnings.reduce((s, r) => s + (parseFloat(r.salary) || 0), 0);
-    const totalDed = deductions.total || 0;
+    const totalDed = deductions.total || (deductions.items ? deductions.items.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) : 0);
     const netPay = totalEarn - totalDed;
-    const monthYear = (data.month || 'April') + ' ' + (data.year || '2026');
+    const monthYearStr = _formatMonthYear(data.month, data.year);
 
-    const logoText = (c.logoText || 'C').toUpperCase();
+    const U = s => (s ? String(s).trim().toUpperCase() : '');
+
     const logoData = c.logoData || null;
-    const compName = c.name || 'Company Name';
-    const compAddr = c.address || '';
+    const compName = U(c.name) || 'COMPANY NAME';
+    const compAddr = U(c.address) || '';
     const compPhone = c.phone || '';
     const compEmail = c.email || '';
-    const compTagline = c.tagline || '';
-
-    const netPayWhole = Math.floor(netPay);
-    const netPayPaise = Math.round((netPay - netPayWhole) * 100);
-    let netPayWords = 'Rupees ' + _numToWords(netPayWhole);
-    if (netPayPaise > 0) netPayWords += ' and ' + _numToWords(netPayPaise) + ' Paise';
-    netPayWords += ' Only';
 
     // Logo HTML
     let logoHtml;
     if (logoData) {
-      logoHtml = `<div class="slip-logo"><img src="${logoData}" alt="Company Logo" /></div>`;
+      logoHtml = `<div class="slip-header-logo"><img src="${logoData}" alt="${_esc(compName)}" /></div>`;
     } else {
-      const colors = [
-        ['#1a3c6e','#2a5298'],['#1a5632','#228b22'],['#8b1a1a','#b22222'],
-        ['#6b4c00','#8b6914'],['#3b1a6e','#5b2d8e'],['#5a1a4e','#7b2d6e'],
-        ['#1a3b6e','#2a5b9e'],['#6e1a4b','#8b2d6e'],
-      ];
-      const ci = (compName || '').charCodeAt(0) % colors.length;
-      logoHtml = `<div class="slip-logo" style="background:${colors[ci][0]};color:#fff">${_esc(logoText)}</div>`;
+      logoHtml = `
+        <div class="slip-header-brand">
+          <div class="brand-badge-icon">
+            <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 2L32 10V26L18 34L4 26V10L18 2Z" fill="#0070c0" fill-opacity="0.15" stroke="#0070c0" stroke-width="2"/>
+              <path d="M18 7L27 12V24L18 29L9 24V12L18 7Z" fill="#0070c0"/>
+            </svg>
+          </div>
+          <div class="brand-text-name">${_esc(compName)}</div>
+          <div class="brand-text-tagline">SERVICES &bull; RECRUITMENT &bull; SOLUTIONS</div>
+        </div>`;
     }
 
-    // Employee details (all uppercase in print)
-    const U = s => (s || '--').toUpperCase();
-    const empLeft = [
-      { label: 'Employee ID', value: U(e.id) },
-      { label: 'Location', value: U(e.location) },
-      { label: 'Date of Joining', value: U(e.doj) },
-      { label: 'UAN', value: U(e.uan) },
-      { label: 'ESIC No', value: U(e.esic) },
-      { label: 'PAN No', value: U(e.pan) },
-    ];
-    const empRight = [
-      { label: 'Employee Name', value: U(e.name) },
-      { label: 'Division', value: U(e.division) },
-      { label: 'Designation', value: U(e.designation) },
-      { label: 'Bank Name', value: U(e.bankName) },
-      { label: 'Bank A/c', value: U(e.acNo) },
-      { label: 'IFSC Code', value: U(e.ifsc) },
-    ];
+    // Address & Phone
+    const addrHtml = compAddr ? _esc(compAddr).replace(/\n/g, '<br>') : '';
+    const contactParts = [];
+    if (compPhone) contactParts.push(_esc(compPhone));
+    if (compEmail) contactParts.push(_esc(compEmail));
+    const phoneHtml = contactParts.join(' &nbsp;|&nbsp; ');
 
-    let empRows = '';
-    for (let i = 0; i < Math.max(empLeft.length, empRight.length); i++) {
-      const l = empLeft[i] || { label: '', value: '' };
-      const r = empRight[i] || { label: '', value: '' };
-      const stripe = i % 2 === 0 ? 'row-light' : 'row-white';
-      empRows += `<tr class="${stripe}">
-        <td class="emp-lbl">${l.label}</td>
-        <td class="emp-val">${l.value}</td>
-        <td class="emp-lbl">${r.label}</td>
-        <td class="emp-val">${r.value}</td>
-      </tr>`;
-    }
+    // Employee Key-Values
+    const empId = U(e.id) || '--';
+    const empName = U(e.name) || '--';
+    const empLocation = U(e.location) || '--';
+    const empDivision = U(e.division) || '--';
+    const empDoj = _formatDoj(e.doj);
+    const empDesignation = U(e.designation) || '--';
+    const empUan = U(e.uan) || '--';
+    const empBankName = U(e.bankName) || '--';
+    const empEsic = U(e.esic) || '--';
+    const empAcNo = U(e.acNo) || '--';
+    const empPan = U(e.pan) || '--';
+    const empIfsc = U(e.ifsc) || '--';
+
+    // Attendance numbers formatted as 31.0, 00.0, etc.
+    const totalDaysStr = _fmtDays(att.totalDays, 31);
+    const daysPaidStr = _fmtDays(att.daysPaid, totalDaysStr);
+    const lopVal = parseFloat(att.lop) || 0;
+    const lopStr = lopVal === 0 ? '00.0' : lopVal.toFixed(1);
 
     // Build earnings/deductions table rows
-    const maxRows = Math.max(earnings.length, deductions.items.length);
+    const dedItems = deductions.items || [];
+    const maxRows = Math.max(earnings.length, dedItems.length, 3);
     let tableRows = '';
+
     for (let i = 0; i < maxRows; i++) {
-      const er = earnings[i] || {};
-      const dr = deductions.items[i] || {};
-      const stripe = i % 2 === 0 ? 'row-white' : 'row-light';
-      tableRows += `<tr class="${stripe}">
-        <td class="td-name">${_esc(U(er.name))}</td>
-        <td class="td-num">${er.actual ? fmt(er.actual) : '&nbsp;'}</td>
-        <td class="td-num">${er.salary ? fmt(er.salary) : '&nbsp;'}</td>
-        <td class="td-name">${_esc(U(dr.name))}</td>
-        <td class="td-num">${dr.amount ? fmt(dr.amount) : '&nbsp;'}</td>
+      const er = earnings[i];
+      const dr = dedItems[i];
+
+      const erName = er && er.name ? _esc(er.name) : '';
+      const erActual = er && er.actual !== undefined && er.actual !== '' ? fmt(er.actual) : '';
+      const erSalary = er && er.salary !== undefined && er.salary !== '' ? fmt(er.salary) : '';
+
+      const drName = dr && dr.name ? _esc(dr.name) : '';
+      const drAmt = dr && dr.amount !== undefined && dr.amount !== '' ? fmt(dr.amount) : '';
+
+      tableRows += `
+      <tr class="slip-data-row">
+        <td class="col-head-earn">${erName}</td>
+        <td class="col-act-earn">${erActual}</td>
+        <td class="col-sal-earn">${erSalary}</td>
+        <td class="col-head-ded">${drName}</td>
+        <td class="col-amt-ded">${drAmt}</td>
       </tr>`;
     }
 
-    // Address lines
-    let addrLines = [];
-    if (compAddr) addrLines.push(_esc(compAddr));
-    let contactParts = [];
-    if (compPhone) contactParts.push('Ph: ' + _esc(compPhone));
-    if (compEmail) contactParts.push('Email: ' + _esc(compEmail));
-    if (contactParts.length) addrLines.push(contactParts.join('  |  '));
-
-    const taglineHtml = compTagline
-      ? `<div class="slip-tagline">${_esc(compTagline)}</div>`
-      : '';
+    // Bank Credit Text
+    let bankCreditText = `Your salary for the month ${monthYearStr} of Rs. ${fmt(netPay)} credited to your bank account no: ${empAcNo}`;
+    if (empBankName && empBankName !== '--') {
+      bankCreditText += ` of bank ${empBankName}`;
+    }
+    if (empIfsc && empIfsc !== '--') {
+      bankCreditText += ` (${empIfsc})`;
+    }
+    bankCreditText += '.';
 
     return `
-    <div class="slip-page">
-      <div class="top-rule"></div>
+    <div class="slip-card-wrapper">
+      <div class="payslip-outer-box">
 
-      <!-- ── HEADER ── -->
-      <div class="slip-header">
-        <div class="slip-hdr-left">
-          ${logoHtml}
-        </div>
-        <div class="slip-hdr-info">
-          <div class="slip-comp-name">${_esc(compName)}</div>
-          ${taglineHtml}
-          <div class="hdr-addr">${addrLines.join('<br>')}</div>
-        </div>
-      </div>
-
-      <!-- ── TITLE BAR ── -->
-      <div class="slip-title">
-        <span class="slip-title-text">Payslip for the month of ${_esc(monthYear)}</span>
-      </div>
-
-      <!-- ── EMPLOYEE DETAILS ── -->
-      <div class="slip-emp">
-        <table>
-          <tbody>
-            ${empRows}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- ── ATTENDANCE ── -->
-      <div class="slip-att">
-        <span>Total Days: <strong>${_esc(att.totalDays || '30')}</strong></span>
-        <span>Days Paid: <strong>${_esc(att.daysPaid || '30')}</strong></span>
-        <span>Loss of Pay: <strong>${_esc(att.lop || '0')}</strong></span>
-      </div>
-
-      <!-- ── EARNINGS & DEDUCTIONS TABLE ── -->
-      <div class="slip-table-wrap">
-        <table class="slip-table">
-          <thead>
-            <tr>
-              <th style="width:34%">Earnings</th>
-              <th style="width:16%;text-align:right">Actual (₹)</th>
-              <th style="width:16%;text-align:right">Salary (₹)</th>
-              <th style="width:18%">Deductions</th>
-              <th style="width:16%;text-align:right">Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-
-        <div class="slip-totals">
-          <div class="tot-cell">
-            <span>Total Earnings</span>
-            <span>₹ ${fmt(totalEarn)}</span>
+        <!-- ── HEADER ── -->
+        <div class="slip-header-section">
+          <div class="slip-company-info">
+            <div class="slip-company-title">${_esc(compName)}</div>
+            ${addrHtml ? `<div class="slip-company-address">${addrHtml}</div>` : ''}
+            ${phoneHtml ? `<div class="slip-company-phone">${phoneHtml}</div>` : ''}
           </div>
-          <div class="tot-cell">
-            <span>Total Deductions</span>
-            <span>₹ ${fmt(totalDed)}</span>
+          <div class="slip-logo-wrapper">
+            ${logoHtml}
           </div>
         </div>
-      </div>
 
-      <!-- ── NET PAY ── -->
-      <div class="slip-net">
-        <span class="slip-net-label">Net Pay</span>
-        <span class="slip-net-amount">₹ ${fmt(netPay)}</span>
-      </div>
-      <div class="slip-net-words"><strong>In Words :</strong> ${_esc(netPayWords)}</div>
-
-      <!-- ── BANK CREDIT ── -->
-      <div class="slip-bank">
-        Your net salary of <strong>Rs. ${fmt(netPay)}</strong> for <strong>${_esc(monthYear)}</strong> has been credited to your
-        <strong>${U(e.bankName)}</strong> account no. <strong>${U(e.acNo)}</strong>
-        (IFSC: <strong>${U(e.ifsc)}</strong>).
-      </div>
-
-      <!-- ── FOOTER ── -->
-      <div class="slip-footer">
-        <div class="slip-disclaimer">
-          This is a computer-generated document and does not require a physical signature.<br>
-          For any discrepancies, please contact the HR / Accounts department.
+        <!-- ── TITLE BAR ── -->
+        <div class="slip-month-title">
+          Payslip for the month of ${monthYearStr}
         </div>
-      </div>
 
-      <div class="bottom-rule"></div>
+        <!-- ── EMPLOYEE DETAILS ── -->
+        <div class="slip-employee-details">
+          <table class="slip-emp-table">
+            <tbody>
+              <tr>
+                <td class="lbl">Employee ID</td>
+                <td class="val">${_esc(empId)}</td>
+                <td class="lbl">Employee Name :</td>
+                <td class="val">${_esc(empName)}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Location :</td>
+                <td class="val">${_esc(empLocation)}</td>
+                <td class="lbl">Division :</td>
+                <td class="val">${_esc(empDivision)}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Date of Joining:</td>
+                <td class="val">${_esc(empDoj)}</td>
+                <td class="lbl">Designation :</td>
+                <td class="val">${_esc(empDesignation)}</td>
+              </tr>
+              <tr>
+                <td class="lbl">UAN :</td>
+                <td class="val">${_esc(empUan)}</td>
+                <td class="lbl">Bank Name :</td>
+                <td class="val">${_esc(empBankName)}</td>
+              </tr>
+              <tr>
+                <td class="lbl">ESIC No :</td>
+                <td class="val">${_esc(empEsic)}</td>
+                <td class="lbl">Bank A/c :</td>
+                <td class="val">${_esc(empAcNo)}</td>
+              </tr>
+              <tr>
+                <td class="lbl">PAN No :</td>
+                <td class="val">${_esc(empPan)}</td>
+                <td class="lbl">IFSC Code:</td>
+                <td class="val">${_esc(empIfsc)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── ATTENDANCE ── -->
+        <div class="slip-attendance-bar">
+          <div class="att-item-left">Total Days in Month: ${totalDaysStr}</div>
+          <div class="att-item-mid">Days Paid:${daysPaidStr}</div>
+          <div class="att-item-right">Loss of Pay: ${lopStr}</div>
+        </div>
+
+        <!-- ── EARNINGS & DEDUCTIONS TABLE ── -->
+        <div class="slip-financial-table-container">
+          <table class="slip-grid-table">
+            <thead>
+              <tr class="th-group-row">
+                <th colspan="3" class="th-earnings-grp">Earnings</th>
+                <th colspan="2" class="th-deductions-grp">Deductions</th>
+              </tr>
+              <tr class="th-cols-row">
+                <th class="col-head-earn">Header</th>
+                <th class="col-act-earn">Actual</th>
+                <th class="col-sal-earn">Salary</th>
+                <th class="col-head-ded">Header</th>
+                <th class="col-amt-ded">Deducted</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+              <tr class="row-totals">
+                <td colspan="3" class="cell-tot-earn">Total Earning :${fmt(totalEarn)}</td>
+                <td colspan="2" class="cell-tot-ded">Total Deduction : ${fmt(totalDed)}</td>
+              </tr>
+              <tr class="row-netpay">
+                <td colspan="3" class="cell-blank"></td>
+                <td colspan="2" class="cell-netpay">Net Pay : ${fmt(netPay)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── SALARY CREDIT NOTE ── -->
+        <div class="slip-credit-note">
+          ${_esc(bankCreditText)}
+        </div>
+
+        <!-- ── FOOTER NOTE ── -->
+        <div class="slip-footer-note">
+          This is computer generated document and signature doesn’t require.
+        </div>
+
+      </div>
     </div>`;
   }
 
@@ -247,39 +313,63 @@ const SalarySlipEngine = (() => {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${_esc(title)}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 
   /* ── RESET ── */
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
   body {
-    font-family: 'Inter', Arial, sans-serif;
-    background: #d5d5d5;
-    color: #111;
-    padding: 20px;
+    font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    background: #e5e7eb;
+    color: #000;
+    padding: 30px 15px;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* ── PRINT ── */
+  /* ── PRINT RULES ── */
   @media print {
-    body { background: #fff; padding: 0; margin: 0; }
-    .slip-multi-wrap { gap: 0 !important; }
-    .slip-page {
+    body {
+      background: #fff !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    .slip-multi-wrap {
+      gap: 0 !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+    }
+    .slip-card-wrapper {
       box-shadow: none !important;
-      margin: 0 auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
       max-width: 100% !important;
       page-break-after: always !important;
       break-after: page !important;
     }
-    .slip-page:last-child {
+    .slip-card-wrapper:last-child {
       page-break-after: auto !important;
       break-after: auto !important;
     }
-    .no-print { display: none !important; }
-    @page { margin: 8mm 10mm; size: A4 portrait; }
+    .payslip-outer-box {
+      border: 2px solid #000 !important;
+      box-shadow: none !important;
+      margin: 0 auto !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+    @page {
+      margin: 12mm 15mm;
+      size: A4 portrait;
+    }
   }
 
   /* ── SCREEN WRAPPER ── */
@@ -287,236 +377,339 @@ const SalarySlipEngine = (() => {
     .slip-multi-wrap {
       display: flex;
       flex-direction: column;
-      gap: 32px;
-      max-width: 800px;
-      margin: 0 auto 60px auto;
+      gap: 35px;
+      max-width: 820px;
+      margin: 0 auto 70px auto;
+    }
+    .slip-card-wrapper {
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      padding: 2px;
     }
   }
 
-  /* ── PAGE ── */
-  .slip-page {
-    max-width: 780px;
-    margin: 0 auto;
+  /* ── PAYSLIP OUTER BOX (2px Black Border) ── */
+  .payslip-outer-box {
+    border: 2px solid #000;
     background: #fff;
-    border: 2px solid #222;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+    padding: 24px 28px 30px 28px;
+    color: #000;
+    min-height: 840px;
+    box-sizing: border-box;
   }
 
-  /* ── TOP RULE ── */
-  .top-rule { height: 3px; background: #222; }
-
   /* ══════════════════════════════════════════
-     HEADER
+     1. HEADER SECTION
      ══════════════════════════════════════════ */
-  .slip-header {
+  .slip-header-section {
     display: flex;
-    align-items: center;
+    justify-content: space-between;
+    align-items: flex-start;
     gap: 20px;
-    padding: 16px 28px 12px;
-    border-bottom: 2px solid #222;
-    background: #fafafa;
+    margin-bottom: 12px;
   }
-  .slip-hdr-left { flex-shrink: 0; }
-  .slip-logo {
-    width: 64px;
-    height: 64px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24pt;
-    font-weight: 900;
-    overflow: hidden;
+
+  .slip-company-info {
+    flex: 1;
   }
-  .slip-logo img { width: 100%; height: 100%; object-fit: contain; }
-  .slip-hdr-info { flex: 1; }
-  .slip-comp-name {
-    font-size: 16pt;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    color: #111;
-    line-height: 1.15;
-  }
-  .slip-tagline {
-    font-size: 8pt;
-    font-weight: 600;
-    color: #555;
-    font-style: italic;
-    letter-spacing: 0.3px;
+
+  .slip-company-title {
+    font-size: 15pt;
+    font-weight: 700;
+    color: #000;
+    line-height: 1.25;
     margin-bottom: 4px;
-  }
-  .slip-hdr-info .hdr-addr {
-    font-size: 8.5pt;
-    color: #444;
-    line-height: 1.55;
+    font-family: 'Segoe UI', Arial, sans-serif;
   }
 
-  /* ══════════════════════════════════════════
-     TITLE BAR
-     ══════════════════════════════════════════ */
-  .slip-title {
-    text-align: center;
-    padding: 10px 28px;
-    border-bottom: 1px solid #999;
-    background: #f2f2f2;
-  }
-  .slip-title-text {
-    font-size: 12pt;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: #111;
-    text-decoration: underline;
-    text-underline-offset: 4px;
+  .slip-company-address {
+    font-size: 9.5pt;
+    color: #000;
+    line-height: 1.35;
+    max-width: 480px;
   }
 
-  /* ══════════════════════════════════════════
-     EMPLOYEE DETAILS
-     ══════════════════════════════════════════ */
-  .slip-emp { padding: 12px 28px; }
-  .slip-emp table { width: 100%; border-collapse: collapse; }
-  .slip-emp td {
-    padding: 4px 8px;
-    font-size: 8.5pt;
-    border: 1px solid #bbb;
-    vertical-align: top;
+  .slip-company-phone {
+    font-size: 9.5pt;
+    color: #000;
+    margin-top: 3px;
   }
-  .emp-lbl {
-    font-weight: 700;
-    width: 14%;
-    white-space: nowrap;
-    color: #222;
-  }
-  .emp-val {
-    width: 30%;
-    font-weight: 500;
-    color: #111;
-  }
-  .row-light td { background: #f7f7f7; }
-  .row-light .emp-lbl { background: #eee; }
-  .row-white td { background: #fff; }
-  .row-white .emp-lbl { background: #f7f7f7; }
 
-  /* ══════════════════════════════════════════
-     ATTENDANCE
-     ══════════════════════════════════════════ */
-  .slip-att {
+  .slip-logo-wrapper {
+    flex-shrink: 0;
+    text-align: right;
     display: flex;
-    justify-content: center;
-    gap: 32px;
-    padding: 8px 28px 10px;
-    font-size: 9pt;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
+  }
+
+  .slip-header-logo img {
+    max-height: 65px;
+    max-width: 190px;
+    object-fit: contain;
+  }
+
+  .slip-header-brand {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .brand-badge-icon svg {
+    width: 38px;
+    height: 38px;
+  }
+
+  .brand-text-name {
+    font-size: 17pt;
+    font-weight: 800;
+    color: #0070c0;
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+    margin-top: 2px;
+  }
+
+  .brand-text-tagline {
+    font-size: 6.5pt;
     font-weight: 700;
-    color: #222;
-    border-top: 1px solid #ddd;
-    border-bottom: 1px solid #ddd;
-    background: #f9f9f9;
-    letter-spacing: 0.3px;
+    color: #555;
+    letter-spacing: 1px;
+    margin-top: 2px;
   }
 
   /* ══════════════════════════════════════════
-     EARNINGS & DEDUCTIONS TABLE
+     2. TITLE BAR (Payslip for the month of ...)
      ══════════════════════════════════════════ */
-  .slip-table-wrap { padding: 12px 28px; }
-  .slip-table {
+  .slip-month-title {
+    text-align: center;
+    color: #0070c0;
+    font-size: 10pt;
+    font-weight: 700;
+    margin: 10px 0 14px 0;
+    letter-spacing: 0.2px;
+  }
+
+  /* ══════════════════════════════════════════
+     3. EMPLOYEE DETAILS TABLE
+     ══════════════════════════════════════════ */
+  .slip-employee-details {
+    margin-bottom: 12px;
+  }
+
+  .slip-emp-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 8.5pt;
+    font-size: 9.5pt;
   }
-  .slip-table th {
-    background: #222;
-    color: #fff;
-    padding: 6px 8px;
-    text-align: left;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    border: 1px solid #222;
-  }
-  .slip-table td {
-    padding: 4px 8px;
-    border: 1px solid #bbb;
-  }
-  .td-name { font-weight: 600; color: #222; }
-  .td-num { text-align: right; font-family: 'Courier New', monospace; font-size: 8.5pt; font-weight: 600; }
 
-  .slip-totals {
-    display: flex;
-    border: 1px solid #222;
-    border-top: 2px solid #222;
-    background: #eee;
-    font-weight: 800;
-    font-size: 9pt;
+  .slip-emp-table td {
+    padding: 2.5px 4px;
+    vertical-align: top;
+    line-height: 1.35;
+    border: none;
   }
-  .tot-cell {
-    flex: 1;
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 10px;
+
+  .slip-emp-table .lbl {
+    font-weight: 700;
+    color: #000;
+    width: 17%;
+    white-space: nowrap;
   }
-  .tot-cell:first-child { border-right: 1px solid #bbb; }
+
+  .slip-emp-table .val {
+    font-weight: 400;
+    color: #000;
+    width: 33%;
+  }
 
   /* ══════════════════════════════════════════
-     NET PAY
+     4. ATTENDANCE BAR
      ══════════════════════════════════════════ */
-  .slip-net {
-    margin: 4px 28px;
-    padding: 10px 16px;
-    background: #f0f0f0;
-    border: 2px solid #222;
+  .slip-attendance-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-  }
-  .slip-net-label {
-    font-size: 11pt;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #111;
-  }
-  .slip-net-amount {
-    font-size: 14pt;
-    font-weight: 900;
-    color: #111;
-    font-family: 'Courier New', monospace;
-  }
-  .slip-net-words {
-    margin: 4px 28px 12px;
-    font-size: 8.5pt;
-    color: #333;
-    line-height: 1.4;
-    font-style: italic;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    padding: 5px 12px;
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #000;
+    margin-top: 6px;
+    margin-bottom: 0;
   }
 
-  /* ══════════════════════════════════════════
-     BANK CREDIT
-     ══════════════════════════════════════════ */
-  .slip-bank {
-    margin: 0 28px 14px;
-    padding: 8px 12px;
-    background: #f9f9f9;
-    border-left: 3px solid #222;
-    font-size: 8.5pt;
-    color: #333;
-    line-height: 1.5;
+  .att-item-left {
+    text-align: left;
+    flex: 1;
   }
 
-  /* ══════════════════════════════════════════
-     FOOTER & DISCLAIMER
-     ══════════════════════════════════════════ */
-  .slip-footer {
-    padding: 12px 28px 16px;
-    border-top: 1px solid #ccc;
-    background: #fafafa;
-  }
-  .slip-disclaimer {
-    font-size: 7.5pt;
-    color: #666;
+  .att-item-mid {
     text-align: center;
-    line-height: 1.5;
+    flex: 1;
   }
-  .bottom-rule { height: 3px; background: #222; }
+
+  .att-item-right {
+    text-align: right;
+    flex: 1;
+  }
+
+  /* ══════════════════════════════════════════
+     5. FINANCIAL TABLE (EARNINGS & DEDUCTIONS)
+     ══════════════════════════════════════════ */
+  .slip-financial-table-container {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .slip-grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    border: 1px solid #000;
+  }
+
+  .slip-grid-table th,
+  .slip-grid-table td {
+    padding: 3px 6px;
+    line-height: 1.35;
+    color: #000;
+  }
+
+  /* Header Group Row (Earnings | Deductions) */
+  .th-group-row th {
+    font-weight: 700;
+    text-align: center;
+    border-bottom: 1px solid #000;
+  }
+
+  .th-earnings-grp {
+    border-right: 1px solid #000;
+  }
+
+  .th-deductions-grp {
+  }
+
+  /* Header Columns Row (Header | Actual | Salary | Header | Deducted) */
+  .th-cols-row th {
+    font-weight: 400;
+    border-bottom: 1px solid #000;
+    font-size: 9.5pt;
+  }
+
+  .col-head-earn {
+    width: 32%;
+    text-align: left;
+    border-right: 1px solid #000;
+  }
+
+  .col-act-earn {
+    width: 15%;
+    text-align: right;
+    border-right: 1px solid #000;
+  }
+
+  .col-sal-earn {
+    width: 15%;
+    text-align: right;
+    border-right: 1px solid #000;
+  }
+
+  .col-head-ded {
+    width: 23%;
+    text-align: left;
+    border-right: 1px solid #000;
+  }
+
+  .col-amt-ded {
+    width: 15%;
+    text-align: right;
+  }
+
+  /* Data Rows */
+  .slip-data-row td {
+    height: 20px;
+  }
+
+  .cell-head-earn {
+    text-align: left;
+    border-right: 1px solid #000;
+  }
+
+  .cell-act-earn {
+    text-align: right;
+    border-right: 1px solid #000;
+  }
+
+  .cell-sal-earn {
+    text-align: right;
+    border-right: 1px solid #000;
+  }
+
+  .cell-head-ded {
+    text-align: left;
+    border-right: 1px solid #000;
+  }
+
+  .cell-amt-ded {
+    text-align: right;
+  }
+
+  /* Total Row */
+  .row-totals td {
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    font-weight: 400;
+    padding: 3.5px 6px;
+  }
+
+  .cell-tot-earn {
+    text-align: right;
+    border-right: 1px solid #000;
+  }
+
+  .cell-tot-ded {
+    text-align: right;
+  }
+
+  /* Net Pay Row */
+  .row-netpay td {
+    padding: 0;
+  }
+
+  .cell-blank {
+    border: none;
+  }
+
+  .cell-netpay {
+    border: 1px solid #000;
+    border-top: none;
+    text-align: right;
+    font-weight: 700;
+    padding: 4px 6px;
+    background: #fff;
+  }
+
+  /* ══════════════════════════════════════════
+     6. SALARY CREDIT NOTE
+     ══════════════════════════════════════════ */
+  .slip-credit-note {
+    font-size: 9.5pt;
+    color: #000;
+    line-height: 1.45;
+    margin-top: 16px;
+  }
+
+  /* ══════════════════════════════════════════
+     7. FOOTER NOTE
+     ══════════════════════════════════════════ */
+  .slip-footer-note {
+    font-size: 9.5pt;
+    color: #000;
+    margin-top: 22px;
+  }
 
   /* ══════════════════════════════════════════
      PRINT TOOLBAR (ON-SCREEN ONLY)
@@ -527,35 +720,43 @@ const SalarySlipEngine = (() => {
     right: 20px;
     display: flex;
     gap: 10px;
-    background: #222;
+    background: #111827;
     padding: 10px 16px;
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     z-index: 9999;
   }
+
   .btn-print {
-    background: #2563eb;
+    background: #0070c0;
     color: #fff;
     border: none;
-    padding: 8px 16px;
+    padding: 9px 18px;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     transition: background 0.15s ease;
   }
-  .btn-print:hover { background: #1d4ed8; }
+
+  .btn-print:hover {
+    background: #005a9e;
+  }
+
   .btn-close-slip {
-    background: #4b5563;
+    background: #374151;
     color: #fff;
     border: none;
-    padding: 8px 14px;
+    padding: 9px 15px;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
   }
-  .btn-close-slip:hover { background: #374151; }
+
+  .btn-close-slip:hover {
+    background: #4b5563;
+  }
 </style>
 </head>
 <body>
@@ -577,9 +778,16 @@ const SalarySlipEngine = (() => {
     return generateMulti([data]);
   }
 
-  return {
+  const engine = {
     generate,
     generateMulti,
     renderSingleSlipPage
   };
+
+  if (typeof window !== 'undefined') {
+    window.SalarySlipEngine = engine;
+  }
+
+  return engine;
 })();
+

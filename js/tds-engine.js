@@ -62,6 +62,7 @@ const TDSEngine = (() => {
     const is44AD    = presumptiveSection === '44AD';
     const isRetail  = !natureOfBiz || RETAIL_TYPES.includes(natureOfBiz);
     const isService = SERVICE_TYPES.includes(natureOfBiz) || is44ADA;
+    const selectedDeductors = adminConfig.selectedDeductors || [];
 
     // Apply admin rate overrides (rates stored as plain %, e.g. 0.20 means 0.20%)
     const r194H = (adminConfig.rate194H != null && adminConfig.rate194H > 0)
@@ -73,38 +74,100 @@ const TDSEngine = (() => {
     const r194J = DEFAULTS.service194J_rate;
 
     let tds194H = 0, tds194C = 0, tds194N = 0, tds194J = 0;
+    let entries = [];
 
-    // ── 194H: Commission / Brokerage ────────────────────────
-    // Note: Section 44AD(6) prohibits 44AD for Commission/Brokerage income.
-    // Therefore, 194H is only generated if NOT under Section 44AD/44ADA or explicitly overridden.
+    // ── MANUAL DEDUCTOR MODE: When specific deductor(s) are selected by user ──
+    if (selectedDeductors && selectedDeductors.length > 0) {
+      // Calculate realistic aggregate TDS base for the business turnover
+      const baseRate = isService ? 0.0020 : 0.0015;
+      const calculatedTds = Math.round(turnover * baseRate);
+      const targetTotal = turnover > 0 ? Math.max(500, _roundRealistic(calculatedTds)) : 0;
+
+      if (targetTotal > 0) {
+        const count = selectedDeductors.length;
+        const shares = _distributeAmounts(targetTotal, count);
+        const dates = _fakeDates(count, ay);
+
+        selectedDeductors.forEach((ded, i) => {
+          let amt = shares[i] || Math.max(100, Math.round(targetTotal / count));
+
+          const cat = (ded.category || '').toLowerCase();
+          const name = (ded.name || '').toUpperCase();
+          let section = '194C';
+          let grossBase = 0;
+
+          if (cat.includes('gateway') || name.includes('RAZORPAY') || name.includes('PAYTM') || name.includes('PHONEPE')) {
+            section = '194H';
+            grossBase = Math.round(amt / 0.05); // 5% / 2% commission base
+            tds194H += amt;
+          } else if (cat.includes('logistics') || name.includes('DELHIVERY') || name.includes('BLUEDART') || name.includes('EKART')) {
+            section = '194C';
+            grossBase = Math.round(amt / 0.02); // 2% contractor base
+            tds194C += amt;
+          } else if (cat.includes('bank') || name.includes('BANK')) {
+            section = turnover >= DEFAULTS.min194N_turnover ? '194N' : '194C';
+            grossBase = section === '194N' ? Math.round(amt / 0.02) + 2000000 : Math.round(amt / 0.02);
+            if (section === '194N') tds194N += amt; else tds194C += amt;
+          } else if (is44ADA || cat.includes('professional') || cat.includes('service')) {
+            section = '194J';
+            grossBase = Math.round(amt / 0.10); // 10% professional fee base
+            tds194J += amt;
+          } else {
+            section = isRetail ? '194C' : '194J';
+            grossBase = section === '194J' ? Math.round(amt / 0.10) : Math.round(amt / 0.02);
+            if (section === '194J') tds194J += amt; else tds194C += amt;
+          }
+
+          entries.push({
+            section,
+            deductorName: (ded.name || `DEDUCTOR ${i + 1}`).toUpperCase(),
+            deductorTAN:  ded.tan || _fakeTAN(section.slice(-1)),
+            dateOfCredit: dates[i] || _fakeDate(ay),
+            amountPaid:   grossBase,
+            tdsClaimed:   amt,
+            tdsDeposited: amt,
+          });
+        });
+      }
+
+      // Final NaN guard
+      tds194H = Math.max(0, tds194H || 0);
+      tds194C = Math.max(0, tds194C || 0);
+      tds194N = Math.max(0, tds194N || 0);
+      tds194J = Math.max(0, tds194J || 0);
+      const totalTDS = tds194H + tds194C + tds194N + tds194J;
+
+      return { tds194H, tds194C, tds194N, tds194J, totalTDS, entries };
+    }
+
+    // ── AUTO DEDUCTOR MODE: Dynamic Simulation ──
+    // 194H: Commission / Brokerage
     if (!is44AD && !is44ADA && turnover > 0) {
       const digitalBase = Math.round(turnover * 0.60);
       tds194H = _roundRealistic(Math.round(digitalBase * r194H));
     }
 
-    // ── 194C: Courier / Transport / Contractor ───────────────
-    // Meaningful if turnover crosses ₹15L threshold or under 44AD trade/logistics
+    // 194C: Courier / Transport / Contractor
     if (turnover >= DEFAULTS.min194C_turnover || is44AD) {
-      const logisticsBase = Math.round(turnover * 0.08); // ~8% of turnover is freight/contract
+      const logisticsBase = Math.round(turnover * 0.08);
       tds194C = _roundRealistic(Math.round(logisticsBase * r194C));
     }
 
-    // ── 194J: Professional Fee (Section 44ADA / Services) ────
-    // Generated for 44ADA (Professionals) or service businesses not under 44AD
+    // 194J: Professional Fee
     if ((is44ADA || (isService && !is44AD)) && turnover > 0) {
       tds194J = _roundRealistic(Math.round(turnover * r194J));
     }
 
-    // ── 194N: Cash Withdrawal (only large turnovers) ─────────
+    // 194N: Cash Withdrawal (only large turnovers)
     if (turnover >= DEFAULTS.min194N_turnover) {
       const cashWithdrawal = Math.round(turnover * 0.03);
-      const excessCash     = Math.max(0, cashWithdrawal - 2000000); // above ₹20L
+      const excessCash     = Math.max(0, cashWithdrawal - 2000000);
       if (excessCash > 0) {
         tds194N = _roundRealistic(Math.round(excessCash * 0.02));
       }
     }
 
-    // Final NaN guard – all TDS values must be non-negative integers
+    // Final NaN guard
     tds194H = Math.max(0, tds194H || 0);
     tds194C = Math.max(0, tds194C || 0);
     tds194N = Math.max(0, tds194N || 0);
@@ -112,11 +175,10 @@ const TDSEngine = (() => {
 
     const totalTDS = tds194H + tds194C + tds194N + tds194J;
 
-    // ── Generate deductor entries (26AS format) ──────────────
-    const entries = _buildEntries({
+    entries = _buildEntries({
       tds194H, tds194C, tds194N, tds194J,
       banks, turnover, isRetail, isService, is44ADA, ay,
-      selectedDeductors: adminConfig.selectedDeductors || [],
+      selectedDeductors: [],
     });
 
     return { tds194H, tds194C, tds194N, tds194J, totalTDS, entries };
@@ -266,5 +328,78 @@ const TDSEngine = (() => {
     return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
   }
 
-  return { generate, _roundRealistic, _fakeDate };
+  /**
+   * Distribute total amount into realistic, naturally varied, non-identical chunks
+   */
+  function _distributeAmounts(total, count) {
+    if (count <= 1) return [total];
+
+    // Generate distinct random weights with natural variation (e.g. 35%, 28%, 22%, 15%)
+    const rawWeights = [];
+    for (let i = 0; i < count; i++) {
+      rawWeights.push(0.5 + Math.random() * 1.0);
+    }
+    const sumW = rawWeights.reduce((s, w) => s + w, 0);
+    const normalized = rawWeights.map(w => w / sumW);
+
+    const parts = [];
+    let allocated = 0;
+
+    for (let i = 0; i < count - 1; i++) {
+      let share = Math.round(total * normalized[i]);
+      share = _roundRealistic(share);
+      if (share <= 0) share = Math.max(50, Math.round(total / (count * 2)));
+      parts.push(share);
+      allocated += share;
+    }
+
+    let last = total - allocated;
+    if (last <= 0 || (count > 2 && last > total * 0.6)) {
+      last = Math.max(100, _roundRealistic(Math.round(total * normalized[count - 1])));
+    }
+    parts.push(last);
+
+    // Ensure no identical amounts between any deductors
+    for (let i = 0; i < parts.length; i++) {
+      for (let j = i + 1; j < parts.length; j++) {
+        if (parts[i] === parts[j]) {
+          const delta = parts[j] >= 1000 ? (50 * (j + 1)) : (20 * (j + 1));
+          parts[j] += delta;
+        }
+      }
+    }
+
+    return parts;
+  }
+
+  /**
+   * Generate multiple distinct credit dates spread across the financial year
+   */
+  function _fakeDates(count, ay = '2026-27') {
+    let ayYear = 2026;
+    if (typeof ay === 'string' && ay.includes('-')) {
+      const parsed = parseInt(ay.split('-')[0], 10);
+      if (!isNaN(parsed) && parsed > 2000) ayYear = parsed;
+    } else if (typeof ay === 'number') {
+      ayYear = ay;
+    }
+
+    const fyStart = ayYear - 1;
+    const fyEnd   = ayYear;
+    const months = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+    const shuffled = [...months].sort(() => Math.random() - 0.5);
+    const dates = [];
+
+    for (let i = 0; i < count; i++) {
+      const m = shuffled[i % shuffled.length];
+      const maxDays = (m === 2) ? 28 : ([4, 6, 9, 11].includes(m) ? 30 : 31);
+      const d = Math.floor(Math.random() * (maxDays - 3)) + 1;
+      const y = m >= 4 ? fyStart : fyEnd;
+      dates.push(`${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`);
+    }
+
+    return dates;
+  }
+
+  return { generate, _roundRealistic, _fakeDate, _distributeAmounts, _fakeDates };
 })();
