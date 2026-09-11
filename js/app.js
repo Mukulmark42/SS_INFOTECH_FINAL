@@ -3550,54 +3550,85 @@ const App = (() => {
     }
   }
 
-  function _calcAutoBreakdown(gross, cityType, pfApplicable) {
-    const basic = Math.round(gross * 0.40);
-    const hraRate = cityType === 'metro' ? 0.50 : 0.40;
-    const hra = Math.round(basic * hraRate);
-    const pf = pfApplicable === 'yes' ? Math.round(basic * 0.12) : 0;
-    const special = gross - basic - hra;
-
-    // Professional Tax (monthly) - West Bengal slab
-    let pt = 0;
-    if (gross >= 30000) pt = 200;
-    else if (gross >= 25000) pt = 150;
-    else if (gross >= 20000) pt = 100;
-    else if (gross >= 15000) pt = 50;
-    else pt = 0;
-
-    const totalDed = pf + pt;
-    const net = gross - totalDed;
-    return { basic, hra, special, pf, pt, totalDed, net };
+  function _isPfApplicable() {
+    const sel = document.getElementById('ss-pf-applicable')?.value || 'auto';
+    if (sel === 'yes') return true;
+    if (sel === 'no') return false;
+    const uan = (document.getElementById('ss-emp-uan')?.value || '').trim();
+    return uan.length > 0;
   }
 
-  function previewSlipAuto() {
-    const gross = parseFloat(document.getElementById('ss-gross-salary')?.value) || 0;
-    const cityType = document.getElementById('ss-city-type')?.value || 'metro';
-    const pfApplicable = document.getElementById('ss-pf-applicable')?.value || 'yes';
+  function _calcAutoBreakdownFromNet(desiredNet, cityType) {
+    const isPf = _isPfApplicable();
+    const hraRate = cityType === 'metro' ? 0.50 : 0.40;
+    const basicRate = 0.60; // 60% Basic ensures HRA (30%/24%) > Special Allowance (10%/16%)
 
-    if (gross <= 0) {
-      ['ss-auto-basic','ss-auto-hra','ss-auto-special','ss-auto-pf','ss-auto-pt','ss-auto-net'].forEach(id => {
+    // When PF is applicable: PF = 12% of Basic = 0.12 * 0.60 * Gross = 0.072 * Gross
+    // Net = Gross - PF = Gross * (1 - 0.072) = 0.928 * Gross
+    // Therefore Gross = Net / 0.928
+    const pfFactor = isPf ? (basicRate * 0.12) : 0;
+    let gross = isPf ? Math.round(desiredNet / (1 - pfFactor)) : Math.round(desiredNet);
+    let basic = Math.round(gross * basicRate);
+    let pf = isPf ? Math.round(basic * 0.12) : 0;
+
+    // Rupee precision convergence to ensure exact net matching
+    let diff = desiredNet - (gross - pf);
+    let guard = 0;
+    while (diff !== 0 && guard < 10) {
+      gross += diff;
+      basic = Math.round(gross * basicRate);
+      pf = isPf ? Math.round(basic * 0.12) : 0;
+      diff = desiredNet - (gross - pf);
+      guard++;
+    }
+
+    let hra = Math.round(basic * hraRate);
+    let special = gross - basic - hra;
+
+    // Guarantee: Special Allowance must always show lower than HRA amount
+    if (special >= hra) {
+      const targetSpecial = Math.floor(hra * 0.60);
+      const shift = special - targetSpecial;
+      basic += shift;
+      special = gross - basic - hra;
+    }
+
+    const totalDed = pf;
+    const net = gross - totalDed;
+
+    return { gross, basic, hra, special, pf, totalDed, net };
+  }
+  const _calcAutoBreakdown = _calcAutoBreakdownFromNet;
+
+  function previewSlipAuto() {
+    const netInput = document.getElementById('ss-net-salary-input') || document.getElementById('ss-gross-salary');
+    const netVal = parseFloat(netInput?.value) || 0;
+    const cityType = document.getElementById('ss-city-type')?.value || 'metro';
+
+    if (netVal <= 0) {
+      ['ss-auto-gross','ss-auto-basic','ss-auto-hra','ss-auto-special','ss-auto-pf','ss-auto-net'].forEach(id => {
         const el = document.getElementById(id); if (el) el.textContent = '₹ 0';
       });
       return;
     }
 
-    const b = _calcAutoBreakdown(gross, cityType, pfApplicable);
+    const b = _calcAutoBreakdownFromNet(netVal, cityType);
     const fmt = n => '₹ ' + n.toLocaleString('en-IN');
+    const grossEl = document.getElementById('ss-auto-gross');
+    if (grossEl) grossEl.textContent = fmt(b.gross);
     document.getElementById('ss-auto-basic').textContent = fmt(b.basic);
     document.getElementById('ss-auto-hra').textContent = fmt(b.hra);
     document.getElementById('ss-auto-special').textContent = fmt(b.special);
     document.getElementById('ss-auto-pf').textContent = fmt(b.pf);
-    document.getElementById('ss-auto-pt').textContent = fmt(b.pt);
     document.getElementById('ss-auto-net').textContent = fmt(b.net);
   }
 
   function applyAutoFill() {
-    const gross = parseFloat(document.getElementById('ss-gross-salary')?.value) || 0;
-    if (gross <= 0) { alert('Enter gross salary first.'); return; }
+    const netInput = document.getElementById('ss-net-salary-input') || document.getElementById('ss-gross-salary');
+    const desiredNet = parseFloat(netInput?.value) || 0;
+    if (desiredNet <= 0) { alert('Enter desired net salary first.'); return; }
     const cityType = document.getElementById('ss-city-type')?.value || 'metro';
-    const pfApplicable = document.getElementById('ss-pf-applicable')?.value || 'yes';
-    const b = _calcAutoBreakdown(gross, cityType, pfApplicable);
+    const b = _calcAutoBreakdownFromNet(desiredNet, cityType);
 
     // Set earnings
     const earnContainer = document.getElementById('ss-earnings-list');
@@ -3618,7 +3649,7 @@ const App = (() => {
         <input type="number" class="form-control form-control-sm ss-earning-salary" value="${b.special}" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
       </div>`;
 
-    // Set deductions
+    // Set deductions: only deduct Employee PF when UAN is entered / PF applicable
     const dedContainer = document.getElementById('ss-deductions-list');
     let dedHtml = '';
     if (b.pf > 0) {
@@ -3626,21 +3657,53 @@ const App = (() => {
       <div class="ss-ded-row" data-type="pf">
         <input type="text" class="form-control form-control-sm" value="Employee PF" readonly />
         <input type="number" class="form-control form-control-sm ss-deduction-amt" value="${b.pf}" min="0" oninput="App.calcSlipNet()" placeholder="Deducted" />
-      </div>`;
-    }
-    if (b.pt > 0) {
-      dedHtml += `
-      <div class="ss-ded-row" data-type="pt">
-        <input type="text" class="form-control form-control-sm" value="Professional Tax" readonly />
-        <input type="number" class="form-control form-control-sm ss-deduction-amt" value="${b.pt}" min="0" oninput="App.calcSlipNet()" placeholder="Deducted" />
+        <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.ss-ded-row').remove();App.calcSlipNet()"><i class="bi bi-trash"></i></button>
       </div>`;
     }
     dedContainer.innerHTML = dedHtml;
 
     calcSlipNet();
 
-    // Switch to manual mode so user can see/edit the values
+    // Switch to manual mode and navigate to Tab 5 (Earnings and deduction tab)
     setSlipMode('manual');
+    switchSlipTab(5);
+  }
+
+  function onSlipUanChange() {
+    previewSlipAuto();
+    const isPf = _isPfApplicable();
+    const dedContainer = document.getElementById('ss-deductions-list');
+    if (!dedContainer) return;
+    const pfRow = dedContainer.querySelector('.ss-ded-row[data-type="pf"]');
+
+    if (isPf) {
+      const basicInput = document.querySelector('#ss-earnings-list .ss-earn-row[data-type="basic"] .ss-earning-salary') ||
+                         document.querySelector('#ss-earnings-list .ss-earn-row .ss-earning-salary');
+      const basicVal = basicInput ? (parseFloat(basicInput.value) || 0) : 0;
+      const pfAmt = basicVal > 0 ? Math.round(basicVal * 0.12) : 0;
+
+      if (pfRow) {
+        const amtInput = pfRow.querySelector('.ss-deduction-amt');
+        if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0) && pfAmt > 0) {
+          amtInput.value = pfAmt;
+        }
+      } else if (pfAmt > 0) {
+        const newRow = document.createElement('div');
+        newRow.className = 'ss-ded-row';
+        newRow.dataset.type = 'pf';
+        newRow.innerHTML = `
+          <input type="text" class="form-control form-control-sm" value="Employee PF" readonly />
+          <input type="number" class="form-control form-control-sm ss-deduction-amt" value="${pfAmt}" min="0" oninput="App.calcSlipNet()" placeholder="Deducted" />
+          <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.ss-ded-row').remove();App.calcSlipNet()"><i class="bi bi-trash"></i></button>`;
+        dedContainer.prepend(newRow);
+      }
+    } else {
+      const selVal = document.getElementById('ss-pf-applicable')?.value || 'auto';
+      if (selVal === 'auto' && pfRow) {
+        pfRow.remove();
+      }
+    }
+    calcSlipNet();
   }
 
   // ── Salary Slip Multi-Month State & Logic ───────────────────
@@ -3743,8 +3806,58 @@ const App = (() => {
     return [..._selectedSlipMonths];
   }
 
+  // ── Salary Slip Tab Navigation ────────────────────────────
+  let _currentSlipTab = 1;
+
+  function switchSlipTab(tabIndex) {
+    const idx = parseInt(tabIndex) || 1;
+    _currentSlipTab = Math.max(1, Math.min(7, idx));
+
+    for (let i = 1; i <= 7; i++) {
+      const btn = document.getElementById(`ss-tab-${i}`);
+      const panel = document.getElementById(`ss-tab-panel-${i}`);
+      if (i === _currentSlipTab) {
+        btn?.classList.add('active');
+        btn?.setAttribute('aria-selected', 'true');
+        panel?.classList.add('active');
+      } else {
+        btn?.classList.remove('active');
+        btn?.setAttribute('aria-selected', 'false');
+        panel?.classList.remove('active');
+      }
+    }
+
+    if (_currentSlipTab === 4) {
+      previewSlipAuto();
+    }
+    if (_currentSlipTab === 6) {
+      calcSlipNet();
+    }
+    if (_currentSlipTab === 7) {
+      renderSavedSlips();
+    }
+
+    const slipPage = document.getElementById('page-salary-slip');
+    if (slipPage) {
+      slipPage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function nextSlipTab() {
+    if (_currentSlipTab < 7) {
+      switchSlipTab(_currentSlipTab + 1);
+    }
+  }
+
+  function prevSlipTab() {
+    if (_currentSlipTab > 1) {
+      switchSlipTab(_currentSlipTab - 1);
+    }
+  }
+
   // ── Salary Slip Page Logic ─────────────────────────────────
   function _initSlipPage() {
+    switchSlipTab(1);
     _populateSlipCompanyDropdown();
     _populateSlipYearDropdown();
     _renderSlipMonthChips();
@@ -3905,10 +4018,11 @@ const App = (() => {
     }
     setSlipMode('manual');
     calcSlipNet();
+    // Switch to Tab 3 (Employee Details) to review loaded record
+    switchSlipTab(3);
     // Remove old record and let save create new
     DB.removeSlipRecord(id);
     renderSavedSlips();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function reprintSlipRecord(id) {
@@ -4082,10 +4196,11 @@ const App = (() => {
     _renderSlipMonthChips();
     _updateDaysInMonth();
     // Reset auto-fill
-    document.getElementById('ss-gross-salary').value = '';
+    const netInput = document.getElementById('ss-net-salary-input') || document.getElementById('ss-gross-salary');
+    if (netInput) netInput.value = '';
     document.getElementById('ss-city-type').value = 'metro';
-    document.getElementById('ss-pf-applicable').value = 'yes';
-    ['ss-auto-basic','ss-auto-hra','ss-auto-special','ss-auto-pf','ss-auto-pt','ss-auto-net'].forEach(id => {
+    document.getElementById('ss-pf-applicable').value = 'auto';
+    ['ss-auto-gross','ss-auto-basic','ss-auto-hra','ss-auto-special','ss-auto-pf','ss-auto-net'].forEach(id => {
       const el = document.getElementById(id); if (el) el.textContent = '₹ 0';
     });
     setSlipMode('auto');
@@ -4094,19 +4209,20 @@ const App = (() => {
       <div class="ss-earn-row" data-type="basic"><input type="text" class="form-control form-control-sm" value="Basic" readonly /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" /></div>
       <div class="ss-earn-row" data-type="hra"><input type="text" class="form-control form-control-sm" value="HRA" readonly /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" /></div>
       <div class="ss-earn-row" data-type="special"><input type="text" class="form-control form-control-sm" value="Special Allowance" readonly /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" /></div>`;
-    document.getElementById('ss-deductions-list').innerHTML = `
-      <div class="ss-ded-row" data-type="pf"><input type="text" class="form-control form-control-sm" value="Employee PF" readonly /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Deducted" /></div>`;
+    document.getElementById('ss-deductions-list').innerHTML = '';
     calcSlipNet();
+    switchSlipTab(1);
   }
 
   function saveSlipEmployee() {
     const baseData = _collectSlipData();
-    if (!baseData.company.name) { alert('Please select a company.'); return; }
-    if (!baseData.employee.name) { alert('Please enter employee name.'); return; }
+    if (!baseData.company.name) { alert('Please select a company.'); switchSlipTab(1); return; }
+    if (!baseData.employee.name) { alert('Please enter employee name.'); switchSlipTab(3); return; }
 
     const selectedMonths = getSelectedSlipMonths();
     if (!selectedMonths.length) {
       alert('Please select at least one month.');
+      switchSlipTab(1);
       return;
     }
 
@@ -4153,6 +4269,7 @@ const App = (() => {
     alert(`✅ Successfully saved ${selectedMonths.length} payslip record(s) for ${selectedMonths.join(', ')}!`);
     renderSavedSlips();
     updateProjectStorageStats();
+    switchSlipTab(7);
   }
 
   function generateSalarySlip() {
@@ -5534,7 +5651,8 @@ const App = (() => {
     addNatureCode, removeNatureCode, editNatureCode, saveEditNatureCode, filterNatureCodes, addPresetNatureCodes,
     addSlipCompany, removeSlipCompany, editSlipCompany, saveEditSlipCompany, _renderSlipCompanies,
     previewAutoLogo, autoGenSlipLogo, uploadSlipLogo, autoGenEditSlipLogo, uploadEditSlipLogo,
-    setSlipMode, previewSlipAuto, applyAutoFill,
+    setSlipMode, previewSlipAuto, applyAutoFill, onSlipUanChange,
+    switchSlipTab, nextSlipTab, prevSlipTab,
     toggleSlipMonth, selectSlipMonthsPreset, getSelectedSlipMonths,
     calcSlipNet, addSlipEarning, addSlipDeduction, resetSlipForm, saveSlipEmployee, generateSalarySlip,
     renderSavedSlips, editSlipRecord, reprintSlipRecord, deleteSlipRecord,

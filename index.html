@@ -1309,230 +1309,315 @@
         </div>
       </div>
 
-      <!-- Company & Month Row -->
-      <div class="ss-section">
-        <div class="ss-section-header d-flex justify-content-between align-items-center">
-          <div><i class="bi bi-building"></i> Company &amp; Pay Period</div>
-          <span id="ss-months-badge" class="badge bg-primary-subtle text-primary fw-semibold">1 Month Selected (April)</span>
-        </div>
-        <div class="ss-section-body">
-          <div class="ss-form-grid ss-form-grid-2 mb-3">
-            <div class="ss-field">
-              <label class="ss-label">Company <span class="ss-required">*</span></label>
-              <select class="form-select form-select-sm" id="ss-company">
-                <option value="">— Select Company —</option>
-              </select>
-            </div>
-            <div class="ss-field">
-              <label class="ss-label">Year <span class="ss-required">*</span></label>
-              <select class="form-select form-select-sm" id="ss-year"></select>
-            </div>
-          </div>
-
-          <!-- Multi-Month Selector Matrix -->
-          <div class="ss-month-selector-card p-3 border rounded mb-2 bg-surface-subtle">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-              <label class="ss-label mb-0 fw-bold"><i class="bi bi-calendar3 me-1 text-primary"></i> Select Pay Period Months (Select Multiple at Once) <span class="ss-required">*</span></label>
-              <div class="btn-group btn-group-sm" role="group" aria-label="Month selection presets">
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('all')">All (12M)</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('last3')">Last 3M</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('last6')">Last 6M</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('fy')">FY (Apr–Mar)</button>
-                <button type="button" class="btn btn-outline-danger btn-sm" onclick="App.selectSlipMonthsPreset('clear')">Clear</button>
-              </div>
-            </div>
-            
-            <div class="ss-months-grid" id="ss-months-grid">
-              <!-- Rendered dynamically by JS -->
-            </div>
-
-            <!-- Hidden input for single month fallback compatibility -->
-            <select class="d-none" id="ss-month">
-              <option value="January">January</option><option value="February">February</option>
-              <option value="March">March</option><option value="April" selected>April</option>
-              <option value="May">May</option><option value="June">June</option>
-              <option value="July">July</option><option value="August">August</option>
-              <option value="September">September</option><option value="October">October</option>
-              <option value="November">November</option><option value="December">December</option>
-            </select>
-
-            <div class="small text-muted mt-2 d-flex align-items-center gap-1">
-              <i class="bi bi-info-circle text-primary"></i>
-              <span>Select any combination of months above. <strong>Generate &amp; Print</strong> will generate, store, and print all selected months' payslips at once.</span>
-            </div>
-          </div>
-        </div>
+      <!-- ── 7 TABS NAVIGATION ── -->
+      <div class="ss-tabs-nav" role="tablist" aria-label="Salary slip steps">
+        <button type="button" class="ss-tab-btn active" id="ss-tab-1" role="tab" aria-selected="true" aria-controls="ss-tab-panel-1" onclick="App.switchSlipTab(1)">
+          <span class="ss-tab-badge">1</span>
+          <i class="bi bi-building"></i>
+          <span>Company &amp; Pay Period</span>
+        </button>
+        <button type="button" class="ss-tab-btn" id="ss-tab-2" role="tab" aria-selected="false" aria-controls="ss-tab-panel-2" onclick="App.switchSlipTab(2)">
+          <span class="ss-tab-badge">2</span>
+          <i class="bi bi-calendar-check"></i>
+          <span>Attendance</span>
+        </button>
+        <button type="button" class="ss-tab-btn" id="ss-tab-3" role="tab" aria-selected="false" aria-controls="ss-tab-panel-3" onclick="App.switchSlipTab(3)">
+          <span class="ss-tab-badge">3</span>
+          <i class="bi bi-person-badge-fill"></i>
+          <span>Employee Details</span>
+        </button>
+        <button type="button" class="ss-tab-btn" id="ss-tab-4" role="tab" aria-selected="false" aria-controls="ss-tab-panel-4" onclick="App.switchSlipTab(4)">
+          <span class="ss-tab-badge">4</span>
+          <i class="bi bi-cash-coin"></i>
+          <span>Salary Entry</span>
+        </button>
+        <button type="button" class="ss-tab-btn" id="ss-tab-5" role="tab" aria-selected="false" aria-controls="ss-tab-panel-5" onclick="App.switchSlipTab(5)">
+          <span class="ss-tab-badge">5</span>
+          <i class="bi bi-cash-stack"></i>
+          <span>Earnings &amp; Deductions</span>
+        </button>
+        <button type="button" class="ss-tab-btn" id="ss-tab-6" role="tab" aria-selected="false" aria-controls="ss-tab-panel-6" onclick="App.switchSlipTab(6)">
+          <span class="ss-tab-badge">6</span>
+          <i class="bi bi-calculator-fill"></i>
+          <span>Summary</span>
+        </button>
+        <button type="button" class="ss-tab-btn" id="ss-tab-7" role="tab" aria-selected="false" aria-controls="ss-tab-panel-7" onclick="App.switchSlipTab(7)">
+          <span class="ss-tab-badge">7</span>
+          <i class="bi bi-folder2-open"></i>
+          <span>Saved Salary Slips</span>
+        </button>
       </div>
 
-      <!-- Salary Mode: Auto-fill or Manual -->
-      <div class="ss-section">
-        <div class="ss-section-header"><i class="bi bi-cash-coin"></i> Salary Entry</div>
-        <div class="ss-section-body">
-          <div class="ss-mode-toggle">
-            <button class="ss-mode-btn active" id="ss-mode-auto" onclick="App.setSlipMode('auto')">
-              <i class="bi bi-lightning-fill"></i> Auto-fill Salary
-            </button>
-            <button class="ss-mode-btn" id="ss-mode-manual" onclick="App.setSlipMode('manual')">
-              <i class="bi bi-pencil-square"></i> Manual Entry
-            </button>
+      <!-- ── TAB 1: Company & Pay Period ── -->
+      <div class="ss-tab-panel active" id="ss-tab-panel-1" role="tabpanel" aria-labelledby="ss-tab-1">
+        <div class="ss-section">
+          <div class="ss-section-header d-flex justify-content-between align-items-center">
+            <div><i class="bi bi-building"></i> Company &amp; Pay Period</div>
+            <span id="ss-months-badge" class="badge bg-primary-subtle text-primary fw-semibold">1 Month Selected (April)</span>
           </div>
-
-          <!-- Auto-fill Panel -->
-          <div class="ss-mode-panel active" id="ss-auto-panel">
-            <div class="ss-form-grid ss-form-grid-3" style="margin-top:14px">
+          <div class="ss-section-body">
+            <div class="ss-form-grid ss-form-grid-2 mb-3">
               <div class="ss-field">
-                <label class="ss-label">Gross Salary (₹) <span class="ss-required">*</span></label>
-                <input type="number" class="form-control form-control-sm" id="ss-gross-salary" placeholder="e.g. 30000" min="0" oninput="App.previewSlipAuto()" />
-              </div>
-              <div class="ss-field">
-                <label class="ss-label">City Type</label>
-                <select class="form-select form-select-sm" id="ss-city-type" onchange="App.previewSlipAuto()">
-                  <option value="metro">Metro (HRA 50%)</option>
-                  <option value="non-metro">Non-Metro (HRA 40%)</option>
+                <label class="ss-label">Company <span class="ss-required">*</span></label>
+                <select class="form-select form-select-sm" id="ss-company">
+                  <option value="">— Select Company —</option>
                 </select>
               </div>
               <div class="ss-field">
-                <label class="ss-label">PF Applicable</label>
-                <select class="form-select form-select-sm" id="ss-pf-applicable" onchange="App.previewSlipAuto()">
-                  <option value="yes">Yes (12% of Basic)</option>
-                  <option value="no">No</option>
-                </select>
+                <label class="ss-label">Year <span class="ss-required">*</span></label>
+                <select class="form-select form-select-sm" id="ss-year"></select>
               </div>
             </div>
-            <div class="ss-auto-breakdown" id="ss-auto-breakdown">
-              <div class="ss-auto-item"><span>Basic (40%)</span><strong id="ss-auto-basic">₹ 0</strong></div>
-              <div class="ss-auto-item"><span>HRA</span><strong id="ss-auto-hra">₹ 0</strong></div>
-              <div class="ss-auto-item"><span>Special Allow.</span><strong id="ss-auto-special">₹ 0</strong></div>
-              <div class="ss-auto-item"><span>PF (12%)</span><strong id="ss-auto-pf">₹ 0</strong></div>
-              <div class="ss-auto-item"><span>Prof. Tax</span><strong id="ss-auto-pt">₹ 0</strong></div>
-              <div class="ss-auto-item ss-auto-net"><span>Net Pay</span><strong id="ss-auto-net">₹ 0</strong></div>
-            </div>
-            <div style="margin-top:12px">
-              <button class="btn btn-success btn-sm" onclick="App.applyAutoFill()"><i class="bi bi-check-circle-fill me-1"></i>Apply to Earnings & Deductions</button>
-            </div>
-          </div>
 
-          <!-- Manual Panel -->
-          <div class="ss-mode-panel" id="ss-manual-panel">
-            <p class="text-muted" style="font-size:12px;margin:10px 0 0">Enter earnings and deductions manually in the sections below.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Employee Details -->
-      <div class="ss-section">
-        <div class="ss-section-header"><i class="bi bi-person-badge-fill"></i> Employee Details</div>
-        <div class="ss-section-body">
-          <div class="ss-form-grid">
-            <div class="ss-field"><label class="ss-label">Employee ID <small class="text-muted">(auto)</small></label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-id" placeholder="Auto-generated" style="background:rgba(99,102,241,.05)" /></div>
-            <div class="ss-field"><label class="ss-label">Employee Name <span class="ss-required">*</span></label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-name" placeholder="Full Name" /></div>
-            <div class="ss-field"><label class="ss-label">Location</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-location" placeholder="e.g. Kolkata" /></div>
-            <div class="ss-field"><label class="ss-label">Division</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-division" placeholder="e.g. Kolkata East" /></div>
-            <div class="ss-field"><label class="ss-label">Designation</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-designation" placeholder="e.g. Manager" /></div>
-            <div class="ss-field"><label class="ss-label">Date of Joining</label><input type="date" class="form-control form-control-sm" id="ss-emp-doj" /></div>
-            <div class="ss-field"><label class="ss-label">UAN</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-uan" placeholder="12-digit UAN" maxlength="12" /></div>
-            <div class="ss-field"><label class="ss-label">ESIC No</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-esic" placeholder="ESIC Number" /></div>
-            <div class="ss-field"><label class="ss-label">PAN No</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-pan" placeholder="PAN" maxlength="10" /></div>
-          </div>
-          <div class="ss-form-grid" style="margin-top:10px">
-            <div class="ss-field"><label class="ss-label">Bank Name</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-bank" placeholder="Bank Name" /></div>
-            <div class="ss-field"><label class="ss-label">Bank A/c No</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-acno" placeholder="Account Number" /></div>
-            <div class="ss-field"><label class="ss-label">IFSC Code</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-ifsc" placeholder="IFSC" maxlength="11" /></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Attendance -->
-      <div class="ss-section">
-        <div class="ss-section-header"><i class="bi bi-calendar-check"></i> Attendance</div>
-        <div class="ss-section-body">
-          <div class="ss-form-grid ss-form-grid-3">
-            <div class="ss-field"><label class="ss-label">Total Days in Month</label><input type="number" class="form-control form-control-sm" id="ss-total-days" value="30" min="1" max="31" oninput="App.calcSlipNet()" /></div>
-            <div class="ss-field"><label class="ss-label">Days Paid</label><input type="number" class="form-control form-control-sm" id="ss-days-paid" value="30" min="0" max="31" oninput="this.dataset.userEdited='1';App.calcSlipNet()" /></div>
-            <div class="ss-field"><label class="ss-label">Loss of Pay</label><input type="number" class="form-control form-control-sm" id="ss-lop" value="0" min="0" max="31" oninput="App.calcSlipNet()" /></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Earnings & Deductions -->
-      <div class="ss-two-col">
-        <!-- Earnings -->
-        <div class="ss-section">
-          <div class="ss-section-header"><i class="bi bi-cash-stack"></i> Earnings</div>
-          <div class="ss-section-body">
-            <div id="ss-earnings-list">
-              <div class="ss-earn-row" data-type="basic">
-                <input type="text" class="form-control form-control-sm" value="Basic" readonly />
-                <input type="number" class="form-control form-control-sm ss-earning-actual" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
-                <input type="number" class="form-control form-control-sm ss-earning-salary" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
+            <!-- Multi-Month Selector Matrix -->
+            <div class="ss-month-selector-card p-3 border rounded mb-2 bg-surface-subtle">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <label class="ss-label mb-0 fw-bold"><i class="bi bi-calendar3 me-1 text-primary"></i> Select Pay Period Months (Select Multiple at Once) <span class="ss-required">*</span></label>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Month selection presets">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('all')">All (12M)</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('last3')">Last 3M</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('last6')">Last 6M</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.selectSlipMonthsPreset('fy')">FY (Apr–Mar)</button>
+                  <button type="button" class="btn btn-outline-danger btn-sm" onclick="App.selectSlipMonthsPreset('clear')">Clear</button>
+                </div>
               </div>
-              <div class="ss-earn-row" data-type="hra">
-                <input type="text" class="form-control form-control-sm" value="HRA" readonly />
-                <input type="number" class="form-control form-control-sm ss-earning-actual" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
-                <input type="number" class="form-control form-control-sm ss-earning-salary" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
+              
+              <div class="ss-months-grid" id="ss-months-grid">
+                <!-- Rendered dynamically by JS -->
               </div>
-              <div class="ss-earn-row" data-type="special">
-                <input type="text" class="form-control form-control-sm" value="Special Allowance" readonly />
-                <input type="number" class="form-control form-control-sm ss-earning-actual" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
-                <input type="number" class="form-control form-control-sm ss-earning-salary" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
-              </div>
-            </div>
-            <div class="ss-add-row">
-              <input type="text" class="form-control form-control-sm" id="ss-new-earn-name" placeholder="Earning name" />
-              <input type="number" class="form-control form-control-sm" id="ss-new-earn-actual" placeholder="Actual" min="0" />
-              <input type="number" class="form-control form-control-sm" id="ss-new-earn-salary" placeholder="Salary" min="0" />
-              <button class="btn btn-sm btn-primary" onclick="App.addSlipEarning()"><i class="bi bi-plus"></i></button>
-            </div>
-          </div>
-        </div>
 
-        <!-- Deductions -->
-        <div class="ss-section">
-          <div class="ss-section-header"><i class="bi bi-dash-circle"></i> Deductions</div>
-          <div class="ss-section-body">
-            <div id="ss-deductions-list">
-              <div class="ss-ded-row" data-type="pf">
-                <input type="text" class="form-control form-control-sm" value="Employee PF" readonly />
-                <input type="number" class="form-control form-control-sm ss-deduction-amt" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Deducted" />
-              </div>
-            </div>
-            <div class="ss-add-row">
-              <input type="text" class="form-control form-control-sm" id="ss-new-ded-name" placeholder="Deduction name" />
-              <input type="number" class="form-control form-control-sm" id="ss-new-ded-amt" placeholder="Amount" min="0" />
-              <button class="btn btn-sm btn-primary" onclick="App.addSlipDeduction()"><i class="bi bi-plus"></i></button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Totals & Net Pay -->
-      <div class="ss-section">
-        <div class="ss-section-header"><i class="bi bi-calculator-fill"></i> Summary</div>
-        <div class="ss-section-body">
-          <div class="ss-summary-row">
-            <div class="ss-summary-item ss-earn-total"><span>Total Earning</span><strong id="ss-total-earning">₹ 0.00</strong></div>
-            <div class="ss-summary-item ss-ded-total"><span>Total Deduction</span><strong id="ss-total-deduction">₹ 0.00</strong></div>
-            <div class="ss-summary-item ss-net-pay"><span>Net Pay</span><strong id="ss-net-pay">₹ 0.00</strong></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Saved Salary Slips -->
-      <div class="ss-section">
-        <div class="ss-section-header"><i class="bi bi-folder2-open"></i> Saved Salary Slips</div>
-        <div class="ss-section-body">
-          <div class="ss-saved-filters d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div class="d-flex gap-2 align-items-center flex-wrap">
-              <select class="form-select form-select-sm" id="ss-filter-comp" onchange="App.renderSavedSlips()" style="width:auto">
-                <option value="">All Companies</option>
+              <!-- Hidden input for single month fallback compatibility -->
+              <select class="d-none" id="ss-month">
+                <option value="January">January</option><option value="February">February</option>
+                <option value="March">March</option><option value="April" selected>April</option>
+                <option value="May">May</option><option value="June">June</option>
+                <option value="July">July</option><option value="August">August</option>
+                <option value="September">September</option><option value="October">October</option>
+                <option value="November">November</option><option value="December">December</option>
               </select>
-              <input type="search" class="form-control form-control-sm" id="ss-filter-search" placeholder="Search name, emp code..." oninput="App.renderSavedSlips()" style="width:220px" />
+
+              <div class="small text-muted mt-2 d-flex align-items-center gap-1">
+                <i class="bi bi-info-circle text-primary"></i>
+                <span>Select any combination of months above. <strong>Generate &amp; Print</strong> will generate, store, and print all selected months' payslips at once.</span>
+              </div>
             </div>
-            <button class="btn btn-outline-primary btn-sm" onclick="App.downloadAllSlips()" title="Export All Salary Slips (JSON)">
-              <i class="bi bi-download me-1"></i>Export All Payslips
-            </button>
           </div>
-          <div id="ss-saved-list"></div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <div></div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(2)">Next: Attendance <i class="bi bi-arrow-right ms-1"></i></button>
+        </div>
+      </div>
+
+      <!-- ── TAB 2: Attendance ── -->
+      <div class="ss-tab-panel" id="ss-tab-panel-2" role="tabpanel" aria-labelledby="ss-tab-2">
+        <div class="ss-section">
+          <div class="ss-section-header"><i class="bi bi-calendar-check"></i> Attendance Details</div>
+          <div class="ss-section-body">
+            <div class="ss-form-grid ss-form-grid-3">
+              <div class="ss-field"><label class="ss-label">Total Days in Month</label><input type="number" class="form-control form-control-sm" id="ss-total-days" value="30" min="1" max="31" oninput="App.calcSlipNet()" /></div>
+              <div class="ss-field"><label class="ss-label">Days Paid</label><input type="number" class="form-control form-control-sm" id="ss-days-paid" value="30" min="0" max="31" oninput="this.dataset.userEdited='1';App.calcSlipNet()" /></div>
+              <div class="ss-field"><label class="ss-label">Loss of Pay (Days)</label><input type="number" class="form-control form-control-sm" id="ss-lop" value="0" min="0" max="31" oninput="App.calcSlipNet()" /></div>
+            </div>
+            <p class="text-muted small mt-2 mb-0"><i class="bi bi-lightbulb text-warning me-1"></i>Total days auto-adjust based on the selected month &amp; year. In batch generation, loss of pay is calculated per month.</p>
+          </div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(1)"><i class="bi bi-arrow-left me-1"></i> Back: Company &amp; Pay Period</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(3)">Next: Employee Details <i class="bi bi-arrow-right ms-1"></i></button>
+        </div>
+      </div>
+
+      <!-- ── TAB 3: Employee Details ── -->
+      <div class="ss-tab-panel" id="ss-tab-panel-3" role="tabpanel" aria-labelledby="ss-tab-3">
+        <div class="ss-section">
+          <div class="ss-section-header"><i class="bi bi-person-badge-fill"></i> Employee Details</div>
+          <div class="ss-section-body">
+            <div class="ss-form-grid">
+              <div class="ss-field"><label class="ss-label">Employee ID <small class="text-muted">(auto)</small></label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-id" placeholder="Auto-generated" style="background:rgba(99,102,241,.05)" /></div>
+              <div class="ss-field"><label class="ss-label">Employee Name <span class="ss-required">*</span></label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-name" placeholder="Full Name" /></div>
+              <div class="ss-field"><label class="ss-label">Location</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-location" placeholder="e.g. Kolkata" /></div>
+              <div class="ss-field"><label class="ss-label">Division</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-division" placeholder="e.g. Kolkata East" /></div>
+              <div class="ss-field"><label class="ss-label">Designation</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-designation" placeholder="e.g. Manager" /></div>
+              <div class="ss-field"><label class="ss-label">Date of Joining</label><input type="date" class="form-control form-control-sm" id="ss-emp-doj" /></div>
+              <div class="ss-field"><label class="ss-label">UAN</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-uan" placeholder="12-digit UAN" maxlength="12" oninput="App.onSlipUanChange()" /></div>
+              <div class="ss-field"><label class="ss-label">ESIC No</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-esic" placeholder="ESIC Number" /></div>
+              <div class="ss-field"><label class="ss-label">PAN No</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-pan" placeholder="PAN" maxlength="10" /></div>
+            </div>
+            <div class="ss-form-grid" style="margin-top:10px">
+              <div class="ss-field"><label class="ss-label">Bank Name</label><input type="text" class="form-control form-control-sm text-uppercase" id="ss-emp-bank" placeholder="Bank Name" /></div>
+              <div class="ss-field"><label class="ss-label">Bank A/c No</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-acno" placeholder="Account Number" /></div>
+              <div class="ss-field"><label class="ss-label">IFSC Code</label><input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="ss-emp-ifsc" placeholder="IFSC" maxlength="11" /></div>
+            </div>
+          </div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(2)"><i class="bi bi-arrow-left me-1"></i> Back: Attendance</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(4)">Next: Salary Entry <i class="bi bi-arrow-right ms-1"></i></button>
+        </div>
+      </div>
+
+      <!-- ── TAB 4: Salary Entry (Auto-fill Salary / Manual Entry) ── -->
+      <div class="ss-tab-panel" id="ss-tab-panel-4" role="tabpanel" aria-labelledby="ss-tab-4">
+        <div class="ss-section">
+          <div class="ss-section-header"><i class="bi bi-cash-coin"></i> Salary Entry</div>
+          <div class="ss-section-body">
+            <div class="ss-mode-toggle">
+              <button class="ss-mode-btn active" id="ss-mode-auto" onclick="App.setSlipMode('auto')">
+                <i class="bi bi-lightning-fill"></i> Auto-fill Salary
+              </button>
+              <button class="ss-mode-btn" id="ss-mode-manual" onclick="App.setSlipMode('manual')">
+                <i class="bi bi-pencil-square"></i> Manual Entry
+              </button>
+            </div>
+
+            <!-- Auto-fill Panel -->
+            <div class="ss-mode-panel active" id="ss-auto-panel">
+              <div class="ss-form-grid ss-form-grid-3" style="margin-top:14px">
+                <div class="ss-field">
+                  <label class="ss-label">Desired Net Salary (₹) <span class="ss-required">*</span></label>
+                  <input type="number" class="form-control form-control-sm" id="ss-net-salary-input" placeholder="e.g. 30000" min="0" oninput="App.previewSlipAuto()" />
+                </div>
+                <div class="ss-field">
+                  <label class="ss-label">City Type</label>
+                  <select class="form-select form-select-sm" id="ss-city-type" onchange="App.previewSlipAuto()">
+                    <option value="metro">Metro (HRA 50%)</option>
+                    <option value="non-metro">Non-Metro (HRA 40%)</option>
+                  </select>
+                </div>
+                <div class="ss-field">
+                  <label class="ss-label">PF Applicable</label>
+                  <select class="form-select form-select-sm" id="ss-pf-applicable" onchange="App.previewSlipAuto()">
+                    <option value="auto" selected>Auto (Only if UAN entered)</option>
+                    <option value="yes">Yes (12% of Basic)</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+              <div class="ss-auto-breakdown" id="ss-auto-breakdown">
+                <div class="ss-auto-item"><span>Gross Salary</span><strong id="ss-auto-gross">₹ 0</strong></div>
+                <div class="ss-auto-item"><span>Basic (60%)</span><strong id="ss-auto-basic">₹ 0</strong></div>
+                <div class="ss-auto-item"><span>HRA</span><strong id="ss-auto-hra">₹ 0</strong></div>
+                <div class="ss-auto-item"><span>Special Allow.</span><strong id="ss-auto-special">₹ 0</strong></div>
+                <div class="ss-auto-item"><span>PF (12%)</span><strong id="ss-auto-pf">₹ 0</strong></div>
+                <div class="ss-auto-item ss-auto-net"><span>Net Pay</span><strong id="ss-auto-net">₹ 0</strong></div>
+              </div>
+              <div style="margin-top:14px" class="d-flex gap-2">
+                <button class="btn btn-success btn-sm" onclick="App.applyAutoFill()"><i class="bi bi-check-circle-fill me-1"></i>Apply to Earnings &amp; Deductions</button>
+              </div>
+            </div>
+
+            <!-- Manual Panel -->
+            <div class="ss-mode-panel" id="ss-manual-panel">
+              <div class="alert alert-info py-2 px-3 mt-3 mb-0" style="font-size:12.5px;">
+                <i class="bi bi-info-circle-fill me-1"></i> In Manual Mode, you can directly customize, add, or delete individual earning components and deductions in the <strong>Earnings &amp; Deductions</strong> tab.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(3)"><i class="bi bi-arrow-left me-1"></i> Back: Employee Details</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(5)">Next: Earnings &amp; Deductions <i class="bi bi-arrow-right ms-1"></i></button>
+        </div>
+      </div>
+
+      <!-- ── TAB 5: Earnings and deduction tab ── -->
+      <div class="ss-tab-panel" id="ss-tab-panel-5" role="tabpanel" aria-labelledby="ss-tab-5">
+        <div class="ss-two-col">
+          <!-- Earnings -->
+          <div class="ss-section">
+            <div class="ss-section-header"><i class="bi bi-cash-stack"></i> Earnings</div>
+            <div class="ss-section-body">
+              <div id="ss-earnings-list">
+                <div class="ss-earn-row" data-type="basic">
+                  <input type="text" class="form-control form-control-sm" value="Basic" readonly />
+                  <input type="number" class="form-control form-control-sm ss-earning-actual" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
+                  <input type="number" class="form-control form-control-sm ss-earning-salary" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
+                </div>
+                <div class="ss-earn-row" data-type="hra">
+                  <input type="text" class="form-control form-control-sm" value="HRA" readonly />
+                  <input type="number" class="form-control form-control-sm ss-earning-actual" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
+                  <input type="number" class="form-control form-control-sm ss-earning-salary" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
+                </div>
+                <div class="ss-earn-row" data-type="special">
+                  <input type="text" class="form-control form-control-sm" value="Special Allowance" readonly />
+                  <input type="number" class="form-control form-control-sm ss-earning-actual" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
+                  <input type="number" class="form-control form-control-sm ss-earning-salary" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
+                </div>
+              </div>
+              <div class="ss-add-row">
+                <input type="text" class="form-control form-control-sm" id="ss-new-earn-name" placeholder="Earning name" />
+                <input type="number" class="form-control form-control-sm" id="ss-new-earn-actual" placeholder="Actual" min="0" />
+                <input type="number" class="form-control form-control-sm" id="ss-new-earn-salary" placeholder="Salary" min="0" />
+                <button class="btn btn-sm btn-primary" onclick="App.addSlipEarning()"><i class="bi bi-plus"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Deductions -->
+          <div class="ss-section">
+            <div class="ss-section-header"><i class="bi bi-dash-circle"></i> Deductions</div>
+            <div class="ss-section-body">
+              <div id="ss-deductions-list"></div>
+              <div class="ss-add-row">
+                <input type="text" class="form-control form-control-sm" id="ss-new-ded-name" placeholder="Deduction name" />
+                <input type="number" class="form-control form-control-sm" id="ss-new-ded-amt" placeholder="Amount" min="0" />
+                <button class="btn btn-sm btn-primary" onclick="App.addSlipDeduction()"><i class="bi bi-plus"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(4)"><i class="bi bi-arrow-left me-1"></i> Back: Salary Entry</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(6)">Next: Summary <i class="bi bi-arrow-right ms-1"></i></button>
+        </div>
+      </div>
+
+      <!-- ── TAB 6: Summary ── -->
+      <div class="ss-tab-panel" id="ss-tab-panel-6" role="tabpanel" aria-labelledby="ss-tab-6">
+        <div class="ss-section">
+          <div class="ss-section-header"><i class="bi bi-calculator-fill"></i> Payslip Summary</div>
+          <div class="ss-section-body">
+            <div class="ss-summary-row">
+              <div class="ss-summary-item ss-earn-total"><span>Total Earning</span><strong id="ss-total-earning">₹ 0.00</strong></div>
+              <div class="ss-summary-item ss-ded-total"><span>Total Deduction</span><strong id="ss-total-deduction">₹ 0.00</strong></div>
+              <div class="ss-summary-item ss-net-pay"><span>Net Pay</span><strong id="ss-net-pay">₹ 0.00</strong></div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3 pt-3 border-top">
+              <button class="btn btn-outline-secondary btn-sm" onclick="App.resetSlipForm()"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset Form</button>
+              <button class="btn btn-success btn-sm" onclick="App.saveSlipEmployee()"><i class="bi bi-save-fill me-1"></i>Save Payslip</button>
+              <button class="btn btn-primary btn-sm" onclick="App.generateSalarySlip()"><i class="bi bi-printer-fill me-1"></i>Generate &amp; Print</button>
+            </div>
+          </div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(5)"><i class="bi bi-arrow-left me-1"></i> Back: Earnings &amp; Deductions</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" onclick="App.switchSlipTab(7)">View Saved Payslips <i class="bi bi-arrow-right ms-1"></i></button>
+        </div>
+      </div>
+
+      <!-- ── TAB 7: Saved Salary Slips ── -->
+      <div class="ss-tab-panel" id="ss-tab-panel-7" role="tabpanel" aria-labelledby="ss-tab-7">
+        <div class="ss-section">
+          <div class="ss-section-header"><i class="bi bi-folder2-open"></i> Saved Salary Slips</div>
+          <div class="ss-section-body">
+            <div class="ss-saved-filters d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div class="d-flex gap-2 align-items-center flex-wrap">
+                <select class="form-select form-select-sm" id="ss-filter-comp" onchange="App.renderSavedSlips()" style="width:auto">
+                  <option value="">All Companies</option>
+                </select>
+                <input type="search" class="form-control form-control-sm" id="ss-filter-search" placeholder="Search name, emp code..." oninput="App.renderSavedSlips()" style="width:220px" />
+              </div>
+              <button class="btn btn-outline-primary btn-sm" onclick="App.downloadAllSlips()" title="Export All Salary Slips (JSON)">
+                <i class="bi bi-download me-1"></i>Export All Payslips
+              </button>
+            </div>
+            <div id="ss-saved-list"></div>
+          </div>
+        </div>
+        <div class="ss-tab-footer-nav">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(6)"><i class="bi bi-arrow-left me-1"></i> Back to Summary</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(1)">Create New Payslip <i class="bi bi-arrow-repeat ms-1"></i></button>
         </div>
       </div>
 
