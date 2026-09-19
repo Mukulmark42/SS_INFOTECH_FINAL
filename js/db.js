@@ -13,11 +13,11 @@ const DB = (() => {
   const STMT_REC_KEY = 'ssinfotech_statement_records';
 
   /** Safe localStorage write wrapper with QuotaExceededError protection */
-  function _safeSetItem(key, value) {
+  function _safeSetItem(key, value, triggerSync = true) {
     try {
       localStorage.setItem(key, value);
-      // Trigger background auto-sync to Supabase cloud
-      if (typeof SupabaseSync !== 'undefined' && SupabaseSync.isAutoSyncEnabled()) {
+      // Trigger background auto-sync to Supabase cloud only for user mutations
+      if (triggerSync && typeof SupabaseSync !== 'undefined' && SupabaseSync.isAutoSyncEnabled()) {
         SupabaseSync.triggerAutoBackup('Auto Sync');
       }
       return true;
@@ -30,6 +30,14 @@ const DB = (() => {
       }
       return false;
     }
+  }
+
+  /** Check if local storage is completely empty of user data */
+  function isEmpty() {
+    const clientCount = all().length;
+    const stmtCount = getStatementRecords().length;
+    const slipCount = getSlipRecords().length;
+    return clientCount === 0 && stmtCount === 0 && slipCount === 0;
   }
 
   /** Load all clients */
@@ -218,7 +226,7 @@ const DB = (() => {
           { name: 'Delhivery Limited', tan: 'GREP12345E', category: 'Logistics' },
           { name: 'BlueDart Express Limited', tan: 'CHEP12345E', category: 'Logistics' },
         ];
-        _safeSetItem(ADMIN_KEY, JSON.stringify(config));
+        _safeSetItem(ADMIN_KEY, JSON.stringify(config), false);
       }
       return config;
     }
@@ -254,7 +262,7 @@ const DB = (() => {
           createdAt: Date.now()
         }
       ];
-      _safeSetItem(SLIP_COMP_KEY, JSON.stringify(defaults));
+      _safeSetItem(SLIP_COMP_KEY, JSON.stringify(defaults), false);
       return defaults;
     }
     catch { return []; }
@@ -352,7 +360,7 @@ const DB = (() => {
     _safeSetItem(STMT_REC_KEY, JSON.stringify(list));
   }
 
-  return { all, save, remove, bulkRemove, findById, search, duplicate, stats, exportCSV, getStorageUsage,
+  return { all, save, remove, bulkRemove, findById, search, duplicate, stats, exportCSV, getStorageUsage, isEmpty,
            getAdmin, saveAdmin,
            getSlipCompanies, saveSlipCompany, removeSlipCompany,
            getSlipRecords, getSlipRecordsByEmployee, getSlipRecordsByCompany,

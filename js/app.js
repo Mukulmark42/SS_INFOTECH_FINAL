@@ -104,6 +104,9 @@ const App = (() => {
     navTo('dashboard');
     _refreshDashboard();
     _initAdminPanel();
+
+    // Startup Cloud Sync: checks if device is empty to auto-restore, or if cloud has updates
+    _runStartupCloudSync();
   }
 
   // ── Navigation ─────────────────────────────────────────────
@@ -1752,6 +1755,144 @@ const App = (() => {
   // ── Supabase Cloud Sync Handlers ────────────────────────────
   let _supabaseEventBound = false;
 
+  function _updateTopbarCloudState(status, message) {
+    const iconEl = document.getElementById('topbarCloudIcon');
+    const textEl = document.getElementById('topbarCloudText');
+    if (!iconEl || !textEl) return;
+
+    textEl.textContent = message;
+    iconEl.className = 'cloud-pill-icon';
+
+    if (status === 'synced') {
+      iconEl.innerHTML = '<i class="bi bi-cloud-check-fill"></i>';
+      iconEl.style.color = 'var(--green)';
+    } else if (status === 'syncing' || status === 'checking') {
+      iconEl.classList.add('syncing');
+      iconEl.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+      iconEl.style.color = 'var(--primary-light)';
+    } else if (status === 'update') {
+      iconEl.classList.add('update-available');
+      iconEl.innerHTML = '<i class="bi bi-cloud-download-fill"></i>';
+      iconEl.style.color = 'var(--amber)';
+    } else if (status === 'offline') {
+      iconEl.classList.add('offline');
+      iconEl.innerHTML = '<i class="bi bi-cloud-slash-fill"></i>';
+      iconEl.style.color = 'var(--text-subtle)';
+    } else {
+      iconEl.innerHTML = '<i class="bi bi-cloud-fill"></i>';
+      iconEl.style.color = 'var(--primary-light)';
+    }
+  }
+
+  function _showCloudToast({ title, message, type = 'info', delay = 7000 }) {
+    const container = document.getElementById('cloud-toast-container');
+    if (!container) return;
+
+    const id = 'toast-' + Math.random().toString(36).slice(2, 8);
+    const bgClass = type === 'success' ? 'text-bg-success' : (type === 'danger' ? 'text-bg-danger' : (type === 'warning' ? 'text-bg-warning text-dark' : 'text-bg-dark text-white'));
+    const html = `
+      <div id="${id}" class="toast align-items-center ${bgClass} border-0 shadow-lg mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body">
+            <div class="fw-bold mb-1">${title}</div>
+            <div>${message}</div>
+          </div>
+          <button type="button" class="btn-close ${type === 'warning' ? '' : 'btn-close-white'} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+    const toastEl = document.getElementById(id);
+    if (toastEl && typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+      const bsToast = new bootstrap.Toast(toastEl, { delay });
+      bsToast.show();
+      toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+  }
+
+  async function _runStartupCloudSync() {
+    if (typeof SupabaseSync === 'undefined') return;
+    _updateTopbarCloudState('checking', 'Connecting Cloud...');
+
+    try {
+      const res = await SupabaseSync.checkStartupSync();
+      if (res.status === 'auto_restored') {
+        _updateTopbarCloudState('synced', 'Cloud Restored');
+        _refreshDashboard();
+        _renderClientTable();
+        _initAdminPanel();
+        _showCloudToast({
+          title: '☁️ Cloud Backup Restored',
+          message: `Loaded <strong>${res.stats.clients} Computations</strong>, <strong>${res.stats.statements} Statements</strong>, and <strong>${res.stats.slips} Payslips</strong> from Supabase.`,
+          type: 'success',
+          delay: 8000
+        });
+      } else if (res.status === 'cloud_update_available') {
+        _updateTopbarCloudState('update', 'Update Available');
+        _showCloudToast({
+          title: '☁️ Newer Cloud Snapshot Available',
+          message: `Found backup with ${res.backup.client_count || 0} clients from ${new Date(res.backup.created_at).toLocaleTimeString('en-IN')}. <div class="mt-2"><button class="btn btn-sm btn-light fw-bold py-0 px-2" onclick="App.quickSyncCloud('pull')"><i class="bi bi-download me-1"></i>Pull Now</button></div>`,
+          type: 'warning',
+          delay: 10000
+        });
+      } else if (res.status === 'synced') {
+        _updateTopbarCloudState('synced', 'Cloud Synced');
+      } else if (res.status === 'no_backups') {
+        _updateTopbarCloudState('synced', 'Cloud Ready');
+      } else {
+        _updateTopbarCloudState('offline', 'Cloud Offline');
+      }
+    } catch (err) {
+      console.warn('Startup sync check error:', err);
+      _updateTopbarCloudState('offline', 'Cloud Offline');
+    }
+  }
+
+  function handleTopbarCloudClick() {
+    openCloudBackupsModal();
+  }
+
+  async function quickSyncCloud(action = 'auto') {
+    if (typeof SupabaseSync === 'undefined') return;
+    _updateTopbarCloudState('syncing', 'Syncing...');
+
+    try {
+      const isLocalEmpty = typeof DB !== 'undefined' && typeof DB.isEmpty === 'function' && DB.isEmpty();
+
+      if (action === 'pull' || isLocalEmpty) {
+        const res = await SupabaseSync.restoreBackup(null, { merge: !isLocalEmpty });
+        _updateTopbarCloudState('synced', 'Cloud Synced');
+        _refreshDashboard();
+        _renderClientTable();
+        _initAdminPanel();
+        _showCloudToast({
+          title: '☁️ Cloud Restore Successful',
+          message: `Loaded snapshot "${_esc(res.label)}" (${res.stats.clients} clients, ${res.stats.statements} statements).`,
+          type: 'success'
+        });
+      } else {
+        const res = await SupabaseSync.pushBackup('Quick Sync');
+        if (res && res.skipped) {
+          _updateTopbarCloudState('synced', 'Cloud Ready');
+        } else {
+          _updateTopbarCloudState('synced', 'Cloud Synced');
+          _showCloudToast({
+            title: '☁️ Cloud Backup Successful',
+            message: `Uploaded ${res.stats.clients} clients & ${res.stats.statementRecords} statements to Supabase.`,
+            type: 'success'
+          });
+        }
+      }
+    } catch (err) {
+      _updateTopbarCloudState('offline', 'Sync Error');
+      _showCloudToast({
+        title: '❌ Cloud Sync Error',
+        message: err.message,
+        type: 'danger'
+      });
+    }
+  }
+
   async function _initSupabaseUI() {
     if (typeof SupabaseSync === 'undefined') return;
     const cfg = SupabaseSync.getConfig();
@@ -1769,6 +1910,7 @@ const App = (() => {
           const d = new Date().toLocaleTimeString('en-IN');
           lastSyncEl.innerHTML = `Last Sync: <strong class="text-success">${d} (Auto)</strong>`;
         }
+        _updateTopbarCloudState('synced', 'Cloud Synced');
       });
       _supabaseEventBound = true;
     }
@@ -1789,10 +1931,13 @@ const App = (() => {
     const res = await SupabaseSync.testConnection();
     if (res.success) {
       _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
+      _updateTopbarCloudState('synced', 'Cloud Synced');
     } else if (res.tableMissing) {
       _updateSupabaseBadge({ status: 'setup', message: '🟡 Table Setup Required (Click SQL Setup)' });
+      _updateTopbarCloudState('offline', 'Setup Required');
     } else {
       _updateSupabaseBadge({ status: 'disconnected', message: '⚪ Cloud Offline / Disconnected' });
+      _updateTopbarCloudState('offline', 'Cloud Offline');
     }
   }
 
@@ -1832,16 +1977,20 @@ const App = (() => {
 
   async function testSupabaseConnection() {
     _updateSupabaseBadge({ status: 'checking', message: 'Testing Connection...' });
+    _updateTopbarCloudState('syncing', 'Testing...');
     const res = await SupabaseSync.testConnection();
     if (res.success) {
       _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
+      _updateTopbarCloudState('synced', 'Cloud Synced');
       alert('🎉 Connection Successful!\n\nYour Supabase database is connected and ready for cloud backup and sync.');
     } else if (res.tableMissing) {
       _updateSupabaseBadge({ status: 'setup', message: '🟡 Table Setup Required' });
+      _updateTopbarCloudState('offline', 'Setup Required');
       alert(`⚠️ ${res.message}\n\nPlease click "SQL Setup Script", copy the query, and run it in your Supabase SQL Editor.`);
       openSupabaseSqlModal();
     } else {
       _updateSupabaseBadge({ status: 'disconnected', message: '🔴 Connection Failed' });
+      _updateTopbarCloudState('offline', 'Cloud Offline');
       alert(`❌ Connection Failed:\n${res.message}\n\nPlease verify your Supabase URL and Anon Key.`);
     }
   }
@@ -1849,6 +1998,7 @@ const App = (() => {
   async function pushBackupToCloud() {
     try {
       _updateSupabaseBadge({ status: 'checking', message: 'Uploading to Cloud...' });
+      _updateTopbarCloudState('syncing', 'Uploading...');
       const label = prompt('Enter a label for this cloud snapshot (or leave blank for automatic timestamp):', '');
       if (label === null) {
         _initSupabaseUI();
@@ -1856,24 +2006,37 @@ const App = (() => {
       }
 
       const res = await SupabaseSync.pushBackup(label);
+      if (res.skipped) {
+        alert('ℹ️ Cloud Backup Skipped: Your workspace has 0 client or statement records.');
+        _initSupabaseUI();
+        return;
+      }
       _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
+      _updateTopbarCloudState('synced', 'Cloud Synced');
       _initSupabaseUI();
       alert(`☁️ Cloud Backup Successful!\n\nUploaded:\n• ${res.stats.clients} Tax Computations (ITRs)\n• ${res.stats.statementRecords} Bank Statements\n• ${res.stats.slipRecords} Salary Slips\n• ${res.stats.slipCompanies} Companies & Logos\n\nYour data is now safely stored on Supabase!`);
     } catch (err) {
       _updateSupabaseBadge({ status: 'disconnected', message: 'Upload Failed' });
+      _updateTopbarCloudState('offline', 'Upload Failed');
       alert(`❌ Cloud Backup Failed:\n${err.message}`);
     }
   }
 
-  async function restoreLatestCloudBackup() {
-    if (!confirm('⚠️ Restore Latest Cloud Backup from Supabase?\n\nThis will download the newest snapshot from your Supabase cloud database and replace current local data.\n\nAre you sure you want to proceed?')) {
+  async function restoreLatestCloudBackup(merge = false) {
+    const actionName = merge ? 'Merge' : 'Replace & Restore';
+    if (!confirm(`⚠️ ${actionName} from Supabase Cloud?\n\n${merge ? 'This will merge cloud clients and records into your local storage without deleting existing data.' : 'This will replace current local data with the latest cloud snapshot.'}\n\nAre you sure you want to proceed?`)) {
       return;
     }
     try {
-      const res = await SupabaseSync.restoreBackup();
-      alert(`🎉 Restore Successful!\n\nRestored Snapshot: "${res.label}"\nFrom: ${new Date(res.createdAt).toLocaleString('en-IN')}\n\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips\n\nThe app will now reload.`);
-      window.location.reload();
+      _updateTopbarCloudState('syncing', 'Restoring...');
+      const res = await SupabaseSync.restoreBackup(null, { merge });
+      _updateTopbarCloudState('synced', 'Cloud Synced');
+      alert(`🎉 ${actionName} Successful!\n\nRestored Snapshot: "${res.label}"\nFrom: ${new Date(res.createdAt).toLocaleString('en-IN')}\n\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips`);
+      _refreshDashboard();
+      _renderClientTable();
+      _initAdminPanel();
     } catch (err) {
+      _updateTopbarCloudState('offline', 'Restore Failed');
       alert(`❌ Restore Failed:\n${err.message}`);
     }
   }
@@ -1892,23 +2055,41 @@ const App = (() => {
     if (!tbody) return;
 
     tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Fetching snapshots from Supabase...</td></tr>';
-    
+
     try {
       const list = await SupabaseSync.listBackups(20);
       if (countEl) countEl.textContent = `${list.length} cloud snapshot(s) found`;
 
       if (!list || !list.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-cloud-slash me-2"></i>No cloud backups found yet. Click "Backup to Cloud Now" to create your first snapshot.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-cloud-slash me-2"></i>No cloud backups found yet. Click "Backup Current Data" to create your first snapshot.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = list.map(item => {
+      // Identify the snapshot with the most complete records
+      let maxRecords = -1;
+      let richestId = null;
+      list.forEach(item => {
+        const total = (item.client_count || 0) + (item.statement_count || 0) + (item.slip_count || 0);
+        if (total > maxRecords) {
+          maxRecords = total;
+          richestId = item.id;
+        }
+      });
+
+      tbody.innerHTML = list.map((item, idx) => {
         const d = new Date(item.created_at).toLocaleString('en-IN');
         const device = (item.device_id || 'Unknown').slice(0, 10);
+        const isRichest = item.id === richestId && maxRecords > 0;
+        const isLatest = idx === 0;
+
         return `
-          <tr>
+          <tr class="${isRichest ? 'table-active' : ''}">
             <td>
-              <div class="fw-bold text-primary">${_esc(item.label || 'Snapshot')}</div>
+              <div class="d-flex align-items-center gap-2">
+                <div class="fw-bold text-primary">${_esc(item.label || 'Snapshot')}</div>
+                ${isRichest ? '<span class="badge bg-warning text-dark font-monospace" style="font-size:10px;"><i class="bi bi-star-fill me-1"></i>Most Data</span>' : ''}
+                ${isLatest ? '<span class="badge bg-info text-dark font-monospace" style="font-size:10px;">Latest</span>' : ''}
+              </div>
               <small class="text-muted font-monospace" style="font-size: 10px;">ID: ${item.id.slice(0, 8)}...</small>
             </td>
             <td><small>${d}</small></td>
@@ -1920,8 +2101,11 @@ const App = (() => {
             <td><small class="badge bg-secondary-subtle text-secondary font-monospace">${device}</small></td>
             <td class="text-end">
               <div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-primary btn-sm" onclick="App.restoreSpecificCloudBackup('${item.id}', '${_esc(item.label)}')" title="Restore this snapshot">
+                <button type="button" class="btn btn-primary btn-sm" onclick="App.restoreSpecificCloudBackup('${item.id}', '${_esc(item.label)}')" title="Replace local data with this snapshot">
                   <i class="bi bi-download me-1"></i>Restore
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="App.mergeSpecificCloudBackup('${item.id}', '${_esc(item.label)}')" title="Merge snapshot with local data without deleting">
+                  <i class="bi bi-intersect me-1"></i>Merge
                 </button>
                 <button type="button" class="btn btn-outline-danger btn-sm" onclick="App.deleteSpecificCloudBackup('${item.id}')" title="Delete from cloud">
                   <i class="bi bi-trash"></i>
@@ -1937,15 +2121,38 @@ const App = (() => {
     }
   }
 
+  async function mergeSpecificCloudBackup(backupId, label) {
+    if (!confirm(`Merge cloud snapshot "${label}" into your local database?\n\nThis will add missing clients, statements, and payslips without overwriting newer local edits.`)) {
+      return;
+    }
+    try {
+      _updateTopbarCloudState('syncing', 'Merging...');
+      const res = await SupabaseSync.restoreBackup(backupId, { merge: true });
+      _updateTopbarCloudState('synced', 'Cloud Synced');
+      alert(`🎉 Merge Successful!\n\nMerged Snapshot: "${res.label}"\n• Total Clients: ${DB.all().length}\n• Total Statements: ${DB.getStatementRecords().length}\n• Total Payslips: ${DB.getSlipRecords().length}`);
+      _refreshDashboard();
+      _renderClientTable();
+      _initAdminPanel();
+    } catch (err) {
+      _updateTopbarCloudState('offline', 'Merge Failed');
+      alert(`❌ Merge Failed:\n${err.message}`);
+    }
+  }
+
   async function restoreSpecificCloudBackup(backupId, label) {
     if (!confirm(`Restore cloud snapshot "${label}"?\n\nThis will replace your current local data with the selected cloud snapshot.`)) {
       return;
     }
     try {
-      const res = await SupabaseSync.restoreBackup(backupId);
-      alert(`🎉 Restore Successful!\n\nRestored Snapshot: "${res.label}"\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips\n\nThe app will now reload.`);
-      window.location.reload();
+      _updateTopbarCloudState('syncing', 'Restoring...');
+      const res = await SupabaseSync.restoreBackup(backupId, { merge: false });
+      _updateTopbarCloudState('synced', 'Cloud Synced');
+      alert(`🎉 Restore Successful!\n\nRestored Snapshot: "${res.label}"\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips`);
+      _refreshDashboard();
+      _renderClientTable();
+      _initAdminPanel();
     } catch (err) {
+      _updateTopbarCloudState('offline', 'Restore Failed');
       alert(`❌ Restore Failed:\n${err.message}`);
     }
   }
@@ -5667,7 +5874,8 @@ const App = (() => {
     downloadStatementRecord, downloadAllStatements,
     downloadAllCompanies, updateProjectStorageStats,
     saveSupabaseConfig, testSupabaseConnection, pushBackupToCloud, restoreLatestCloudBackup,
-    openCloudBackupsModal, refreshCloudBackupsList, restoreSpecificCloudBackup, deleteSpecificCloudBackup,
+    openCloudBackupsModal, refreshCloudBackupsList, restoreSpecificCloudBackup, mergeSpecificCloudBackup, deleteSpecificCloudBackup,
+    handleTopbarCloudClick, quickSyncCloud,
     openSupabaseSqlModal, copySupabaseSql,
   };
 

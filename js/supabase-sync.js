@@ -41,14 +41,20 @@ const SupabaseSync = (() => {
    */
   function triggerAutoBackup(reason = 'Auto Sync') {
     if (!isAutoSyncEnabled()) return;
+
+    // Safety guard: do not queue auto-sync if local storage has no user records
+    if (typeof DB !== 'undefined' && typeof DB.isEmpty === 'function' && DB.isEmpty()) {
+      return;
+    }
+
     if (_autoSyncTimer) clearTimeout(_autoSyncTimer);
 
     _autoSyncTimer = setTimeout(async () => {
       if (_isSyncing) return;
       try {
         _isSyncing = true;
-        const res = await pushBackup(`${reason} (${new Date().toLocaleTimeString('en-IN')})`);
-        if (typeof window !== 'undefined') {
+        const res = await pushBackup(`${reason} (${new Date().toLocaleTimeString('en-IN')})`, true);
+        if (res && !res.skipped && typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('supabase:synced', { detail: res }));
         }
       } catch (err) {
@@ -175,7 +181,7 @@ const SupabaseSync = (() => {
   /**
    * Push current local data as a cloud snapshot into Supabase
    */
-  async function pushBackup(customLabel = '') {
+  async function pushBackup(customLabel = '', isAuto = false) {
     const client = getClient();
     if (!client) {
       throw new Error('Supabase is not configured. Please check your Project URL and Key.');
@@ -183,6 +189,15 @@ const SupabaseSync = (() => {
     const cfg = getConfig();
     const bundle = collectAllData();
     const label = customLabel || `Snapshot (${new Date().toLocaleString('en-IN')})`;
+
+    // Protection: NEVER push an empty backup during automatic sync to prevent wiping out existing data
+    const isAutoSync = isAuto || label.startsWith('Auto Sync');
+    const totalUserRecords = (bundle.stats.clients || 0) + (bundle.stats.statementRecords || 0) + (bundle.stats.slipRecords || 0);
+
+    if (isAutoSync && totalUserRecords === 0) {
+      console.log('ℹ️ Auto-backup skipped: local workspace has no user records (protecting cloud backups).');
+      return { skipped: true, reason: 'Empty workspace on auto-sync' };
+    }
 
     const record = {
       label: label,
@@ -231,37 +246,78 @@ const SupabaseSync = (() => {
   }
 
   /**
-   * Restore application data from a specific cloud snapshot ID or latest
+   * Fetch the latest valid cloud backup (prefers snapshots that have actual records)
    */
-  async function restoreBackup(backupId = null) {
+  async function getLatestValidBackup() {
+    const client = getClient();
+    if (!client) return null;
+    const cfg = getConfig();
+
+    try {
+      // Get the 10 most recent backups
+      const { data, error } = await client
+        .from(cfg.tableName || DEFAULT_TABLE)
+        .select('id, label, device_id, client_count, statement_count, slip_count, company_count, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error || !data || !data.length) return null;
+
+      // Find the first backup with data > 0
+      const bestWithData = data.find(b =>
+        (b.client_count > 0) || (b.statement_count > 0) || (b.slip_count > 0)
+      );
+
+      // Return the best backup with data, or the latest if none have data
+      return bestWithData || data[0];
+    } catch (e) {
+      console.warn('Failed to find latest valid backup:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Restore application data from a specific cloud snapshot ID or latest valid
+   * @param {string|null} backupId
+   * @param {Object} options { merge: boolean }
+   */
+  async function restoreBackup(backupId = null, options = { merge: false }) {
     const client = getClient();
     if (!client) throw new Error('Supabase client not initialized.');
     const cfg = getConfig();
 
-    let query = client
-      .from(cfg.tableName || DEFAULT_TABLE)
-      .select('*');
-
-    if (backupId) {
-      query = query.eq('id', backupId).single();
-    } else {
-      query = query.order('created_at', { ascending: false }).limit(1).single();
+    let targetId = backupId;
+    if (!targetId) {
+      const best = await getLatestValidBackup();
+      if (!best) throw new Error('No cloud backups found on Supabase.');
+      targetId = best.id;
     }
 
-    const { data, error } = await query;
+    const { data, error } = await client
+      .from(cfg.tableName || DEFAULT_TABLE)
+      .select('*')
+      .eq('id', targetId)
+      .single();
+
     if (error) throw new Error(error.message || 'Failed to download cloud backup.');
     if (!data || !data.data) throw new Error('Backup data payload is empty or invalid.');
 
-    // Write back to localStorage safely
     const payload = data.data;
     const restoredKeys = [];
-    Object.keys(payload).forEach(key => {
-      if (key.startsWith('ssinfotech_')) {
-        const val = typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key];
-        localStorage.setItem(key, val);
-        restoredKeys.push(key);
-      }
-    });
+
+    if (options && options.merge) {
+      // MERGE MODE: Combine local records with cloud snapshot without overwriting newer items
+      _mergePayloadIntoLocalStorage(payload);
+    } else {
+      // REPLACE MODE: Write back to localStorage safely
+      Object.keys(payload).forEach(key => {
+        if (key.startsWith('ssinfotech_')) {
+          const val = typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key];
+          localStorage.setItem(key, val);
+          restoredKeys.push(key);
+        }
+      });
+    }
 
     saveConfig({ lastSyncAt: Date.now() });
 
@@ -270,6 +326,7 @@ const SupabaseSync = (() => {
       backupId: data.id,
       label: data.label,
       createdAt: data.created_at,
+      merged: !!(options && options.merge),
       restoredKeys,
       stats: {
         clients: data.client_count || 0,
@@ -278,6 +335,141 @@ const SupabaseSync = (() => {
         companies: data.company_count || 0,
       }
     };
+  }
+
+  /**
+   * Smart merge helper for combining cloud records with local records
+   */
+  function _mergePayloadIntoLocalStorage(payload) {
+    // 1. Clients
+    if (payload.ssinfotech_clients && Array.isArray(payload.ssinfotech_clients)) {
+      const localClients = JSON.parse(localStorage.getItem('ssinfotech_clients') || '[]');
+      const clientMap = new Map();
+      localClients.forEach(c => {
+        const k = c.id || (c.pan ? `${c.pan}_${c.ay}` : null);
+        if (k) clientMap.set(k, c);
+      });
+      payload.ssinfotech_clients.forEach(c => {
+        const k = c.id || (c.pan ? `${c.pan}_${c.ay}` : null);
+        if (!k) return;
+        if (!clientMap.has(k)) {
+          clientMap.set(k, c);
+        } else {
+          const existing = clientMap.get(k);
+          if ((c.updatedAt || 0) > (existing.updatedAt || 0)) {
+            clientMap.set(k, { ...existing, ...c });
+          }
+        }
+      });
+      localStorage.setItem('ssinfotech_clients', JSON.stringify(Array.from(clientMap.values())));
+    }
+
+    // 2. Statements
+    if (payload.ssinfotech_statement_records && Array.isArray(payload.ssinfotech_statement_records)) {
+      const localStmts = JSON.parse(localStorage.getItem('ssinfotech_statement_records') || '[]');
+      const stmtMap = new Map();
+      localStmts.forEach(s => stmtMap.set(s.id || s.accountNo, s));
+      payload.ssinfotech_statement_records.forEach(s => {
+        const k = s.id || s.accountNo;
+        if (!k || !stmtMap.has(k)) {
+          stmtMap.set(k || Math.random().toString(), s);
+        }
+      });
+      localStorage.setItem('ssinfotech_statement_records', JSON.stringify(Array.from(stmtMap.values())));
+    }
+
+    // 3. Salary Slip records
+    if (payload.ssinfotech_slip_records && Array.isArray(payload.ssinfotech_slip_records)) {
+      const localSlips = JSON.parse(localStorage.getItem('ssinfotech_slip_records') || '[]');
+      const slipMap = new Map();
+      localSlips.forEach(s => slipMap.set(s.id || `${s.employeeId}_${s.month}_${s.year}`, s));
+      payload.ssinfotech_slip_records.forEach(s => {
+        const k = s.id || `${s.employeeId}_${s.month}_${s.year}`;
+        if (!k || !slipMap.has(k)) {
+          slipMap.set(k || Math.random().toString(), s);
+        }
+      });
+      localStorage.setItem('ssinfotech_slip_records', JSON.stringify(Array.from(slipMap.values())));
+    }
+
+    // 4. Companies
+    if (payload.ssinfotech_slip_companies && Array.isArray(payload.ssinfotech_slip_companies)) {
+      const localComps = JSON.parse(localStorage.getItem('ssinfotech_slip_companies') || '[]');
+      const compMap = new Map();
+      localComps.forEach(c => compMap.set(c.id || c.name, c));
+      payload.ssinfotech_slip_companies.forEach(c => {
+        const k = c.id || c.name;
+        if (!k || !compMap.has(k)) {
+          compMap.set(k, c);
+        }
+      });
+      localStorage.setItem('ssinfotech_slip_companies', JSON.stringify(Array.from(compMap.values())));
+    }
+
+    // 5. Admin Deductors
+    if (payload.ssinfotech_admin && payload.ssinfotech_admin.deductors) {
+      const localAdmin = JSON.parse(localStorage.getItem('ssinfotech_admin') || '{}');
+      const curDeds = localAdmin.deductors || [];
+      const tanMap = new Map();
+      curDeds.forEach(d => tanMap.set(d.tan || d.name, d));
+      payload.ssinfotech_admin.deductors.forEach(d => {
+        const k = d.tan || d.name;
+        if (!tanMap.has(k)) tanMap.set(k, d);
+      });
+      localAdmin.deductors = Array.from(tanMap.values());
+      localStorage.setItem('ssinfotech_admin', JSON.stringify(localAdmin));
+    }
+  }
+
+  /**
+   * Automatic startup check for new devices or cloud updates.
+   * If local storage is empty, automatically restores the latest cloud backup.
+   * If local storage is not empty, checks if cloud has a newer snapshot.
+   */
+  async function checkStartupSync() {
+    const client = getClient();
+    if (!client) return { status: 'unconfigured' };
+
+    const isLocalEmpty = typeof DB !== 'undefined' && typeof DB.isEmpty === 'function'
+      ? DB.isEmpty()
+      : (JSON.parse(localStorage.getItem('ssinfotech_clients') || '[]').length === 0);
+
+    try {
+      const latestValid = await getLatestValidBackup();
+      if (!latestValid) {
+        return { status: 'no_backups' };
+      }
+
+      const totalCloudRecords = (latestValid.client_count || 0) + (latestValid.statement_count || 0) + (latestValid.slip_count || 0);
+
+      // Case 1: Fresh device / empty workspace, and cloud has data -> Auto Restore!
+      if (isLocalEmpty && totalCloudRecords > 0) {
+        console.log('🔄 Fresh device detected with empty storage. Auto-restoring cloud snapshot:', latestValid.id);
+        const restoreRes = await restoreBackup(latestValid.id, { merge: false });
+        return {
+          status: 'auto_restored',
+          backup: latestValid,
+          stats: restoreRes.stats,
+        };
+      }
+
+      // Case 2: Device already has data. Check if cloud has a newer snapshot from another device
+      const cfg = getConfig();
+      const lastSyncAt = cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0;
+      const cloudTime = new Date(latestValid.created_at).getTime();
+
+      if (cloudTime > (lastSyncAt + 60000) && latestValid.device_id !== cfg.deviceId && totalCloudRecords > 0) {
+        return {
+          status: 'cloud_update_available',
+          backup: latestValid,
+        };
+      }
+
+      return { status: 'synced', backup: latestValid };
+    } catch (e) {
+      console.warn('Startup cloud check error:', e);
+      return { status: 'error', message: e.message };
+    }
   }
 
   /**
@@ -347,10 +539,12 @@ WITH CHECK (true);
     triggerAutoBackup,
     isAutoSyncEnabled,
     listBackups,
+    getLatestValidBackup,
     restoreBackup,
     deleteBackup,
     getSqlSchema,
     collectAllData,
+    checkStartupSync,
     DEFAULT_CONFIG,
   };
 })();

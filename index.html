@@ -112,7 +112,16 @@
       <span id="topbarTitleText">Dashboard</span>
     </div>
 
-    <div class="topbar-actions">
+    <div class="topbar-actions d-flex align-items-center gap-2">
+      <!-- Supabase Cloud Sync Widget -->
+      <div class="topbar-cloud-sync" id="topbarCloudSync" onclick="App.handleTopbarCloudClick()" role="button" tabindex="0" title="Supabase Cloud Sync - Click to manage snapshots">
+        <span class="cloud-pill-icon" id="topbarCloudIcon"><i class="bi bi-cloud-check-fill"></i></span>
+        <span class="cloud-pill-text" id="topbarCloudText">Checking Cloud...</span>
+        <button type="button" class="cloud-pill-btn" id="topbarCloudBtn" onclick="event.stopPropagation(); App.quickSyncCloud();" title="Sync now with Supabase">
+          <i class="bi bi-arrow-repeat"></i>
+        </button>
+      </div>
+
       <div class="topbar-ay-badge" id="currentAY">
         <i class="bi bi-calendar3"></i>
         AY 2026-27 (Current A.Y.)
@@ -2058,7 +2067,15 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer bg-surface-subtle border-top">
+      <div class="modal-footer bg-surface-subtle border-top d-flex justify-content-between align-items-center">
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-success btn-sm fw-bold" onclick="App.pushBackupToCloud()">
+            <i class="bi bi-cloud-arrow-up-fill me-1"></i> Backup Current Data
+          </button>
+          <button type="button" class="btn btn-outline-primary btn-sm" onclick="App.restoreLatestCloudBackup(true)" title="Merge latest cloud backup without overwriting local changes">
+            <i class="bi bi-intersect me-1"></i> Merge Latest
+          </button>
+        </div>
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
@@ -2121,6 +2138,9 @@
 <script src="js/db.js"></script>
 <script src="js/supabase-sync.js"></script>
 <script src="js/app.js"></script>
+
+<!-- Toast Container for Cloud Sync Notifications -->
+<div id="cloud-toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
 
 <!-- Mobile overlay dismiss -->
 <script>
