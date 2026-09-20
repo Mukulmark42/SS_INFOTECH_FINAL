@@ -894,3 +894,7 @@ const ReportAck = (() => {
   };
 
 })();
+
+if (typeof module !== 'undefined') {
+  module.exports = ReportAck;
+}

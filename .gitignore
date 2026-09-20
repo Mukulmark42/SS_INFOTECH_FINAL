@@ -1,0 +1,4 @@
+# Scratch and temporary testing files
+scratch/
+.DS_Store
+Thumbs.db

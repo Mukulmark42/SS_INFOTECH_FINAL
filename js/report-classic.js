@@ -155,17 +155,31 @@ const ReportClassic = (() => {
 <div class="rpt-rule"></div>
 
 <!-- INCOME COMPUTATION -->
+${(c.salaryGross || 0) > 0 ? `
+${secTitle('CHAPTER IV-A &nbsp; SALARIES')}
+<div style="padding:2px 0 4px 8px;">
+  ${line('Gross Salary', fmtNum(c.salaryGross))}
+  ${line('Less: Standard Deduction u/s 16(ia)', `(${fmtNum(c.salaryStdDeduction)})`)}
+  ${(c.salaryPtax || 0) > 0 ? line('Less: Tax on Employment (P-Tax) u/s 16(iii)', `(${fmtNum(c.salaryPtax)})`) : ''}
+  ${(c.salaryHraExemption || 0) > 0 ? line('Less: HRA Exemption u/s 10(13A)', `(${fmtNum(c.salaryHraExemption)})`) : ''}
+  ${boldLine('Total – Income from Salaries', fmtNum(c.netSalary))}
+</div>
+` : ''}
+
+${(c.businessIncome || 0) > 0 || !((c.salaryGross || 0) > 0) ? `
 ${secTitle('CHAPTER IV-D &nbsp; PROFITS &amp; GAINS OF BUSINESS / PROFESSION [SECTION ' + (client.presumptiveSection || '44AD') + ']')}
 <div style="padding:2px 0 4px 8px;">
   ${line(`Net Profit from ${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()} [Code: ${client.bcode || '0204'}]`, fmtNum(c.businessIncome))}
   ${boldLine('Total – Business Income (' + (client.presumptiveSection || '44AD') + ')', fmtNum(c.businessIncome))}
 </div>
+` : ''}
 
-${hasSTCG ? `
+${hasSTCG || (c.ltcg || 0) > 0 ? `
 ${secTitle('CHAPTER IV-E &nbsp; CAPITAL GAINS')}
 <div style="padding:2px 0 4px 8px;">
-  ${line(`Short Term Capital Gain u/s 111A [@ ${(cfg.stcgRate||0.15)*100}%]`, fmtNum(c.stcg))}
-  ${boldLine('Total – Capital Gains', fmtNum(c.stcg))}
+  ${hasSTCG ? line(`Short Term Capital Gain u/s 111A [@ ${(cfg.stcgRate||0.15)*100}%]`, fmtNum(c.stcg)) : ''}
+  ${(c.ltcg || 0) > 0 ? line(`Long Term Capital Gain u/s 112A [Taxable: ₹${fmtNum(c.taxableLTCG)} @ ${(cfg.ltcgRate||0.125)*100}%]`, fmtNum(c.ltcg)) : ''}
+  ${boldLine('Total – Capital Gains', fmtNum((c.stcg || 0) + (c.ltcg || 0)))}
 </div>
 ` : ''}
 
@@ -181,8 +195,12 @@ ${grandLine('GROSS TOTAL INCOME', fmtNum(c.grossTotalIncome))}
 
 ${secTitle('CHAPTER VI-A &nbsp; DEDUCTIONS FROM GROSS TOTAL INCOME')}
 <div style="padding:2px 0 4px 8px;">
-  ${line('Deduction u/s 80TTA – Interest on Savings Bank Account', fmtNum(c.deduction80TTA))}
-  ${boldLine('Total Deductions', fmtNum(c.deduction80TTA))}
+  ${(c.deduction80TTA || 0) > 0 ? line('Deduction u/s 80TTA – Interest on Savings Bank Account', fmtNum(c.deduction80TTA)) : ''}
+  ${(c.deduction80C || 0) > 0 ? line('Deduction u/s 80C – Life Insurance, PPF, ELSS, EPF', fmtNum(c.deduction80C)) : ''}
+  ${(c.deduction80D || 0) > 0 ? line('Deduction u/s 80D – Health Insurance (Mediclaim)', fmtNum(c.deduction80D)) : ''}
+  ${(c.deduction80CCD1B || 0) > 0 ? line('Deduction u/s 80CCD(1B) – National Pension System (NPS)', fmtNum(c.deduction80CCD1B)) : ''}
+  ${(c.deduction80G || 0) > 0 ? line('Deduction u/s 80G – Eligible Donations', fmtNum(c.deduction80G)) : ''}
+  ${boldLine('Total Deductions', fmtNum(c.totalDeductions || c.deduction80TTA || 0))}
 </div>
 
 <div class="rpt-rule"></div>
@@ -193,6 +211,7 @@ ${secTitle('COMPUTATION OF TAX LIABILITY')}
 <div style="padding:2px 0 4px 8px;">
   ${_slabLines(c.regularIncome, cfg, fmtNum)}
   ${hasSTCG ? line(`Tax on STCG u/s 111A [${(cfg.stcgRate||0.15)*100}% on ₹${fmtNum(c.stcg)}]`, fmtNum(c.taxOnSTCG)) : ''}
+  ${(c.taxOnLTCG || 0) > 0 ? line(`Tax on LTCG u/s 112A [${(cfg.ltcgRate||0.125)*100}% on ₹${fmtNum(c.taxableLTCG)}]`, fmtNum(c.taxOnLTCG)) : ''}
   ${boldLine('Tax on Total Income', fmtNum(c.taxBeforeRebate))}
   ${line('Less: Rebate u/s 87A', `(${fmtNum(c.rebate)})`)}
   ${line('Tax after Rebate u/s 87A', fmtNum(c.taxAfterRebate))}
@@ -640,3 +659,7 @@ ${secTitle('ANNEXURE H &nbsp; TAXPAYER INFORMATION SUMMARY (TIS) – COMPARISON 
 
   return { generate };
 })();
+
+if (typeof module !== 'undefined') {
+  module.exports = ReportClassic;
+}

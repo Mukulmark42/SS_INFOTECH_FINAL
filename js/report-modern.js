@@ -312,6 +312,15 @@ const ReportModern = (() => {
         <div class="mrpt-inc-sub">From ${(banks||[]).length} bank account(s)</div>
       </div>
     </div>
+    ${(c.salaryGross || 0) > 0 ? `
+    <div class="mrpt-inc-card" style="background:#f0fdf4;border-left:4px solid #16a34a;">
+      <div class="mrpt-inc-icon">💼</div>
+      <div>
+        <div class="mrpt-inc-lbl">Salary Income (ITR-1)</div>
+        <div class="mrpt-inc-amt">₹ ${fmtNum(c.netSalary)}</div>
+        <div class="mrpt-inc-sub">Gross ₹${fmtNum(c.salaryGross)} – Std Ded ₹${fmtNum(c.salaryStdDeduction)}</div>
+      </div>
+    </div>` : ''}
     ${hasSTCG ? `
     <div class="mrpt-inc-card ic-stcg">
       <div class="mrpt-inc-icon">📈</div>
@@ -319,6 +328,15 @@ const ReportModern = (() => {
         <div class="mrpt-inc-lbl">Short Term Capital Gain [u/s 111A]</div>
         <div class="mrpt-inc-amt">₹ ${fmtNum(c.stcg)}</div>
         <div class="mrpt-inc-sub">Taxed @ ${(cfg.stcgRate||.15)*100}% flat</div>
+      </div>
+    </div>` : ''}
+    ${(c.ltcg || 0) > 0 ? `
+    <div class="mrpt-inc-card" style="background:#fffbeb;border-left:4px solid #d97706;">
+      <div class="mrpt-inc-icon">📊</div>
+      <div>
+        <div class="mrpt-inc-lbl">Long Term Capital Gain [u/s 112A]</div>
+        <div class="mrpt-inc-amt">₹ ${fmtNum(c.ltcg)}</div>
+        <div class="mrpt-inc-sub">Taxable: ₹${fmtNum(c.taxableLTCG)} @ ${(cfg.ltcgRate||.125)*100}%</div>
       </div>
     </div>` : ''}
     ${hasPL ? `
@@ -336,7 +354,7 @@ const ReportModern = (() => {
         <div class="mrpt-inc-lbl">Gross Total Income</div>
         <div class="mrpt-inc-amt">₹ ${fmtNum(c.grossTotalIncome)}</div>
         <div class="mrpt-inc-sub">
-          Less: 80TTA ₹${fmtNum(c.deduction80TTA)} &nbsp;→&nbsp;
+          Less Deductions ₹${fmtNum(c.totalDeductions || c.deduction80TTA || 0)} &nbsp;→&nbsp;
           <b>Total Income: ₹${fmtNum(c.totalIncome)}</b>
         </div>
       </div>
@@ -350,10 +368,26 @@ const ReportModern = (() => {
       <span class="mrpt-tax-lbl">Gross Total Income</span>
       <span class="mrpt-tax-amt">₹ ${fmtNum(c.grossTotalIncome)}</span>
     </div>
-    <div class="mrpt-tax-step green" style="--dot:#059669">
+    ${(c.deduction80TTA || 0) > 0 ? `<div class="mrpt-tax-step green" style="--dot:#059669">
       <span class="mrpt-tax-lbl">Less: Deduction u/s 80TTA (Savings Interest)</span>
       <span class="mrpt-tax-amt" style="color:#059669">– ₹ ${fmtNum(c.deduction80TTA)}</span>
-    </div>
+    </div>` : ''}
+    ${(c.deduction80C || 0) > 0 ? `<div class="mrpt-tax-step green" style="--dot:#059669">
+      <span class="mrpt-tax-lbl">Less: Deduction u/s 80C</span>
+      <span class="mrpt-tax-amt" style="color:#059669">– ₹ ${fmtNum(c.deduction80C)}</span>
+    </div>` : ''}
+    ${(c.deduction80D || 0) > 0 ? `<div class="mrpt-tax-step green" style="--dot:#059669">
+      <span class="mrpt-tax-lbl">Less: Deduction u/s 80D (Health Insurance)</span>
+      <span class="mrpt-tax-amt" style="color:#059669">– ₹ ${fmtNum(c.deduction80D)}</span>
+    </div>` : ''}
+    ${(c.deduction80CCD1B || 0) > 0 ? `<div class="mrpt-tax-step green" style="--dot:#059669">
+      <span class="mrpt-tax-lbl">Less: Deduction u/s 80CCD(1B) (NPS)</span>
+      <span class="mrpt-tax-amt" style="color:#059669">– ₹ ${fmtNum(c.deduction80CCD1B)}</span>
+    </div>` : ''}
+    ${(c.deduction80G || 0) > 0 ? `<div class="mrpt-tax-step green" style="--dot:#059669">
+      <span class="mrpt-tax-lbl">Less: Deduction u/s 80G (Donations)</span>
+      <span class="mrpt-tax-amt" style="color:#059669">– ₹ ${fmtNum(c.deduction80G)}</span>
+    </div>` : ''}
     <div class="mrpt-tax-step bold" style="--dot:#4f46e5">
       <span class="mrpt-tax-lbl">Total Income [Rounded u/s 288A]</span>
       <span class="mrpt-tax-amt">₹ ${fmtNum(c.totalIncome)}</span>
@@ -362,6 +396,10 @@ const ReportModern = (() => {
     ${hasSTCG ? `<div class="mrpt-tax-step" style="--dot:#d97706">
       <span class="mrpt-tax-lbl">Tax on STCG u/s 111A [${(cfg.stcgRate||.15)*100}% on ₹${fmtNum(c.stcg)}]</span>
       <span class="mrpt-tax-amt">₹ ${fmtNum(c.taxOnSTCG)}</span>
+    </div>` : ''}
+    ${(c.taxOnLTCG || 0) > 0 ? `<div class="mrpt-tax-step" style="--dot:#d97706">
+      <span class="mrpt-tax-lbl">Tax on LTCG u/s 112A [${(cfg.ltcgRate||.125)*100}% on ₹${fmtNum(c.taxableLTCG)}]</span>
+      <span class="mrpt-tax-amt">₹ ${fmtNum(c.taxOnLTCG)}</span>
     </div>` : ''}
     <div class="mrpt-tax-step bold" style="--dot:#4f46e5">
       <span class="mrpt-tax-lbl">Tax on Total Income</span>
@@ -618,3 +656,7 @@ const ReportModern = (() => {
 
   return { generate };
 })();
+
+if (typeof module !== 'undefined') {
+  module.exports = ReportModern;
+}

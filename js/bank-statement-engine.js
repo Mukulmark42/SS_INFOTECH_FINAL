@@ -3,7 +3,16 @@
  * BANK STATEMENT ENGINE – High-Fidelity Multi-Bank & ICICI Detailed Generator
  * ═══════════════════════════════════════════════════════════════════════
  */
+let _BankLogos = typeof BankLogos !== 'undefined' ? BankLogos : null;
+if (!_BankLogos && typeof require !== 'undefined') {
+  try {
+    _BankLogos = require('./bank-logos.js');
+  } catch (e) {}
+}
+
 const BankStatementEngine = (() => {
+
+  const _getBL = () => (_BankLogos || (typeof BankLogos !== 'undefined' ? BankLogos : null));
 
   const DEFAULT_MIN_BALANCE = 25000;
 
@@ -108,8 +117,9 @@ const BankStatementEngine = (() => {
     const stripped = upper.replace(/\s+(LIMITED|LTD|PVT|PRIVATE)\b/g, '').trim();
     if (BANK_DOMAINS[stripped]) return BANK_DOMAINS[stripped];
 
-    if (typeof BankLogos !== 'undefined' && BankLogos.normalizeKey) {
-      const key = BankLogos.normalizeKey(upper);
+    const bl = _getBL();
+    if (bl && bl.normalizeKey) {
+      const key = bl.normalizeKey(upper);
       if (DOMAIN_BY_KEY[key]) return DOMAIN_BY_KEY[key];
     }
     return `${stripped.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
@@ -118,8 +128,9 @@ const BankStatementEngine = (() => {
   const BRANDFETCH_API_KEY = 'lJ4dlae8YLrTAa4ueHBuIHSocbZFY7V4Wh5QmB402s_vUAfl-VC6fVNwIGIc7qyCYP42a-6mWMgvQdlcbG7pcQ';
 
   function getBrandfetchLogo(bankName, w = 300, h = 100) {
-    if (typeof BankLogos !== 'undefined' && BankLogos.hasLogo(bankName)) {
-      return BankLogos.getLogo(bankName);
+    const bl = _getBL();
+    if (bl && bl.hasLogo(bankName)) {
+      return bl.getLogo(bankName);
     }
     const domain = getBankDomain(bankName);
     const keyParam = BRANDFETCH_API_KEY ? `?c=${encodeURIComponent(BRANDFETCH_API_KEY)}` : '';
@@ -322,6 +333,24 @@ const BankStatementEngine = (() => {
       return `${parts[2]}/${months[mIdx] || 'Jan'}/${parts[0]}`;
     }
     return d;
+  }
+
+  function fmtAxisDate(d) {
+    if (!d) return '--';
+    const s = String(d).trim();
+    if (s.includes('/')) {
+      const parts = s.split('/');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        return `${parts[0]}-${parts[1]}-${parts[2]}`;
+      }
+    }
+    const parts = s.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      return `${parts[0]}-${parts[1]}-${parts[2]}`;
+    }
+    return s;
   }
 
   function _randomHex(len) {
@@ -702,11 +731,24 @@ const BankStatementEngine = (() => {
 
   // ── Main Generate Dispatcher ──────────────────────────────────────────
   function generate(data) {
-    const style = data.style || 'icici';
-    if (style === 'icici') {
-      return _generateICICIStatement(data);
+    const style = (data.style || 'icici').toLowerCase();
+
+    // Specific optional format styles
+    if (style === 'axis') {
+      return _generateAxisStatement(data);
     }
-    return _generateStandardStatement(data);
+    if (style === 'sbi') {
+      return _generateSBIStatement(data);
+    }
+    if (style === 'hdfc') {
+      return _generateHDFCStatement(data);
+    }
+    if (style === 'standard') {
+      return _generateStandardStatement(data);
+    }
+
+    // Default format is ICICI Bank Detailed Statement
+    return _generateICICIStatement(data);
   }
 
   // ── 1. ICICI Bank Detailed Statement Template (Exact PDF Replica) ──────
@@ -765,7 +807,8 @@ const BankStatementEngine = (() => {
     const openingBalance = parseFloat(ac.openingBalance) || 0;
 
     // Bank Logo rendering - prioritize local project bank logo / admin saved logo
-    const logoData = b.logoData || (typeof BankLogos !== 'undefined' ? BankLogos.getLogo(bankName) : null);
+    const bl = _getBL();
+    const logoData = b.logoData || (bl ? bl.getLogo(bankName) : null);
     let logoHtml;
     if (logoData) {
       logoHtml = `<div class="icici-logo-img-wrap"><img src="${logoData}" alt="${_esc(bankName)}" class="icici-logo-img" /></div>`;
@@ -835,15 +878,18 @@ const BankStatementEngine = (() => {
     margin-bottom: 8px;
   }
   .icici-logo-img-wrap {
-    max-height: 52px;
-    max-width: 260px;
+    max-height: 58px;
+    max-width: 360px;
     display: flex;
     align-items: center;
     margin-bottom: 6px;
+    overflow: visible;
   }
   .icici-logo-img {
-    max-height: 52px;
-    max-width: 260px;
+    max-height: 58px;
+    max-width: 360px;
+    width: auto;
+    height: auto;
     object-fit: contain;
   }
   .icici-logo-badge {
@@ -1131,7 +1177,971 @@ const BankStatementEngine = (() => {
 </html>`;
   }
 
-  // ── 2. Refined Modern Statement Format ──────────────────────────────
+  // ── 2. Axis Bank Statement Template (Exact PDF Replica) ───────────────
+  function _generateAxisStatement(data) {
+    const b = data.bank || {};
+    const ac = data.account || {};
+    const txs = data.transactions || [];
+
+    const U = s => (s == null ? '' : String(s).trim().toUpperCase());
+
+    const holder = U(ac.holder) || 'MUKUL RAHAMAN';
+    const jointHolder = ac.jointHolder || '- -';
+    const rawHolderAddress = ac.address || 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, WEST BENGAL-INDIA, 743424';
+    
+    // Split address into clean vertical lines matching the official PDF
+    const addrParts = rawHolderAddress.includes('\n')
+      ? rawHolderAddress.split('\n').map(s => s.trim()).filter(Boolean)
+      : rawHolderAddress.split(',').map(s => s.trim()).filter(Boolean);
+    const addressHtml = addrParts.map(line => `<div>${_esc(U(line))}</div>`).join('');
+
+    const mobile = ac.mobile || 'XXXXXX5164';
+    const email = ac.email || 'MUXXXXN1@GMAIL.COM';
+    
+    let scheme = ac.scheme;
+    if (scheme === 'BURGUNDY - CURRENT ACCOUNT') {
+      scheme = '';
+    }
+    if (!scheme && ac.scheme !== '') {
+      const type = (ac.accountType || '').toUpperCase();
+      if (type.includes('CURR') || type === 'CAA' || type === 'CA') {
+        scheme = '';
+      } else if (type.includes('SALARY')) {
+        scheme = 'BURGUNDY - SALARY ACCOUNT';
+      } else if (type.includes('SAVINGS') || type === 'SB') {
+        scheme = 'BURGUNDY - SAVINGS ACCOUNT';
+      } else {
+        scheme = '';
+      }
+    }
+
+    const currency = ac.currency || 'INR';
+    const acNo = ac.accountNo || '924010058354195';
+    const custId = ac.custId || '879157488';
+    const ifsc = U(ac.ifsc) || 'UTIB0005971';
+    const micr = ac.micr || '743211009';
+    const nomineeReg = ac.nomineeRegistered || 'Y';
+    const nomineeName = U(ac.nomineeName) || 'NAFICHA RAHAN';
+    const pan = U(ac.pan) || 'CYMPR5097Q';
+    const branchCode = U(ac.branchCode) || (ifsc.length >= 4 ? ifsc.slice(-4) : '5971');
+    const branchAddress = U(b.address || ac.branchAddress) || 'AXIS BANK LTD, , GR FL JL NO 68 DAG NO 1415, KHATIAN NO 3871, BERACHAMPA, 743424, BERACHAMPA, WEST BENGAL, INDIA';
+    const branchPhone = ac.branchPhone || '9004659712';
+
+    const fromDateDisplay = fmtAxisDate(data.fromDate || '2026-06-20');
+    const toDateDisplay = fmtAxisDate(data.toDate || '2026-09-20');
+
+    let balance = parseFloat(ac.openingBalance) || 0;
+    let totalDr = 0;
+    let totalCr = 0;
+
+    const rows = txs.map((t) => {
+      const dr = parseFloat(t.debit) || 0;
+      const cr = parseFloat(t.credit) || 0;
+      balance = balance - dr + cr;
+      totalDr += dr;
+      totalCr += cr;
+      return {
+        ...t,
+        txnDateFormatted: fmtAxisDate(t.txnDate),
+        chqNo: t.chqNo || t.refNo || '',
+        description: U(t.description || t.narration || t.remark || ''),
+        dr,
+        cr,
+        balance,
+        initBr: t.initBr || branchCode || '5971'
+      };
+    });
+
+    const openingBalance = parseFloat(ac.openingBalance) || 0;
+    const closingBalance = balance;
+
+    let logoHtml;
+    if (b.logoData) {
+      logoHtml = `<img src="${b.logoData}" alt="AXIS BANK" style="max-height:52px;max-width:340px;width:auto;height:auto;object-fit:contain;" />`;
+    } else {
+      logoHtml = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 50" width="240" height="42">
+  <g transform="translate(10, 4) scale(1.6)">
+    <path d="M13.1365 3.62897C12.7598 2.9842 12.3832 2.33944 12.0075 1.69409C9.60607 5.81347 7.19564 9.92752 4.78522 14.0416C3.27037 16.6271 1.75553 19.2125 0.242924 21.7994C0.156387 21.9525 0.0847413 22.1134 0.0132221 22.2741L0 22.3038C2.48931 22.3073 4.97861 22.3082 7.46792 22.2932C7.75527 21.8008 8.0409 21.3073 8.32654 20.8138C8.80398 19.9889 9.28149 19.1638 9.76731 18.3437C11.323 15.7185 12.8228 13.0609 14.3226 10.4035C14.7739 9.60392 15.2251 8.80436 15.6779 8.00569C14.8384 6.54225 13.9874 5.0856 13.1365 3.62897Z" fill="#97144D"/>
+    <path d="M13.6642 14.5147C13.1122 14.5157 12.5603 14.5167 12.0084 14.5169C12.8641 16.0531 13.7523 17.5702 14.6407 19.0874C15.2663 20.156 15.8921 21.2247 16.5065 22.3002C17.1678 22.3006 17.8291 22.3017 18.4904 22.3027C20.3269 22.3055 22.1632 22.3084 24 22.2993C23.175 20.844 22.3309 19.3998 21.4867 17.9555C20.8223 16.8188 20.1579 15.6821 19.5028 14.5399C17.5566 14.5075 15.6104 14.5111 13.6642 14.5147Z" fill="#97144D"/>
+  </g>
+  <text x="64" y="32" font-family="'Times New Roman', Arial, sans-serif" font-weight="bold" font-size="24" fill="#97144D" letter-spacing="1.5">AXIS BANK</text>
+</svg>`;
+    }
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Axis_Bank_Statement_${_esc(acNo)}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Times New Roman', Times, 'Nimbus Roman No9 L', serif;
+    background: #eef2f6;
+    color: #000;
+    padding: 20px;
+    font-size: 8.5pt;
+    line-height: 1.25;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @media print {
+    body { background: #fff; padding: 0; margin: 0; }
+    .axis-page {
+      box-shadow: none !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+      border: none !important;
+      padding: 0 !important;
+    }
+    .no-print { display: none !important; }
+    @page {
+      margin: 10mm 10mm 10mm 10mm;
+      size: A4 portrait;
+    }
+    table { page-break-inside: auto; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; break-inside: avoid; }
+    .axis-notes-block { page-break-inside: avoid; break-inside: avoid; }
+    .axis-legends-block { page-break-inside: avoid; break-inside: avoid; }
+  }
+
+  .axis-page {
+    max-width: 920px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    padding: 26px 30px;
+  }
+
+  /* Header Branding */
+  .axis-hdr-logo {
+    text-align: center;
+    margin-bottom: 14px;
+  }
+
+  /* 2-Column Meta Layout */
+  .axis-meta-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    font-size: 8.5pt;
+    line-height: 1.35;
+  }
+  .axis-cust-col {
+    flex: 1;
+    max-width: 55%;
+  }
+  .axis-cust-name {
+    font-weight: bold;
+    font-size: 10.5pt;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .axis-bank-col {
+    width: 280px;
+    text-align: left;
+    font-size: 8.5pt;
+    line-height: 1.35;
+  }
+  .axis-info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1px;
+  }
+  .axis-info-row .lbl {
+    font-weight: normal;
+  }
+  .axis-info-row .val {
+    font-weight: normal;
+    text-align: right;
+  }
+
+  /* Statement Title */
+  .axis-stmt-title {
+    text-align: center;
+    font-weight: bold;
+    font-size: 9.5pt;
+    margin: 14px 0 8px 0;
+    padding: 4px 0;
+  }
+
+  /* Transactions Table */
+  .axis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+    color: #000;
+  }
+  .axis-table th, .axis-table td {
+    border: 1px solid #000;
+    padding: 2px 4px;
+    vertical-align: top;
+    line-height: 1.25;
+  }
+  .axis-table th {
+    font-weight: bold;
+    background: #fff;
+  }
+  .axis-table td.r, .axis-table th.r {
+    text-align: right;
+  }
+  .axis-table td.c, .axis-table th.c {
+    text-align: center;
+  }
+  .axis-part {
+    word-break: break-word;
+    white-space: normal;
+  }
+  .axis-table tr.row-total td {
+    font-weight: bold;
+  }
+
+  /* Disclaimers & Notes Block */
+  .axis-notes-block {
+    margin-top: 14px;
+    font-size: 7pt;
+    line-height: 1.3;
+    color: #111;
+  }
+  .axis-notes-block p {
+    margin-bottom: 5px;
+    text-align: justify;
+  }
+  .axis-office-line {
+    margin-top: 6px;
+    font-size: 7.2pt;
+    text-transform: uppercase;
+  }
+
+  /* Legends Block */
+  .axis-legends-block {
+    margin-top: 14px;
+    font-size: 7pt;
+    line-height: 1.3;
+  }
+  .axis-legends-title {
+    font-weight: bold;
+    font-size: 8pt;
+    margin-bottom: 4px;
+  }
+  .axis-legends-list {
+    margin-bottom: 12px;
+  }
+  .axis-legends-list div {
+    margin-bottom: 1px;
+  }
+  .axis-sys-gen {
+    margin-top: 12px;
+    font-size: 7.5pt;
+    margin-bottom: 16px;
+  }
+  .axis-end-stmt {
+    text-align: center;
+    font-weight: bold;
+    font-size: 8.5pt;
+    margin-top: 10px;
+    letter-spacing: 1px;
+  }
+
+  /* Print Bar */
+  .stmt-print-bar { text-align: center; padding: 18px; }
+  .stmt-print-bar button {
+    padding: 10px 32px; font-size: 14px; font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: none; cursor: pointer; margin: 0 6px;
+    border-radius: 6px;
+  }
+  .btn-print { background: #97144D; color: #fff; transition: background 0.2s; }
+  .btn-print:hover { background: #7a103e; }
+  .btn-close-stmt { background: #e5e7eb; color: #374151; transition: background 0.2s; }
+  .btn-close-stmt:hover { background: #d1d5db; }
+</style>
+</head>
+<body>
+
+<div class="stmt-print-bar no-print">
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+  <button class="btn-close-stmt" onclick="window.close()">Close</button>
+</div>
+
+<div class="axis-page">
+  <!-- Top Center Logo -->
+  <div class="axis-hdr-logo">
+    ${logoHtml}
+  </div>
+
+  <!-- Meta Information -->
+  <div class="axis-meta-grid">
+    <div class="axis-cust-col">
+      <div class="axis-cust-name">${_esc(holder)}</div>
+      <div>Joint Holder:- ${_esc(jointHolder)}</div>
+      ${addressHtml}
+      <div style="margin-top: 5px;">Registered Mobile No: ${_esc(mobile)}</div>
+      <div>Registered Email ID: ${_esc(email)}</div>
+      ${scheme && scheme !== 'BURGUNDY - CURRENT ACCOUNT' ? `<div>Scheme: ${_esc(scheme)}</div>` : ''}
+      <div>Currency: ${_esc(currency)}</div>
+    </div>
+    <div class="axis-bank-col">
+      <div class="axis-info-row"><span class="lbl">Customer ID:</span><span class="val">${_esc(custId)}</span></div>
+      <div class="axis-info-row"><span class="lbl">IFSC Code:</span><span class="val">${_esc(ifsc)}</span></div>
+      <div class="axis-info-row"><span class="lbl">MICR Code:</span><span class="val">${_esc(micr)}</span></div>
+      <div class="axis-info-row"><span class="lbl">Nominee Registered:</span><span class="val">${_esc(nomineeReg)}</span></div>
+      <div class="axis-info-row"><span class="lbl">Nominee Name:</span><span class="val">${_esc(nomineeName)}</span></div>
+      <div class="axis-info-row"><span class="lbl">PAN:</span><span class="val">${_esc(pan)}</span></div>
+    </div>
+  </div>
+
+  <!-- Statement Period Header -->
+  <div class="axis-stmt-title">
+    Statement of Axis Account No: ${_esc(acNo)} for the period (From: ${fromDateDisplay} To: ${toDateDisplay})
+  </div>
+
+  <!-- Transactions Table -->
+  <table class="axis-table">
+    <thead>
+      <tr>
+        <th style="width: 10%; text-align: left;">Tran Date</th>
+        <th style="width: 8%; text-align: left;">Chq No</th>
+        <th style="width: 44%; text-align: left;">Particulars</th>
+        <th style="width: 11%; text-align: right;" class="r">Debit</th>
+        <th style="width: 11%; text-align: right;" class="r">Credit</th>
+        <th style="width: 11%; text-align: right;" class="r">Balance</th>
+        <th style="width: 5%; text-align: center;" class="c">Init.<br>Br</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td></td>
+        <td></td>
+        <td><strong>OPENING BALANCE</strong></td>
+        <td class="r"></td>
+        <td class="r"></td>
+        <td class="r"><strong>${fmt(openingBalance)}</strong></td>
+        <td class="c"></td>
+      </tr>
+      ${rows.map(r => `
+      <tr>
+        <td>${r.txnDateFormatted}</td>
+        <td>${_esc(r.chqNo)}</td>
+        <td class="axis-part">${_esc(r.description)}</td>
+        <td class="r">${r.dr > 0 ? fmt(r.dr) : ''}</td>
+        <td class="r">${r.cr > 0 ? fmt(r.cr) : ''}</td>
+        <td class="r">${fmt(r.balance)}</td>
+        <td class="c">${_esc(r.initBr)}</td>
+      </tr>`).join('')}
+      <tr class="row-total">
+        <td colspan="3"><strong>TRANSACTION TOTAL</strong></td>
+        <td class="r"><strong>${fmt(totalDr)}</strong></td>
+        <td class="r"><strong>${fmt(totalCr)}</strong></td>
+        <td class="r"></td>
+        <td class="c"></td>
+      </tr>
+      <tr class="row-total">
+        <td colspan="5"><strong>CLOSING BALANCE</strong></td>
+        <td class="r"><strong>${fmt(closingBalance)}</strong></td>
+        <td class="c"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Disclaimers & Notes -->
+  <div class="axis-notes-block">
+    <p>Unless the constituent notifies the bank immediately of any discrepancy found by him/her in this statement of Account, it will be taken that he/she has found the account correct.</p>
+    <p>The closing balance as shown/displayed includes not only the credit balance and / or overdraft limit, but also funds which are under clearing. It excludes the amount marked as lien, if any. Hence the closing balance displayed may not be the effective available balance. For any further clarifications, please contact the Branch.</p>
+    <p>We would like to reiterate that, as a policy, Axis Bank never asks you to share, disclose, or revalidate your login Id, password or debit card number number through emails OR phone call Further,we would like to reiterate that Axis Bank shall not be liable for any losses arising from you sharing/disclosing of your login id, password and debit card number to anyone. Please co-operate by forwarding all such suspicious/spam emails, if received by you, to customer.service@axis.bank.in</p>
+    <p>With effect from 1st August 2016, the replacement charges for Debit card and ATM card applicable on Current accounts have been revised. To know more about the applicable charges,please visit www.axis.bank.in</p>
+    <p>Deposit Insurance and Credit Guarantee Corporation (DICGC) insurance cover is applicable in all Banks' deposits, such as savings, current, fixed, recurring etc* up to maximum amount of Rs 5 Lakh including principal &amp; interest both* (* or exceptions and details please refer www.dicgc.org.in )</p>
+    <p>In compliance with regulatory guidelines, the non-CTS cheque books attached to the accounts would be destroyed in banks core banking System. Thus, Non CTS cheques will not be valid for CASH, Clearing and Transfer transactions</p>
+    <p>To ensure you never miss any critical communication from us, it is important that your latest / correct mobile number and email ID are updated in our records. Kindly visit your nearest Axis Bank Loan Centre /Branch / Agri area office for updating your latest / correct mobile number and email ID in our records. You can also update your email ID using Internet Banking &amp; Mobile Banking App, open</p>
+    <p class="axis-office-line"><strong>REGISTERED OFFICE -</strong> AXIS BANK LTD,TRISHUL,Opp. Samartheswar Temple, Near Law Garden, Ellisbridge, Ahmedabad . 380006.</p>
+    <p class="axis-office-line"><strong>BRANCH ADDRESS -</strong> AXIS BANK LTD, , ${_esc(branchAddress)}, TEL:${_esc(branchPhone)} FAX: </p>
+  </div>
+
+  <!-- Legends -->
+  <div class="axis-legends-block">
+    <div class="axis-legends-title">Legends :</div>
+    <div class="axis-legends-list">
+      <div>ICONN-Transaction trough Internet Banking</div>
+      <div>VMT-ICON-Visa Money Transfer through Internet Banking</div>
+      <div>AUTOSWEEP-Transfer to linked fixed deposit</div>
+      <div>REV SWEEP-Interest on Linked fixed Deposit</div>
+      <div>SWEEP TRF-Transfer from Linked Fixed Deposit / Account</div>
+      <div>VMT-Visa Money Transfer through ATM</div>
+      <div>CWDR-Cash Withdrawal through ATM</div>
+      <div>PUR-POS purchase</div>
+      <div>TIP/ SCG-Surcharge on usage of debit card at pumps/railway ticket purchase or hotel tips</div>
+      <div>RATE.DIFF-Difference in rates on usage of card internationally</div>
+      <div>CLG-Cheque Clearing Transaction</div>
+      <div>EDC-Credit transaction through EDC Machine</div>
+      <div>SETU -Seamless electronic fund transfer through AXIS Bank</div>
+      <div>Int.pd-Interest paid to customer</div>
+      <div>Int.Coll-Interest collected from the customer</div>
+    </div>
+    <div class="axis-sys-gen">This is a system generated output and requires no signature.</div>
+    <div class="axis-end-stmt">++++ End of Statement ++++</div>
+  </div>
+</div>
+</body>
+</html>`;
+  }
+
+  // ── 3. SBI (State Bank of India) Authentic Statement Template ─────────
+  function _generateSBIStatement(data) {
+    const b = data.bank || {};
+    const ac = data.account || {};
+    const txs = data.transactions || [];
+
+    const U = s => (s == null ? '' : String(s).trim().toUpperCase());
+    const holder = U(ac.holder) || 'CUSTOMER NAME';
+    const holderAddress = U(ac.address) || 'VILL + PO - BASIRHAT, DIST - NORTH 24 PARGANAS, PIN - 743412';
+    const branchName = U(ac.branch) || 'BASIRHAT MAIN BRANCH';
+    const acNo = U(ac.accountNo) || '30894512345';
+    const acType = U(ac.accountType) || 'SAVINGS BANK ACCOUNT';
+    const cifNo = U(ac.cifNo || ac.custId) || '85412096321';
+    const branchCode = U(ac.branchCode) || '00321';
+    const ifsc = U(ac.ifsc) || 'SBIN0000321';
+    const micr = U(ac.micr) || '700002045';
+    const pan = U(ac.pan);
+    const mobile = ac.mobile;
+    const email = ac.email;
+    const nomineeName = U(ac.nomineeName);
+
+    const fromDateDisplay = fmtDate(data.fromDate);
+    const toDateDisplay = fmtDate(data.toDate);
+    const downloadDate = fmtDate(new Date().toISOString().slice(0, 10));
+
+    let balance = parseFloat(ac.openingBalance) || 0;
+    let totalDr = 0;
+    let totalCr = 0;
+
+    const rows = txs.map((t, idx) => {
+      const dr = parseFloat(t.debit) || 0;
+      const cr = parseFloat(t.credit) || 0;
+      balance = balance - dr + cr;
+      totalDr += dr;
+      totalCr += cr;
+      return {
+        ...t,
+        slNo: idx + 1,
+        refNo: U(t.refNo || t.tranId) || `TRANSFER-${idx + 1}`,
+        desc: U(t.description || t.narration || t.remark || ''),
+        valDate: fmtDate(t.valueDate || t.txnDate),
+        txnDate: fmtDate(t.txnDate),
+        dr,
+        cr,
+        balance
+      };
+    });
+
+    const openingBalance = parseFloat(ac.openingBalance) || 0;
+    const closingBalance = balance;
+    const bl = _getBL();
+    const logoData = b.logoData || (bl ? bl.getLogo('SBI') : null);
+
+    let logoHtml = logoData ? `<img src="${logoData}" alt="SBI Logo" class="sbi-logo-img" />` : `<div class="sbi-text-brand">STATE BANK OF INDIA</div>`;
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SBI Account Statement - ${acNo}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Roboto', Arial, Helvetica, sans-serif;
+    background: #e2e8f0;
+    color: #111827;
+    padding: 20px;
+    font-size: 8.5pt;
+    line-height: 1.3;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @media print {
+    body { background: #fff; padding: 0; margin: 0; }
+    .sbi-page { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; border: none !important; }
+    .no-print { display: none !important; }
+    @page { margin: 8mm 6mm 10mm 6mm; size: A4 portrait; }
+  }
+  .sbi-page {
+    max-width: 920px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .sbi-header-band {
+    background: #003399;
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sbi-brand-title {
+    font-size: 16pt;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .sbi-logo-img { max-height: 50px; max-width: 340px; width: auto; height: auto; object-fit: contain; }
+  .sbi-sub-tag { font-size: 8pt; font-weight: 400; opacity: 0.9; }
+  .sbi-details-grid {
+    padding: 18px 24px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    background: #f8fafc;
+    border-bottom: 2px solid #003399;
+  }
+  .sbi-box-title {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #003399;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 3px;
+  }
+  .sbi-info-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  .sbi-info-table td { padding: 2px 4px; vertical-align: top; }
+  .sbi-info-table .lbl { font-weight: 600; color: #475569; width: 40%; }
+  .sbi-info-table .val { font-weight: 700; color: #0f172a; }
+
+  .sbi-summary-ribbon {
+    padding: 10px 24px;
+    background: #eff6ff;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8pt;
+    font-weight: 600;
+    border-bottom: 1px solid #bfdbfe;
+  }
+  .sbi-summary-item span { color: #1e40af; font-weight: 700; }
+
+  .sbi-table-wrap { padding: 16px 24px; }
+  .sbi-table { width: 100%; border-collapse: collapse; font-size: 7.8pt; }
+  .sbi-table th {
+    background: #003399;
+    color: #fff;
+    padding: 8px 6px;
+    text-align: left;
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    border: 1px solid #002266;
+  }
+  .sbi-table th.r, .sbi-table td.r { text-align: right; }
+  .sbi-table td {
+    padding: 6px 6px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  .sbi-table tr:nth-child(even) td { background: #f8fafc; }
+  .sbi-td-desc { font-family: 'JetBrains Mono', monospace; font-size: 7.2pt; word-break: break-word; }
+  .sbi-td-dr { color: #b91c1c; font-weight: 600; }
+  .sbi-td-cr { color: #15803d; font-weight: 600; }
+  .sbi-td-bal { font-weight: 700; color: #0f172a; }
+
+  .sbi-footer {
+    padding: 14px 24px;
+    background: #f1f5f9;
+    border-top: 1px solid #cbd5e1;
+    font-size: 7.5pt;
+    color: #475569;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Print Bar */
+  .stmt-print-bar { text-align: center; padding: 18px; }
+  .stmt-print-bar button {
+    padding: 10px 32px; font-size: 14px; font-weight: 600;
+    font-family: 'Roboto', Arial, sans-serif;
+    border: none; cursor: pointer; margin: 0 6px;
+    border-radius: 6px;
+  }
+  .btn-print { background: #003399; color: #fff; transition: background 0.2s; }
+  .btn-print:hover { background: #002266; }
+  .btn-close-stmt { background: #e5e7eb; color: #374151; transition: background 0.2s; }
+  .btn-close-stmt:hover { background: #d1d5db; }
+</style>
+</head>
+<body>
+
+<div class="stmt-print-bar no-print">
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+  <button class="btn-close-stmt" onclick="window.close()">Close</button>
+</div>
+
+<div class="sbi-page">
+  <div class="sbi-header-band">
+    <div class="sbi-brand-title">
+      ${logoHtml}
+    </div>
+    <div style="text-align: right;">
+      <div style="font-weight: 700; font-size: 10pt;">STATEMENT OF ACCOUNT</div>
+      <div class="sbi-sub-tag">Generated: ${downloadDate}</div>
+    </div>
+  </div>
+
+  <div class="sbi-details-grid">
+    <div>
+      <div class="sbi-box-title">Account Holder Details</div>
+      <table class="sbi-info-table">
+        <tr><td class="lbl">Account Name:</td><td class="val">${_esc(holder)}</td></tr>
+        <tr><td class="lbl">Address:</td><td class="val">${_esc(holderAddress)}</td></tr>
+        <tr><td class="lbl">Account Number:</td><td class="val">${_esc(acNo)}</td></tr>
+        <tr><td class="lbl">Account Type:</td><td class="val">${_esc(acType)}</td></tr>
+        ${pan ? `<tr><td class="lbl">PAN:</td><td class="val">${_esc(pan)}</td></tr>` : ''}
+        ${mobile ? `<tr><td class="lbl">Mobile:</td><td class="val">${_esc(mobile)}</td></tr>` : ''}
+        ${email ? `<tr><td class="lbl">Email:</td><td class="val">${_esc(email)}</td></tr>` : ''}
+        ${nomineeName ? `<tr><td class="lbl">Nominee:</td><td class="val">${_esc(nomineeName)}</td></tr>` : ''}
+      </table>
+    </div>
+    <div>
+      <div class="sbi-box-title">Branch &amp; Banking Details</div>
+      <table class="sbi-info-table">
+        <tr><td class="lbl">Branch:</td><td class="val">${_esc(branchName)}</td></tr>
+        <tr><td class="lbl">Branch Code:</td><td class="val">${_esc(branchCode)}</td></tr>
+        <tr><td class="lbl">CIF Number:</td><td class="val">${_esc(cifNo)}</td></tr>
+        <tr><td class="lbl">IFS Code:</td><td class="val">${_esc(ifsc)}</td></tr>
+        <tr><td class="lbl">MICR Code:</td><td class="val">${_esc(micr)}</td></tr>
+        <tr><td class="lbl">Statement Period:</td><td class="val">${fromDateDisplay} to ${toDateDisplay}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="sbi-summary-ribbon">
+    <div class="sbi-summary-item">Opening Balance: <span>₹ ${fmt(openingBalance)}</span></div>
+    <div class="sbi-summary-item">Total Debit: <span>₹ ${fmt(totalDr)}</span></div>
+    <div class="sbi-summary-item">Total Credit: <span>₹ ${fmt(totalCr)}</span></div>
+    <div class="sbi-summary-item">Closing Balance: <span>₹ ${fmt(closingBalance)}</span></div>
+  </div>
+
+  <div class="sbi-table-wrap">
+    <table class="sbi-table">
+      <thead>
+        <tr>
+          <th style="width: 4%;">#</th>
+          <th style="width: 10%;">Txn Date</th>
+          <th style="width: 10%;">Value Date</th>
+          <th style="width: 44%;">Description / Ref No</th>
+          <th style="width: 10%;" class="r">Debit (₹)</th>
+          <th style="width: 10%;" class="r">Credit (₹)</th>
+          <th style="width: 12%;" class="r">Balance (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#eff6ff;font-weight:700;">
+          <td colspan="4">OPENING BALANCE B/F</td>
+          <td class="r">--</td>
+          <td class="r">--</td>
+          <td class="r sbi-td-bal">${fmt(openingBalance)}</td>
+        </tr>
+        ${rows.map(r => `
+        <tr>
+          <td style="text-align:center;color:#64748b;">${r.slNo}</td>
+          <td>${r.txnDate}</td>
+          <td>${r.valDate}</td>
+          <td class="sbi-td-desc"><strong>${_esc(r.desc)}</strong><br/><span style="color:#64748b;font-size:6.8pt;">REF: ${_esc(r.refNo)}</span></td>
+          <td class="r sbi-td-dr">${r.dr > 0 ? fmt(r.dr) : '--'}</td>
+          <td class="r sbi-td-cr">${r.cr > 0 ? fmt(r.cr) : '--'}</td>
+          <td class="r sbi-td-bal">${fmt(r.balance)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f0fdf4;font-weight:700;">
+          <td colspan="4">CLOSING BALANCE C/F</td>
+          <td class="r sbi-td-dr">${fmt(totalDr)}</td>
+          <td class="r sbi-td-cr">${fmt(totalCr)}</td>
+          <td class="r sbi-td-bal">${fmt(closingBalance)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sbi-footer">
+    <div>This is a computer generated account statement and does not require physical signature.</div>
+    <div>State Bank of India &bull; The Banker to Every Indian</div>
+  </div>
+</div>
+</body>
+</html>`;
+  }
+
+  // ── 3. HDFC Bank Authentic Statement Template ─────────────────────────
+  function _generateHDFCStatement(data) {
+    const b = data.bank || {};
+    const ac = data.account || {};
+    const txs = data.transactions || [];
+
+    const U = s => (s == null ? '' : String(s).trim().toUpperCase());
+    const holder = U(ac.holder) || 'CUSTOMER NAME';
+    const holderAddress = U(ac.address) || 'SUITE 402, CITY CENTRE, SALT LAKE, SECTOR 1, KOLKATA, 700064';
+    const branchName = U(ac.branch) || 'SALT LAKE SECTOR I';
+    const acNo = U(ac.accountNo) || '50100234891234';
+    const acType = U(ac.accountType) || 'SAVINGS ACCOUNTS - REGULAR';
+    const custId = U(ac.custId) || '72910485';
+    const branchCode = U(ac.branchCode) || '0289';
+    const ifsc = U(ac.ifsc) || 'HDFC0000289';
+    const micr = U(ac.micr) || '700240012';
+    const pan = U(ac.pan);
+    const mobile = ac.mobile;
+    const email = ac.email;
+    const nomineeName = U(ac.nomineeName);
+
+    const fromDateDisplay = fmtDate(data.fromDate);
+    const toDateDisplay = fmtDate(data.toDate);
+    const downloadDate = fmtDate(new Date().toISOString().slice(0, 10));
+
+    let balance = parseFloat(ac.openingBalance) || 0;
+    let totalDr = 0;
+    let totalCr = 0;
+
+    const rows = txs.map((t, idx) => {
+      const dr = parseFloat(t.debit) || 0;
+      const cr = parseFloat(t.credit) || 0;
+      balance = balance - dr + cr;
+      totalDr += dr;
+      totalCr += cr;
+      return {
+        ...t,
+        slNo: idx + 1,
+        chqRef: U(t.refNo || t.tranId) || `REF${idx + 1000}`,
+        narration: U(t.description || t.narration || t.remark || ''),
+        valDate: fmtDate(t.valueDate || t.txnDate),
+        txnDate: fmtDate(t.txnDate),
+        dr,
+        cr,
+        balance
+      };
+    });
+
+    const openingBalance = parseFloat(ac.openingBalance) || 0;
+    const closingBalance = balance;
+    const bl = _getBL();
+    const logoData = b.logoData || (bl ? bl.getLogo('HDFC') : null);
+
+    let logoHtml = logoData ? `<img src="${logoData}" alt="HDFC Bank Logo" class="hdfc-logo-img" />` : `<div class="hdfc-text-brand">HDFC BANK</div>`;
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HDFC Bank Statement - ${acNo}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #e2e8f0;
+    color: #1c1c1c;
+    padding: 20px;
+    font-size: 8.5pt;
+    line-height: 1.25;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @media print {
+    body { background: #fff; padding: 0; margin: 0; }
+    .hdfc-page { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; border: none !important; }
+    .no-print { display: none !important; }
+    @page { margin: 8mm 6mm 10mm 6mm; size: A4 portrait; }
+  }
+  .hdfc-page {
+    max-width: 920px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    padding: 24px;
+  }
+  .hdfc-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #004c8f;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+  }
+  .hdfc-logo-img { max-height: 50px; max-width: 320px; width: auto; height: auto; object-fit: contain; }
+  .hdfc-title-box { text-align: right; }
+  .hdfc-main-title { font-size: 13pt; font-weight: bold; color: #004c8f; text-transform: uppercase; }
+  .hdfc-meta-sub { font-size: 8pt; color: #64748b; margin-top: 2px; }
+
+  .hdfc-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .hdfc-cust-card, .hdfc-summary-card {
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    padding: 12px;
+    border-radius: 4px;
+  }
+  .hdfc-card-head {
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: #004c8f;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .hdfc-info-line { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 8pt; }
+  .hdfc-info-line .l { color: #475569; font-weight: 600; }
+  .hdfc-info-line .v { color: #0f172a; font-weight: bold; }
+
+  .hdfc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.8pt;
+    margin-top: 10px;
+  }
+  .hdfc-table th {
+    background: #004c8f;
+    color: #fff;
+    padding: 8px 6px;
+    text-align: left;
+    font-size: 7.5pt;
+    font-weight: bold;
+    border: 1px solid #003366;
+  }
+  .hdfc-table th.r, .hdfc-table td.r { text-align: right; }
+  .hdfc-table td {
+    padding: 6px 6px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  .hdfc-table tr:nth-child(even) td { background: #f8fafc; }
+  .hdfc-desc { font-family: 'JetBrains Mono', monospace; font-size: 7.2pt; word-break: break-word; }
+  .hdfc-dr { color: #dc2626; font-weight: bold; }
+  .hdfc-cr { color: #16a34a; font-weight: bold; }
+  .hdfc-bal { font-weight: bold; color: #0f172a; }
+
+  .hdfc-foot {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 7.2pt;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Print Bar */
+  .stmt-print-bar { text-align: center; padding: 18px; }
+  .stmt-print-bar button {
+    padding: 10px 32px; font-size: 14px; font-weight: 600;
+    font-family: Arial, sans-serif;
+    border: none; cursor: pointer; margin: 0 6px;
+    border-radius: 6px;
+  }
+  .btn-print { background: #004c8f; color: #fff; transition: background 0.2s; }
+  .btn-print:hover { background: #003366; }
+  .btn-close-stmt { background: #e5e7eb; color: #374151; transition: background 0.2s; }
+  .btn-close-stmt:hover { background: #d1d5db; }
+</style>
+</head>
+<body>
+
+<div class="stmt-print-bar no-print">
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+  <button class="btn-close-stmt" onclick="window.close()">Close</button>
+</div>
+
+<div class="hdfc-page">
+  <div class="hdfc-top">
+    <div>${logoHtml}</div>
+    <div class="hdfc-title-box">
+      <div class="hdfc-main-title">Account Statement</div>
+      <div class="hdfc-meta-sub">Period: ${fromDateDisplay} to ${toDateDisplay}</div>
+      <div class="hdfc-meta-sub">Generated On: ${downloadDate}</div>
+    </div>
+  </div>
+
+  <div class="hdfc-grid">
+    <div class="hdfc-cust-card">
+      <div class="hdfc-card-head">Account Holder &amp; Branch Details</div>
+      <div class="hdfc-info-line"><span class="l">Name:</span><span class="v">${_esc(holder)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Address:</span><span class="v" style="max-width:240px;text-align:right;">${_esc(holderAddress)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Account No:</span><span class="v">${_esc(acNo)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Cust ID:</span><span class="v">${_esc(custId)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Account Type:</span><span class="v">${_esc(acType)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Branch / IFSC:</span><span class="v">${_esc(branchName)} / ${_esc(ifsc)}</span></div>
+      ${pan ? `<div class="hdfc-info-line"><span class="l">PAN:</span><span class="v">${_esc(pan)}</span></div>` : ''}
+      ${mobile ? `<div class="hdfc-info-line"><span class="l">Mobile:</span><span class="v">${_esc(mobile)}</span></div>` : ''}
+      ${email ? `<div class="hdfc-info-line"><span class="l">Email:</span><span class="v">${_esc(email)}</span></div>` : ''}
+      ${nomineeName ? `<div class="hdfc-info-line"><span class="l">Nominee:</span><span class="v">${_esc(nomineeName)}</span></div>` : ''}
+    </div>
+    <div class="hdfc-summary-card">
+      <div class="hdfc-card-head">Account Statement Summary</div>
+      <div class="hdfc-info-line"><span class="l">Opening Balance:</span><span class="v">₹ ${fmt(openingBalance)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Total Deposits / Credits (+):</span><span class="v" style="color:#16a34a;">₹ ${fmt(totalCr)}</span></div>
+      <div class="hdfc-info-line"><span class="l">Total Withdrawals / Debits (-):</span><span class="v" style="color:#dc2626;">₹ ${fmt(totalDr)}</span></div>
+      <div class="hdfc-info-line" style="border-top:1px dashed #cbd5e1;padding-top:4px;margin-top:6px;"><span class="l">Closing Balance:</span><span class="v" style="font-size:9pt;color:#004c8f;">₹ ${fmt(closingBalance)}</span></div>
+    </div>
+  </div>
+
+  <table class="hdfc-table">
+    <thead>
+      <tr>
+        <th style="width: 4%;">#</th>
+        <th style="width: 10%;">Date</th>
+        <th style="width: 42%;">Narration</th>
+        <th style="width: 12%;">Chq / Ref No</th>
+        <th style="width: 10%;">Value Dt</th>
+        <th style="width: 11%;" class="r">Withdrawal (Dr)</th>
+        <th style="width: 11%;" class="r">Deposit (Cr)</th>
+        <th style="width: 12%;" class="r">Closing Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#eff6ff;font-weight:bold;">
+        <td colspan="5">OPENING BALANCE</td>
+        <td class="r">--</td>
+        <td class="r">--</td>
+        <td class="r hdfc-bal">${fmt(openingBalance)}</td>
+      </tr>
+      ${rows.map(r => `
+      <tr>
+        <td style="text-align:center;color:#64748b;">${r.slNo}</td>
+        <td>${r.txnDate}</td>
+        <td class="hdfc-desc">${_esc(r.narration)}</td>
+        <td style="font-family:monospace;font-size:7pt;">${_esc(r.chqRef)}</td>
+        <td>${r.valDate}</td>
+        <td class="r hdfc-dr">${r.dr > 0 ? fmt(r.dr) : '--'}</td>
+        <td class="r hdfc-cr">${r.cr > 0 ? fmt(r.cr) : '--'}</td>
+        <td class="r hdfc-bal">${fmt(r.balance)}</td>
+      </tr>`).join('')}
+      <tr style="background:#f0fdf4;font-weight:bold;">
+        <td colspan="5">CLOSING BALANCE</td>
+        <td class="r hdfc-dr">${fmt(totalDr)}</td>
+        <td class="r hdfc-cr">${fmt(totalCr)}</td>
+        <td class="r hdfc-bal">${fmt(closingBalance)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hdfc-foot">
+    <div>HDFC Bank Ltd. Registered Office: HDFC Bank House, Senapati Bapat Marg, Lower Parel (West), Mumbai - 400 013.</div>
+    <div>Computer Generated Statement &bull; Does Not Require Physical Signature</div>
+  </div>
+</div>
+</body>
+</html>`;
+  }
+
+  // ── 4. Refined Modern Statement Format ──────────────────────────────
   function _generateStandardStatement(data) {
     const b = data.bank || {};
     const ac = data.account || {};
@@ -1150,6 +2160,10 @@ const BankStatementEngine = (() => {
     const holder = U(ac.holder) || 'ACCOUNT HOLDER';
     const custId = U(ac.custId) || '--';
     const holderAddress = U(ac.address) || '';
+    const pan = U(ac.pan);
+    const mobile = ac.mobile;
+    const email = ac.email;
+    const nomineeName = U(ac.nomineeName);
     const fromDate = fmtDisplayDate(data.fromDate);
     const toDate = fmtDisplayDate(data.toDate);
     const periodText = `${fromDate}  TO  ${toDate}`;
@@ -1182,7 +2196,8 @@ const BankStatementEngine = (() => {
     const openingBalance = parseFloat(ac.openingBalance) || 0;
 
     // Bank Logo badge - prioritize local project bank logo / admin saved logo
-    const effectiveLogo = logoData || (typeof BankLogos !== 'undefined' ? BankLogos.getLogo(bankName) : null);
+    const bl = _getBL();
+    const effectiveLogo = logoData || (bl ? bl.getLogo(bankName) : null);
     let logoHtml;
     if (effectiveLogo) {
       logoHtml = `<div class="mod-logo mod-logo-img-wrap" style="background:#fff;padding:2px;"><img src="${effectiveLogo}" alt="${_esc(bankName)}" class="mod-logo-img" style="width:100%;height:100%;object-fit:contain;" /></div>`;
@@ -1280,18 +2295,24 @@ const BankStatementEngine = (() => {
     letter-spacing: 0.5px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.12);
   }
-  .mod-logo-img-wrap {
-    max-height: 48px;
-    max-width: 220px;
+  .mod-logo.mod-logo-img-wrap {
+    width: auto !important;
+    height: auto !important;
+    max-height: 54px;
+    max-width: 340px;
     display: flex;
     align-items: center;
+    box-shadow: none;
+    border-radius: 4px;
   }
   .mod-logo-img {
-    max-height: 48px;
-    max-width: 220px;
+    max-height: 54px;
+    max-width: 340px;
+    width: auto;
+    height: auto;
     object-fit: contain;
   }
-  .mod-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .mod-logo img { width: auto; height: auto; max-width: 340px; max-height: 54px; object-fit: contain; }
   .mod-brand-text h1 {
     font-size: 16pt;
     font-weight: 800;
@@ -1511,6 +2532,10 @@ const BankStatementEngine = (() => {
         <div class="mod-grid-val">${_esc(acNo)}</div>
         <div class="mod-grid-lbl">Account Type:</div>
         <div class="mod-grid-val">${_esc(acType)}</div>
+        ${pan ? `<div class="mod-grid-lbl">PAN:</div><div class="mod-grid-val">${_esc(pan)}</div>` : ''}
+        ${mobile ? `<div class="mod-grid-lbl">Mobile:</div><div class="mod-grid-val">${_esc(mobile)}</div>` : ''}
+        ${email ? `<div class="mod-grid-lbl">Email:</div><div class="mod-grid-val">${_esc(email)}</div>` : ''}
+        ${nomineeName ? `<div class="mod-grid-lbl">Nominee:</div><div class="mod-grid-val">${_esc(nomineeName)}</div>` : ''}
         ${holderAddress ? `<div class="mod-grid-lbl">Address:</div><div class="mod-grid-val">${_esc(holderAddress)}</div>` : ''}
       </div>
     </div>
@@ -1628,7 +2653,8 @@ const BankStatementEngine = (() => {
     fmt,
     fmtDate,
     fmtDisplayDate,
-    fmtICICIDate
+    fmtICICIDate,
+    fmtAxisDate
   };
 
   if (typeof window !== 'undefined') {
@@ -1637,3 +2663,7 @@ const BankStatementEngine = (() => {
 
   return engine;
 })();
+
+if (typeof module !== 'undefined') {
+  module.exports = BankStatementEngine;
+}

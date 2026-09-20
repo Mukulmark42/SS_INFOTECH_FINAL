@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark" data-bs-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,7 +7,13 @@
   <meta name="description" content="Professional Income Tax Computation Software by SS INFOTECH" />
 
   <!-- Instant theme: prevents flash of wrong theme -->
-  <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');</script>
+  <script>
+    (function() {
+      const t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      document.documentElement.setAttribute('data-bs-theme', t);
+    })();
+  </script>
 
   <!-- Google Fonts & DejaVu Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -142,73 +148,96 @@
         <div class="dash-welcome-left">
           <div class="dash-welcome-icon"><i class="bi bi-speedometer2"></i></div>
           <div>
+            <div class="dash-welcome-badge"><i class="bi bi-stars me-1"></i>Tax Computation Pro &bull; AY 2026-27</div>
             <h2 class="dash-welcome-title">Welcome to Tax Computation Pro</h2>
             <p class="dash-welcome-sub" id="dashDate"></p>
           </div>
         </div>
-        <button class="btn btn-primary dash-quick-btn" onclick="App.navTo('new-computation')">
-          <i class="bi bi-plus-lg me-1"></i>New Computation
-        </button>
+        <div class="dash-welcome-right">
+          <button class="btn btn-primary dash-quick-btn" onclick="App.navTo('new-computation')">
+            <i class="bi bi-plus-circle-fill me-1"></i>New Computation
+          </button>
+        </div>
       </div>
 
       <!-- Stat Cards Row -->
       <div class="dashboard-grid" role="list">
 
         <div class="stat-card primary" role="listitem">
-          <div class="stat-icon" aria-hidden="true"><i class="bi bi-file-earmark-text-fill"></i></div>
+          <div class="stat-card-top">
+            <div class="stat-icon" aria-hidden="true"><i class="bi bi-file-earmark-text-fill"></i></div>
+            <span class="stat-pill primary"><i class="bi bi-lightning-charge-fill me-1"></i>Today</span>
+          </div>
           <div class="stat-body">
             <div class="stat-num" id="stat-today">0</div>
             <div class="stat-label">Today's Computations</div>
           </div>
-          <div class="stat-trend" aria-hidden="true"><i class="bi bi-arrow-up-right"></i></div>
         </div>
 
         <div class="stat-card success" role="listitem">
-          <div class="stat-icon" aria-hidden="true"><i class="bi bi-people-fill"></i></div>
+          <div class="stat-card-top">
+            <div class="stat-icon" aria-hidden="true"><i class="bi bi-people-fill"></i></div>
+            <span class="stat-pill success"><i class="bi bi-database-check me-1"></i>Total</span>
+          </div>
           <div class="stat-body">
             <div class="stat-num" id="stat-clients">0</div>
             <div class="stat-label">Total Clients</div>
           </div>
-          <div class="stat-trend" aria-hidden="true"><i class="bi bi-arrow-up-right"></i></div>
         </div>
 
         <div class="stat-card warning" role="listitem">
-          <div class="stat-icon" aria-hidden="true"><i class="bi bi-arrow-return-left"></i></div>
+          <div class="stat-card-top">
+            <div class="stat-icon" aria-hidden="true"><i class="bi bi-arrow-return-left"></i></div>
+            <span class="stat-pill warning"><i class="bi bi-check2-circle me-1"></i>Active</span>
+          </div>
           <div class="stat-body">
             <div class="stat-num" id="stat-refund">0</div>
             <div class="stat-label">Refund Cases</div>
           </div>
-          <div class="stat-trend" aria-hidden="true"><i class="bi bi-arrow-up-right"></i></div>
         </div>
 
         <div class="stat-card danger" role="listitem">
-          <div class="stat-icon" aria-hidden="true"><i class="bi bi-cash-stack"></i></div>
+          <div class="stat-card-top">
+            <div class="stat-icon" aria-hidden="true"><i class="bi bi-cash-stack"></i></div>
+            <span class="stat-pill danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Payable</span>
+          </div>
           <div class="stat-body">
             <div class="stat-num" id="stat-payable">0</div>
             <div class="stat-label">Tax Payable Cases</div>
           </div>
-          <div class="stat-trend" aria-hidden="true"><i class="bi bi-arrow-down-right"></i></div>
         </div>
 
       </div><!-- /.dashboard-grid -->
 
       <!-- Quick Actions -->
       <div class="dash-quick-actions">
-        <button type="button" class="dash-qa-item" onclick="App.navTo('new-computation')">
-          <div class="dash-qa-icon" style="background:rgba(99,102,241,.12);color:#818cf8"><i class="bi bi-file-earmark-plus-fill"></i></div>
-          <span>New Computation</span>
+        <button type="button" class="dash-qa-item qa-new" onclick="App.navTo('new-computation')">
+          <div class="dash-qa-icon"><i class="bi bi-file-earmark-plus-fill"></i></div>
+          <div class="dash-qa-text">
+            <span class="dash-qa-title">New Computation</span>
+            <span class="dash-qa-desc">Start 5-step wizard</span>
+          </div>
         </button>
-        <button type="button" class="dash-qa-item" onclick="App.navTo('clients')">
-          <div class="dash-qa-icon" style="background:rgba(16,185,129,.12);color:#34d399"><i class="bi bi-people-fill"></i></div>
-          <span>Client Database</span>
+        <button type="button" class="dash-qa-item qa-clients" onclick="App.navTo('clients')">
+          <div class="dash-qa-icon"><i class="bi bi-people-fill"></i></div>
+          <div class="dash-qa-text">
+            <span class="dash-qa-title">Client Database</span>
+            <span class="dash-qa-desc">Search, filter & export</span>
+          </div>
         </button>
-        <button type="button" class="dash-qa-item" onclick="App.navTo('admin')">
-          <div class="dash-qa-icon" style="background:rgba(139,92,246,.12);color:#a78bfa"><i class="bi bi-gear-fill"></i></div>
-          <span>Admin Panel</span>
+        <button type="button" class="dash-qa-item qa-admin" onclick="App.navTo('admin')">
+          <div class="dash-qa-icon"><i class="bi bi-gear-fill"></i></div>
+          <div class="dash-qa-text">
+            <span class="dash-qa-title">Admin & Vault</span>
+            <span class="dash-qa-desc">Cloud sync & settings</span>
+          </div>
         </button>
-        <button type="button" class="dash-qa-item" onclick="App.navTo('new-computation');setTimeout(()=>App.goStep(4),100)">
-          <div class="dash-qa-icon" style="background:rgba(239,68,68,.12);color:#f87171"><i class="bi bi-calculator-fill"></i></div>
-          <span>Quick Compute</span>
+        <button type="button" class="dash-qa-item qa-compute" onclick="App.navTo('new-computation');setTimeout(()=>App.goStep(4),100)">
+          <div class="dash-qa-icon"><i class="bi bi-calculator-fill"></i></div>
+          <div class="dash-qa-text">
+            <span class="dash-qa-title">Quick Compute</span>
+            <span class="dash-qa-desc">Jump straight to review</span>
+          </div>
         </button>
       </div>
 
@@ -216,7 +245,7 @@
       <div class="dash-content-row">
 
         <div class="dash-chart-col">
-          <div class="card-panel">
+          <div class="card-panel dash-panel">
             <div class="panel-header">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-primary" aria-hidden="true"><i class="bi bi-bar-chart-fill"></i></div>
@@ -225,15 +254,19 @@
                   <p class="panel-subtitle">Clients filed per assessment year</p>
                 </div>
               </div>
+              <div class="dash-chart-legends">
+                <span class="dash-legend-dot computed"></span><span class="dash-legend-text">Computed</span>
+                <span class="dash-legend-dot active-ay"></span><span class="dash-legend-text">Current AY</span>
+              </div>
             </div>
-            <div class="panel-body" style="padding:20px 24px">
+            <div class="panel-body dash-chart-body">
               <canvas id="chartAY" height="200" role="img" aria-label="Bar chart showing AY-wise client count"></canvas>
             </div>
           </div>
         </div>
 
         <div class="dash-recent-col">
-          <div class="card-panel">
+          <div class="card-panel dash-panel">
             <div class="panel-header">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-success" aria-hidden="true"><i class="bi bi-clock-history"></i></div>
@@ -242,12 +275,28 @@
                   <p class="panel-subtitle">Latest computations</p>
                 </div>
               </div>
-              <a href="#" class="panel-action-link" data-page="clients">View all →</a>
+              <a href="#" class="panel-action-link" data-page="clients">View all &rarr;</a>
             </div>
             <div id="recentClients" class="recent-list" role="list" aria-label="Recent clients list"></div>
           </div>
         </div>
 
+      </div>
+
+      <!-- Stitch Compliance Alert Banner -->
+      <div class="dash-compliance-banner">
+        <div class="dash-compliance-left">
+          <div class="dash-compliance-icon">
+            <i class="bi bi-shield-exclamation"></i>
+          </div>
+          <div>
+            <div class="dash-compliance-title">AY 2026-27 Compliance & Filing Active</div>
+            <div class="dash-compliance-sub">Section 139(1) Tax Computation & verified bank interest statements are active. Cloud sync ensures all data is backed up.</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-warning dash-compliance-btn" onclick="App.navTo('clients')">
+          <i class="bi bi-journal-text me-1"></i>Review Client Records
+        </button>
       </div>
 
     </section>
@@ -294,7 +343,15 @@
 
         <!-- ── Step 1: Personal Details ── -->
         <div class="wizard-panel active" id="step-panel-1" role="tabpanel" aria-labelledby="step-1">
-          <h5 class="panel-title"><i class="bi bi-person-vcard-fill me-2" aria-hidden="true"></i>Personal Details</h5>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="panel-title mb-0"><i class="bi bi-person-vcard-fill me-2" aria-hidden="true"></i>Personal Details</h5>
+            <div>
+              <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('ais-json-file').click()" title="Auto-fill PAN, Name &amp; Income from official AIS/TIS or 26AS JSON">
+                <i class="bi bi-file-earmark-code me-1"></i> Import AIS / 26AS JSON
+              </button>
+              <input type="file" id="ais-json-file" accept=".json" style="display:none;" onchange="App.handleAisJsonUpload(event)" />
+            </div>
+          </div>
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label" for="f-name">Full Name <span class="required-mark">*</span></label>
@@ -468,7 +525,7 @@
             </div>
           </div>
 
-          <h6 class="section-sub-heading">Optional Income Sources</h6>
+          <h6 class="section-sub-heading">Income Sources &amp; Chapter VI-A Deductions</h6>
           <div class="row g-3">
             <div class="col-md-3">
               <div class="income-toggle-card selected" id="toggle-savings" onclick="App.toggleIncome('savings')" role="checkbox" aria-checked="true" tabindex="0">
@@ -481,16 +538,36 @@
               </div>
             </div>
             <div class="col-md-3">
-              <div class="income-toggle-card" id="toggle-stcg" onclick="App.toggleIncome('stcg')" role="checkbox" aria-checked="false" tabindex="0">
-                <div class="itc-icon" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></div>
+              <div class="income-toggle-card" id="toggle-salary" onclick="App.toggleIncome('salary')" role="checkbox" aria-checked="false" tabindex="0">
+                <div class="itc-icon" aria-hidden="true"><i class="bi bi-briefcase-fill"></i></div>
                 <div class="itc-body">
-                  <div class="itc-name">Short Term Capital Gain</div>
+                  <div class="itc-name">Salary Income (ITR-1)</div>
                   <div class="itc-badge optional">Optional</div>
                 </div>
                 <div class="itc-check" aria-hidden="true"><i class="bi bi-circle"></i></div>
               </div>
             </div>
             <div class="col-md-3">
+              <div class="income-toggle-card" id="toggle-stcg" onclick="App.toggleIncome('stcg')" role="checkbox" aria-checked="false" tabindex="0">
+                <div class="itc-icon" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></div>
+                <div class="itc-body">
+                  <div class="itc-name">STCG (u/s 111A)</div>
+                  <div class="itc-badge optional">Optional</div>
+                </div>
+                <div class="itc-check" aria-hidden="true"><i class="bi bi-circle"></i></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="income-toggle-card" id="toggle-ltcg" onclick="App.toggleIncome('ltcg')" role="checkbox" aria-checked="false" tabindex="0">
+                <div class="itc-icon" aria-hidden="true"><i class="bi bi-graph-up"></i></div>
+                <div class="itc-body">
+                  <div class="itc-name">LTCG (u/s 112A)</div>
+                  <div class="itc-badge optional">Optional</div>
+                </div>
+                <div class="itc-check" aria-hidden="true"><i class="bi bi-circle"></i></div>
+              </div>
+            </div>
+            <div class="col-md-4">
               <div class="income-toggle-card" id="toggle-pl" onclick="App.toggleIncome('pl')" role="checkbox" aria-checked="false" tabindex="0">
                 <div class="itc-icon" aria-hidden="true"><i class="bi bi-bar-chart-line-fill"></i></div>
                 <div class="itc-body">
@@ -500,7 +577,7 @@
                 <div class="itc-check" aria-hidden="true"><i class="bi bi-circle"></i></div>
               </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
               <div class="income-toggle-card selected" id="toggle-bs" onclick="App.toggleIncome('bs')" role="checkbox" aria-checked="true" tabindex="0">
                 <div class="itc-icon" aria-hidden="true"><i class="bi bi-balance-scale"></i></div>
                 <div class="itc-body">
@@ -510,17 +587,69 @@
                 <div class="itc-check" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></div>
               </div>
             </div>
+            <div class="col-md-4">
+              <div class="income-toggle-card" id="toggle-deductions" onclick="App.toggleIncome('deductions')" role="checkbox" aria-checked="false" tabindex="0">
+                <div class="itc-icon" aria-hidden="true"><i class="bi bi-shield-check"></i></div>
+                <div class="itc-body">
+                  <div class="itc-name">Chapter VI-A (Old Regime)</div>
+                  <div class="itc-badge optional">80C, 80D, 80CCD</div>
+                </div>
+                <div class="itc-check" aria-hidden="true"><i class="bi bi-circle"></i></div>
+              </div>
+            </div>
           </div>
 
           <div id="income-inputs" class="mt-4" aria-live="polite"></div>
 
           <div id="balance-sheet-inputs" class="mt-4" aria-live="polite" style="display:none;"></div>
 
+          <!-- Live Old vs New Regime Comparator Card -->
+          <div class="card shadow-sm border-0 mt-4 overflow-hidden" id="regime-comparator-card">
+            <div class="card-header text-white py-2 px-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+              <span class="fw-bold small"><i class="bi bi-intersect me-1"></i> Live Tax Regime Comparator (New vs Old)</span>
+              <span class="badge bg-warning text-dark fw-bold" id="regime-recommend-badge">New Regime Recommended</span>
+            </div>
+            <div class="card-body p-3 bg-surface-subtle">
+              <div class="row g-3 text-center align-items-center">
+                <div class="col-md-5">
+                  <div class="p-3 rounded border bg-surface" id="regime-box-new">
+                    <div class="text-muted small fw-bold text-uppercase">New Tax Regime (u/s 115BAC)</div>
+                    <div class="fs-4 fw-bold text-primary my-1" id="regime-tax-new">₹ 0</div>
+                    <div class="small text-muted" id="regime-desc-new">Zero tax up to ₹12L (AY 26-27) &bull; Std Ded: ₹75,000</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-2 w-100 fw-bold" id="btn-apply-new-regime" onclick="App.applyTaxRegime('New')">
+                      <i class="bi bi-check2 me-1"></i> Apply New Regime
+                    </button>
+                  </div>
+                </div>
+                <div class="col-md-2">
+                  <div class="d-flex flex-column align-items-center justify-content-center">
+                    <span class="badge bg-secondary rounded-pill mb-1">VS</span>
+                    <span class="badge bg-success py-1 px-2 text-wrap" id="regime-savings-pill">Save ₹ 0</span>
+                  </div>
+                </div>
+                <div class="col-md-5">
+                  <div class="p-3 rounded border bg-surface" id="regime-box-old">
+                    <div class="text-muted small fw-bold text-uppercase">Old Tax Regime</div>
+                    <div class="fs-4 fw-bold text-dark my-1" id="regime-tax-old">₹ 0</div>
+                    <div class="small text-muted" id="regime-desc-old">80C, 80D, 80CCD deductions applicable</div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100 fw-bold" id="btn-apply-old-regime" onclick="App.applyTaxRegime('Old')">
+                      <i class="bi bi-check2 me-1"></i> Apply Old Regime
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Live Breakdown -->
           <div class="income-breakdown mt-4" id="income-breakdown" aria-live="polite" aria-label="Live income breakdown">
             <h6 class="breakdown-heading"><i class="bi bi-calculator me-2" aria-hidden="true"></i>Live Income Breakdown</h6>
+            <div class="breakdown-row" id="brk-salary-row" style="display:none">
+              <span>Salary Income (Net of Std Deduction)</span>
+              <span id="brk-salary">₹ 0</span>
+            </div>
             <div class="breakdown-row">
-              <span>Business Income (44AD)</span>
+              <span>Business Income (44AD / 44ADA)</span>
               <span class="fw-bold" id="brk-business">₹ 0</span>
             </div>
             <div class="breakdown-row">
@@ -528,15 +657,23 @@
               <span id="brk-savings">₹ 0</span>
             </div>
             <div class="breakdown-row" id="brk-stcg-row" style="display:none">
-              <span>Short Term Capital Gain</span>
+              <span>Short Term Capital Gain (111A)</span>
               <span id="brk-stcg">₹ 0</span>
+            </div>
+            <div class="breakdown-row" id="brk-ltcg-row" style="display:none">
+              <span>Long Term Capital Gain (112A)</span>
+              <span id="brk-ltcg">₹ 0</span>
             </div>
             <div class="breakdown-row" id="brk-pl-row" style="display:none">
               <span>P&amp;L Income</span>
               <span id="brk-pl">₹ 0</span>
             </div>
+            <div class="breakdown-row text-success" id="brk-deductions-row" style="display:none">
+              <span>Less: Chapter VI-A Deductions</span>
+              <span id="brk-deductions">- ₹ 0</span>
+            </div>
             <div class="breakdown-row total">
-              <span>Total Income</span>
+              <span>Total Taxable Income</span>
               <span id="brk-total">₹ 0</span>
             </div>
           </div>
@@ -679,6 +816,26 @@
         </div>
       </div>
 
+      <!-- Client Database Tabs: Active vs Recycle Bin -->
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="nav nav-pills" id="client-db-tabs" role="tablist">
+          <button class="nav-link active py-1 px-3 fw-bold small" id="tab-clients-active" onclick="App.switchClientDbTab('active')">
+            <i class="bi bi-people-fill me-1"></i> Active Clients <span class="badge bg-primary ms-1" id="badge-active-count">0</span>
+          </button>
+          <button class="nav-link py-1 px-3 fw-bold small text-danger" id="tab-clients-trash" onclick="App.switchClientDbTab('trash')">
+            <i class="bi bi-trash3-fill me-1"></i> Recycle Bin <span class="badge bg-danger ms-1" id="badge-trash-count">0</span>
+          </button>
+        </div>
+        <div id="trash-actions-bar" style="display:none;" class="d-flex gap-2">
+          <button class="btn btn-outline-success btn-sm" onclick="App.restoreSelectedClients()" id="btn-restore-selected" style="display:none;">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Restore Selected
+          </button>
+          <button class="btn btn-outline-danger btn-sm" onclick="App.emptyTrash()">
+            <i class="bi bi-x-circle-fill me-1"></i> Empty Trash
+          </button>
+        </div>
+      </div>
+
       <!-- Bulk Selection Toolbar -->
       <div class="d-flex justify-content-between align-items-center mb-3 px-2 py-2 border rounded bg-surface-subtle" id="client-bulk-bar" style="font-size: 0.85rem;">
         <div class="form-check m-0 d-flex align-items-center gap-2">
@@ -712,17 +869,70 @@
 
       <!-- Page heading -->
       <div class="admin-page-header">
-        <div>
-          <h4 class="admin-page-title"><i class="bi bi-gear-fill me-2" aria-hidden="true"></i>Admin &amp; System Configuration</h4>
-          <p class="admin-page-sub">Configure masters, business rules, company profiles, and data backup</p>
+        <div class="d-flex align-items-center gap-3">
+          <div class="admin-header-badge" aria-hidden="true">
+            <i class="bi bi-gear-wide-connected"></i>
+          </div>
+          <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <h4 class="admin-page-title mb-0">Admin &amp; System Configuration</h4>
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2 py-1" style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Master Rules</span>
+            </div>
+            <p class="admin-page-sub mb-0">Configure enterprise masters, statutory business rules, company profiles, and data vaults</p>
+          </div>
         </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline-secondary" onclick="App.downloadLocalBackup()" title="Export JSON Backup">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <button class="btn btn-outline-danger btn-sm rounded-pill px-3" onclick="App.lockAdmin()" title="Lock Admin Panel">
+            <i class="bi bi-lock-fill me-1"></i>Lock Admin
+          </button>
+          <button class="btn btn-glass-download" onclick="App.downloadLocalBackup()" title="Export JSON Backup">
             <i class="bi bi-download me-1"></i>Backup
           </button>
-          <button class="btn btn-success" onclick="App.saveAdminConfig()">
-            <i class="bi bi-save-fill me-2" aria-hidden="true"></i>Save All Settings
+          <button class="btn btn-save-settings" onclick="App.saveAdminConfig()">
+            <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>Save All Settings
           </button>
+        </div>
+      </div>
+
+      <!-- Admin Overview Stats Bar -->
+      <div class="admin-stats-bar mb-4">
+        <div class="admin-stat-chip">
+          <div class="asc-icon text-primary"><i class="bi bi-bank2"></i></div>
+          <div class="asc-info">
+            <span class="asc-val" id="admin-stat-banks">0</span>
+            <span class="asc-lbl">Configured Banks</span>
+          </div>
+        </div>
+        <div class="admin-stat-chip">
+          <div class="asc-icon text-success"><i class="bi bi-building"></i></div>
+          <div class="asc-info">
+            <span class="asc-val" id="admin-stat-companies">0</span>
+            <span class="asc-lbl">Employer Profiles</span>
+          </div>
+        </div>
+        <div class="admin-stat-chip">
+          <div class="asc-icon text-warning"><i class="bi bi-person-badge"></i></div>
+          <div class="asc-info">
+            <span class="asc-val" id="admin-stat-deductors">0</span>
+            <span class="asc-lbl">Deductor Profiles</span>
+          </div>
+        </div>
+        <div class="admin-stat-chip">
+          <div class="asc-icon text-info"><i class="bi bi-sliders"></i></div>
+          <div class="asc-info">
+            <span class="asc-val" id="admin-stat-trades">0</span>
+            <span class="asc-lbl">Business Codes</span>
+          </div>
+        </div>
+        <div class="admin-stat-chip">
+          <div class="asc-icon" style="color:#8b5cf6;"><i class="bi bi-cloud-check-fill"></i></div>
+          <div class="asc-info">
+            <div class="d-flex align-items-center gap-2">
+              <span class="pulse-dot" title="Active Storage Engine"></span>
+              <span class="asc-val" id="admin-stat-cloud">Local</span>
+            </div>
+            <span class="asc-lbl">Storage Mode</span>
+          </div>
         </div>
       </div>
 
@@ -769,6 +979,13 @@
                   <input type="text" class="form-control form-control-sm text-uppercase" id="admin-signatory" value="Proprietor" placeholder="e.g. Proprietor / Partner / Director" />
                 </div>
               </div>
+              <div class="mt-3 pt-2 border-top d-flex align-items-center justify-content-between text-muted" style="font-size:11px;">
+                <span class="d-flex align-items-center gap-1">
+                  <i class="bi bi-shield-fill-check text-success"></i>
+                  <span>Report Signatory Stamp: <strong class="text-success">Verified &amp; Active</strong></span>
+                </span>
+                <span class="badge bg-body-secondary text-body-secondary font-monospace" style="font-size:10px;">AY 2026-27 Compliant</span>
+              </div>
             </div>
           </div>
         </div>
@@ -776,7 +993,7 @@
         <!-- Business Configuration -->
         <div class="col-lg-6 admin-card-item" data-admin-sec="company">
           <div class="card-panel h-100">
-            <div class="panel-header">
+            <div class="panel-header d-flex justify-content-between align-items-center">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-warning" aria-hidden="true"><i class="bi bi-sliders2"></i></div>
                 <div>
@@ -784,8 +1001,24 @@
                   <p class="panel-subtitle">Default profit, interest limits &amp; TDS percentages</p>
                 </div>
               </div>
+              <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-2 py-0" style="font-size:10px;">Sec 44AD / 44ADA</span>
             </div>
             <div class="panel-body p-3">
+              <!-- Presumptive Profit Quick Benchmarks (Sec 44AD / 44ADA) -->
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                <div class="presumptive-profit-chip">
+                  <span class="ppc-label">Sec 44AD Cash</span>
+                  <span class="ppc-rate">8.00%</span>
+                </div>
+                <div class="presumptive-profit-chip">
+                  <span class="ppc-label">Sec 44AD Digital</span>
+                  <span class="ppc-rate text-success">6.00%</span>
+                </div>
+                <div class="presumptive-profit-chip">
+                  <span class="ppc-label">Sec 44ADA Prof</span>
+                  <span class="ppc-rate text-warning">50.00%</span>
+                </div>
+              </div>
               <div class="row g-2">
                 <div class="col-sm-4">
                   <label class="form-label small fw-semibold" for="admin-profit">Default Profit %</label>
@@ -836,7 +1069,7 @@
         <!-- Bank Configurations -->
         <div class="col-lg-6 admin-card-item" data-admin-sec="masters">
           <div class="card-panel h-100">
-            <div class="panel-header">
+            <div class="panel-header d-flex justify-content-between align-items-center">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-success" aria-hidden="true"><i class="bi bi-bank"></i></div>
                 <div>
@@ -844,6 +1077,7 @@
                   <p class="panel-subtitle">Auto-fetch bank address, IFSC &amp; official Brandfetch logos</p>
                 </div>
               </div>
+              <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1" style="font-size:10px;font-weight:600;"><i class="bi bi-patch-check-fill me-1"></i>Official Logos</span>
             </div>
             <div class="panel-body p-3">
               <!-- Add Bank Form with IFSC & Brandfetch Integration -->
@@ -893,7 +1127,7 @@
         <!-- Salary Slip Companies -->
         <div class="col-lg-6 admin-card-item" data-admin-sec="masters">
           <div class="card-panel h-100">
-            <div class="panel-header">
+            <div class="panel-header d-flex justify-content-between align-items-center">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-primary" aria-hidden="true"><i class="bi bi-building"></i></div>
                 <div>
@@ -901,6 +1135,7 @@
                   <p class="panel-subtitle">Employer profiles for payslip generation</p>
                 </div>
               </div>
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2 py-1" style="font-size:10px;font-weight:600;"><i class="bi bi-file-earmark-person me-1"></i>Payroll Engine</span>
             </div>
             <div class="panel-body p-3">
               <div class="admin-add-bank-box mb-3">
@@ -942,7 +1177,7 @@
         <!-- Deductor Configurations -->
         <div class="col-lg-6 admin-card-item" data-admin-sec="tax">
           <div class="card-panel h-100">
-            <div class="panel-header">
+            <div class="panel-header d-flex justify-content-between align-items-center">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-warning" aria-hidden="true"><i class="bi bi-person-badge-fill"></i></div>
                 <div>
@@ -950,6 +1185,7 @@
                   <p class="panel-subtitle">Custom TDS deductor profiles &amp; TAN records</p>
                 </div>
               </div>
+              <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-1" style="font-size:10px;font-weight:600;"><i class="bi bi-file-earmark-check me-1"></i>Form 26AS Match</span>
             </div>
             <div class="panel-body p-3">
               <div class="admin-add-bank-box mb-3">
@@ -987,7 +1223,7 @@
         <!-- Nature of Business Codes -->
         <div class="col-lg-6 admin-card-item" data-admin-sec="tax">
           <div class="card-panel h-100">
-            <div class="panel-header">
+            <div class="panel-header d-flex justify-content-between align-items-center">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-danger" aria-hidden="true"><i class="bi bi-sliders"></i></div>
                 <div>
@@ -995,6 +1231,7 @@
                   <p class="panel-subtitle">ITR business activity trade codes</p>
                 </div>
               </div>
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-1" style="font-size:10px;font-weight:600;"><i class="bi bi-hash me-1"></i>ITR-3 &amp; 4 Codes</span>
             </div>
             <div class="panel-body p-3">
               <div class="admin-add-bank-box mb-3">
@@ -1022,7 +1259,7 @@
         <!-- Assessment Year Rules & Custom AYs (Combined Card) -->
         <div class="col-lg-12 admin-card-item" data-admin-sec="tax">
           <div class="card-panel">
-            <div class="panel-header">
+            <div class="panel-header d-flex justify-content-between align-items-center">
               <div class="panel-header-left">
                 <div class="panel-icon panel-icon-primary" aria-hidden="true"><i class="bi bi-calendar2-check-fill"></i></div>
                 <div>
@@ -1030,11 +1267,12 @@
                   <p class="panel-subtitle">Slabs, 87A rebate rules &amp; dropdown AY entries</p>
                 </div>
               </div>
+              <span class="admin-active-ay-pill"><i class="bi bi-check-circle-fill me-1"></i>Active: AY 2026-27</span>
             </div>
             <div class="panel-body p-3">
               <div class="row g-4">
                 <div class="col-lg-8">
-                  <div class="table-responsive border rounded">
+                  <div class="table-responsive admin-table-container">
                     <table class="table table-sm ay-table mb-0" id="ayTable">
                       <thead>
                         <tr>
@@ -1042,6 +1280,7 @@
                           <th scope="col">Default Regime</th>
                           <th scope="col">Sec 87A Rebate</th>
                           <th scope="col">Basic Exemption</th>
+                          <th scope="col">Std Deduction</th>
                         </tr>
                       </thead>
                       <tbody id="ayTbody"></tbody>
@@ -1082,100 +1321,75 @@
               </span>
             </div>
             <div class="panel-body p-3">
-              <!-- Cloud Actions Grid -->
-              <div class="cloud-action-grid mb-4">
-                <div class="cloud-card-primary">
-                  <div class="d-flex align-items-center gap-3 mb-3">
-                    <div class="cloud-icon-box bg-success-subtle text-success">
-                      <i class="bi bi-cloud-upload-fill"></i>
-                    </div>
-                    <div>
-                      <h6 class="mb-0 fw-bold">Push to Supabase Cloud</h6>
-                      <small class="text-muted">Upload a complete cloud snapshot of all your data</small>
+              <!-- Stitch Cloud Credentials Strip -->
+              <div class="mb-3">
+                <div class="row g-3 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold" for="supabase-url">Project Endpoint URL</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+                      <input type="text" id="supabase-url" class="form-control form-control-sm font-monospace" placeholder="https://your-project.supabase.co" />
+                      <span class="input-group-text text-success"><i class="bi bi-lock-fill"></i></span>
                     </div>
                   </div>
-                  <p class="small text-muted mb-3">Saves all tax files, salary slips, statements, and company logos to your Supabase PostgreSQL cloud database.</p>
-                  <button type="button" class="btn btn-success btn-sm w-100 fw-bold py-2 shadow-sm" onclick="App.pushBackupToCloud()">
-                    <i class="bi bi-cloud-arrow-up-fill me-1"></i> Backup to Cloud Now
-                  </button>
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold" for="supabase-key">Supabase Anon Key (Public)</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+                      <input type="password" id="supabase-key" class="form-control form-control-sm font-monospace" placeholder="sb_publishable_..." />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold" for="supabase-table">Target Schema Table</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text"><i class="bi bi-table"></i></span>
+                      <input type="text" id="supabase-table" class="form-control form-control-sm font-monospace text-primary" value="ssinfotech_backups" />
+                    </div>
+                  </div>
+                  <div class="col-md-6 d-flex align-items-center pt-3">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="supabase-autosync" checked>
+                      <label class="form-check-label small fw-semibold ms-1" for="supabase-autosync">
+                        ⚡ Real-Time Auto-Backup on Every Change
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
-                <div class="cloud-card-secondary">
-                  <div class="d-flex align-items-center gap-3 mb-3">
-                    <div class="cloud-icon-box bg-primary-subtle text-primary">
-                      <i class="bi bi-cloud-download-fill"></i>
-                    </div>
-                    <div>
-                      <h6 class="mb-0 fw-bold">Restore from Cloud</h6>
-                      <small class="text-muted">Pull snapshots to this browser or any device</small>
-                    </div>
+                <!-- Sync Status Box -->
+                <div class="p-2.5 px-3 rounded-3 border d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 bg-surface-subtle" style="font-size:12.5px;">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-emerald-400 text-success"><i class="bi bi-check-circle-fill"></i></span>
+                    <span><strong class="text-muted">Cloud Status:</strong> <span id="cloud-last-sync-text">Checking...</span></span>
                   </div>
-                  <p class="small text-muted mb-3">View and restore previous cloud snapshots across different laptops, phones, or office computers.</p>
-                  <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary btn-sm flex-fill fw-bold py-2" onclick="App.restoreLatestCloudBackup()">
-                      <i class="bi bi-arrow-down-circle-fill me-1"></i> Pull Latest
+                  <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-2.5 py-1" onclick="App.testSupabaseConnection()">
+                      <i class="bi bi-activity text-success me-1"></i>Test Connection
                     </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-3" onclick="App.openCloudBackupsModal()" title="View all cloud backups">
-                      <i class="bi bi-clock-history me-1"></i> History
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-2.5 py-1" onclick="App.openSupabaseSqlModal()">
+                      <i class="bi bi-code-slash text-info me-1"></i>SQL Setup
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2.5 py-1" onclick="App.openCloudBackupsModal()">
+                      <i class="bi bi-clock-history me-1"></i>History
                     </button>
                   </div>
                 </div>
               </div>
 
-              <!-- Quick Cloud Tools Bar -->
-              <div class="d-flex flex-wrap align-items-center justify-content-between p-2 px-3 border rounded bg-surface-subtle mb-3 gap-2">
-                <div class="d-flex align-items-center gap-3">
-                  <span class="small fw-bold text-muted"><i class="bi bi-hdd-network me-1 text-primary"></i> Cloud Status:</span>
-                  <span class="small" id="cloud-last-sync-text">Last Sync: Never</span>
-                </div>
+              <!-- Actions Strip -->
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 pt-2 border-top">
                 <div class="d-flex gap-2">
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.testSupabaseConnection()">
-                    <i class="bi bi-activity me-1 text-success"></i> Test Connection
+                  <button type="button" class="btn btn-outline-success btn-sm px-3" onclick="App.restoreLatestCloudBackup()">
+                    <i class="bi bi-cloud-download-fill me-1"></i>Manual Pull
                   </button>
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.openSupabaseSqlModal()">
-                    <i class="bi bi-code-slash me-1 text-info"></i> SQL Setup Script
-                  </button>
-                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#collapseSupabaseConfig">
-                    <i class="bi bi-gear-fill me-1"></i> Cloud Settings
+                  <button type="button" class="btn btn-success btn-sm px-3" onclick="App.pushBackupToCloud()">
+                    <i class="bi bi-cloud-upload-fill me-1"></i>Manual Push
                   </button>
                 </div>
+                <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="App.saveSupabaseConfig()">
+                  <i class="bi bi-save me-1"></i>Save Cloud Settings
+                </button>
               </div>
-
-              <!-- Collapsible Supabase Config Form -->
-              <div class="collapse mt-3" id="collapseSupabaseConfig">
-                <div class="p-3 border rounded bg-surface">
-                  <h6 class="fw-bold mb-2"><i class="bi bi-sliders me-1 text-primary"></i> Supabase Cloud Credentials</h6>
-                  <p class="small text-muted mb-3">Configure your Supabase project parameters. These credentials are saved locally in your browser.</p>
-                  <div class="row g-3">
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold">Supabase Project URL</label>
-                      <input type="text" id="supabase-url" class="form-control form-control-sm" placeholder="https://your-project.supabase.co" />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold">Supabase Anon Key (Public)</label>
-                      <input type="text" id="supabase-key" class="form-control form-control-sm" placeholder="sb_publishable_..." />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold">Cloud Table Name</label>
-                      <input type="text" id="supabase-table" class="form-control form-control-sm" value="ssinfotech_backups" />
-                    </div>
-                    <div class="col-md-6 d-flex align-items-center pt-3">
-                      <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="supabase-autosync" checked>
-                        <label class="form-check-label small fw-bold" for="supabase-autosync">
-                          ⚡ Auto-Backup on Every Change <span class="badge bg-success-subtle text-success">Enabled</span>
-                        </label>
-                      </div>
-                    </div>
-                    <div class="col-12 d-flex justify-content-end">
-                      <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="App.saveSupabaseConfig()">
-                        <i class="bi bi-save me-1"></i> Save Cloud Settings
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
             </div>
           </div>
         </div>
@@ -1283,7 +1497,11 @@
                     <h6>Restore Data from JSON File</h6>
                     <p>Import and restore a previously saved JSON backup file to load all records, statements, payslips, and database settings.</p>
                     <input type="file" id="admin-backup-file" accept="application/json,.json" hidden onchange="App.restoreLocalBackup(this)" />
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('admin-backup-file').click()">
+                    <div class="backup-dropzone" onclick="document.getElementById('admin-backup-file').click()" role="button" tabindex="0" title="Click or drop backup file here">
+                      <div class="backup-dropzone-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                      <div class="backup-dropzone-text">Click or drop JSON backup here to restore</div>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="document.getElementById('admin-backup-file').click()">
                       <i class="bi bi-folder2-open me-1"></i>Select Backup File
                     </button>
                   </div>
@@ -1293,6 +1511,30 @@
               <div class="backup-notice mt-3">
                 <i class="bi bi-shield-check text-success" aria-hidden="true"></i>
                 <span><strong>Offline &amp; Embedded:</strong> All bank logos (SBI, HDFC, ICICI, Axis, Kotak, PNB, BOB, Canara, etc.), generated ITRs, bank statements, and payslips are stored directly in this project.</span>
+              </div>
+
+              <!-- Admin Security & PIN Management -->
+              <div class="admin-security-box mt-3 p-3 rounded-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="panel-icon panel-icon-warning p-2" style="width:42px;height:42px;font-size:18px;border-radius:10px;"><i class="bi bi-shield-lock-fill"></i></div>
+                    <div>
+                      <h6 class="mb-0 fw-bold">Admin Security &amp; Access PIN</h6>
+                      <div class="small text-muted">Active PIN: <span class="badge bg-primary-subtle text-primary font-monospace fs-6 px-2 py-0" id="admin-current-pin-display">••••</span> &bull; Recovery Mobile: <strong class="text-success">+91 ••••••5164</strong></div>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="App.promptChangeAdminPin()">
+                      <i class="bi bi-key-fill me-1"></i>Change PIN
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="App.resetAdminPinToDefault()" title="Reset PIN to default 3572">
+                      <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to 3572
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3" onclick="App.lockAdmin()" title="Lock Admin Panel">
+                      <i class="bi bi-lock-fill me-1"></i>Lock
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1644,6 +1886,7 @@
         </div>
         <div class="ss-header-actions">
           <button class="btn btn-outline-secondary btn-sm" onclick="App.resetBankStatementForm()"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
+          <button class="btn btn-outline-primary btn-sm" onclick="App.fillStatementDemoData()"><i class="bi bi-magic me-1"></i>Demo Data</button>
           <button class="btn btn-success btn-sm" onclick="App.generateBankStatement()"><i class="bi bi-printer-fill me-1"></i>Generate & Print PDF</button>
         </div>
       </div>
@@ -1667,11 +1910,24 @@
         <div class="ss-section">
           <div class="ss-section-header"><i class="bi bi-bank2"></i> Bank & Account Details (Business Account)</div>
           <div class="ss-section-body">
+
+            <!-- Quick Bank Preset Chips -->
+            <div class="bank-preset-chips" id="bs-preset-chips-business">
+              <span class="text-muted small fw-semibold d-flex align-items-center me-1"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Quick Preset:</span>
+              <button type="button" class="bank-preset-chip active" onclick="App.applyBankPreset('icici', 'business')"><i class="bi bi-bank"></i> ICICI Bank (Default)</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('axis', 'business')"><i class="bi bi-bank2"></i> Axis Bank</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('sbi', 'business')"><i class="bi bi-building"></i> SBI</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('hdfc', 'business')"><i class="bi bi-shield-check"></i> HDFC Bank</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('pnb', 'business')"><i class="bi bi-wallet2"></i> PNB</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('kotak', 'business')"><i class="bi bi-cash-stack"></i> Kotak Mahindra</button>
+            </div>
+
             <div class="ss-form-grid">
               <div class="ss-field">
                 <label class="ss-label">Statement Style <span class="ss-required">*</span></label>
                 <select class="form-select form-select-sm" id="bs-style">
-                  <option value="icici" selected>ICICI Detailed Statement (PDF Replica)</option>
+                  <option value="icici" selected>ICICI Detailed Statement (Default)</option>
+                  <option value="axis">Axis Bank Statement (PDF Replica)</option>
                   <option value="standard">Standard Modern Statement</option>
                 </select>
               </div>
@@ -1721,7 +1977,27 @@
                   <input type="text" class="form-control form-control-sm text-uppercase" id="bs-branchcode" placeholder="Code" style="max-width:85px" value="0914" />
                 </div>
               </div>
-              <div class="ss-field" style="grid-column: 1 / -1;">
+              <div class="ss-field">
+                <label class="ss-label">MICR Code</label>
+                <input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="bs-micr" placeholder="e.g. 743211009" value="743211009" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">Registered Email ID</label>
+                <input type="email" class="form-control form-control-sm text-uppercase" id="bs-email" placeholder="e.g. MUXXXXN1@GMAIL.COM" value="MUXXXXN1@GMAIL.COM" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">Registered Mobile No</label>
+                <input type="text" class="form-control form-control-sm" id="bs-mobile" placeholder="e.g. XXXXXX5164 or 98300XXXXX" value="XXXXXX5164" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">PAN Number</label>
+                <input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="bs-pan" placeholder="e.g. CYMPR5097Q" maxlength="10" value="CYMPR5097Q" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">Nominee Name</label>
+                <input type="text" class="form-control form-control-sm text-uppercase" id="bs-nominee" placeholder="e.g. NAFICHA RAHAN" value="NAFICHA RAHAN" />
+              </div>
+              <div class="ss-field" style="grid-column: 2 / -1;">
                 <label class="ss-label">Customer Address</label>
                 <input type="text" class="form-control form-control-sm text-uppercase" id="bs-holderaddress" placeholder="Holder Address" value="CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA" />
               </div>
@@ -1825,11 +2101,24 @@
         <div class="ss-section">
           <div class="ss-section-header"><i class="bi bi-bank2"></i> Bank & Account Details (Salaried Account)</div>
           <div class="ss-section-body">
+
+            <!-- Quick Bank Preset Chips (Salaried) -->
+            <div class="bank-preset-chips" id="bs-preset-chips-salary">
+              <span class="text-muted small fw-semibold d-flex align-items-center me-1"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Quick Preset:</span>
+              <button type="button" class="bank-preset-chip active" onclick="App.applyBankPreset('icici', 'salary')"><i class="bi bi-bank"></i> ICICI Bank (Default)</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('axis', 'salary')"><i class="bi bi-bank2"></i> Axis Bank</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('sbi', 'salary')"><i class="bi bi-building"></i> SBI</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('hdfc', 'salary')"><i class="bi bi-shield-check"></i> HDFC Bank</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('pnb', 'salary')"><i class="bi bi-wallet2"></i> PNB</button>
+              <button type="button" class="bank-preset-chip" onclick="App.applyBankPreset('kotak', 'salary')"><i class="bi bi-cash-stack"></i> Kotak Mahindra</button>
+            </div>
+
             <div class="ss-form-grid">
               <div class="ss-field">
                 <label class="ss-label">Statement Style <span class="ss-required">*</span></label>
                 <select class="form-select form-select-sm" id="bss-style">
-                  <option value="icici" selected>ICICI Detailed Statement (PDF Replica)</option>
+                  <option value="icici" selected>ICICI Detailed Statement (Default)</option>
+                  <option value="axis">Axis Bank Statement (PDF Replica)</option>
                   <option value="standard">Standard Modern Statement</option>
                 </select>
               </div>
@@ -1879,7 +2168,27 @@
                   <input type="text" class="form-control form-control-sm text-uppercase" id="bss-branchcode" placeholder="Code" style="max-width:85px" value="0914" />
                 </div>
               </div>
-              <div class="ss-field" style="grid-column: 1 / -1;">
+              <div class="ss-field">
+                <label class="ss-label">MICR Code</label>
+                <input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="bss-micr" placeholder="e.g. 743211009" value="743211009" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">Registered Email ID</label>
+                <input type="email" class="form-control form-control-sm text-uppercase" id="bss-email" placeholder="e.g. MUXXXXN1@GMAIL.COM" value="MUXXXXN1@GMAIL.COM" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">Registered Mobile No</label>
+                <input type="text" class="form-control form-control-sm" id="bss-mobile" placeholder="e.g. XXXXXX5164 or 98300XXXXX" value="XXXXXX5164" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">PAN Number</label>
+                <input type="text" class="form-control form-control-sm text-uppercase font-monospace" id="bss-pan" placeholder="e.g. CYMPR5097Q" maxlength="10" value="CYMPR5097Q" />
+              </div>
+              <div class="ss-field">
+                <label class="ss-label">Nominee Name</label>
+                <input type="text" class="form-control form-control-sm text-uppercase" id="bss-nominee" placeholder="e.g. NAFICHA RAHAN" value="NAFICHA RAHAN" />
+              </div>
+              <div class="ss-field" style="grid-column: 2 / -1;">
                 <label class="ss-label">Customer Address</label>
                 <input type="text" class="form-control form-control-sm text-uppercase" id="bss-holderaddress" placeholder="Holder Address" value="CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA" />
               </div>
@@ -2009,20 +2318,31 @@
         <h5 class="modal-title" id="reportModalTitle">
           <i class="bi bi-file-earmark-text-fill me-2" aria-hidden="true"></i>Income Tax Computation
         </h5>
-        <div class="modal-header-actions">
-          <button class="btn btn-sm btn-outline-secondary" id="modal-rt-classic" onclick="App.selectReport('classic')" aria-label="Switch to Classic format">
-            <i class="bi bi-file-text me-1" aria-hidden="true"></i>Classic
+        <div class="modal-header-actions d-flex flex-wrap gap-1 align-items-center">
+          <div class="btn-group btn-group-sm me-1" role="group">
+            <button class="btn btn-outline-secondary" id="modal-rt-classic" onclick="App.selectReport('classic')" aria-label="Switch to Classic format">
+              <i class="bi bi-file-text me-1" aria-hidden="true"></i>Classic
+            </button>
+            <button class="btn btn-outline-primary" id="modal-rt-modern" onclick="App.selectReport('modern')" aria-label="Switch to Modern format">
+              <i class="bi bi-file-richtext me-1" aria-hidden="true"></i>Modern
+            </button>
+            <button class="btn btn-outline-info" id="modal-rt-ack" onclick="App.selectReport('ack')" aria-label="Switch to ITR Acknowledgement format">
+              <i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>ITR Ack (ITR-V)
+            </button>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="App.downloadReportPdf()" title="1-Click Download High-Quality A4 PDF">
+            <i class="bi bi-file-earmark-pdf-fill me-1"></i>Download PDF
           </button>
-          <button class="btn btn-sm btn-outline-primary" id="modal-rt-modern" onclick="App.selectReport('modern')" aria-label="Switch to Modern format">
-            <i class="bi bi-file-richtext me-1" aria-hidden="true"></i>Modern
+          <button class="btn btn-sm btn-success" onclick="App.shareWhatsApp()" title="Share Computation Summary to Client WhatsApp">
+            <i class="bi bi-whatsapp me-1"></i>WhatsApp
           </button>
-          <button class="btn btn-sm btn-outline-info" id="modal-rt-ack" onclick="App.selectReport('ack')" aria-label="Switch to ITR Acknowledgement format">
-            <i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>ITR Ack (ITR-V)
+          <button class="btn btn-sm btn-outline-secondary" onclick="App.shareEmail()" title="Email Computation Summary to Client">
+            <i class="bi bi-envelope-fill me-1"></i>Email
           </button>
-          <button class="btn btn-sm btn-success" onclick="App.triggerPrint()">
-            <i class="bi bi-printer-fill me-1" aria-hidden="true"></i>Print / PDF
+          <button class="btn btn-sm btn-dark" onclick="App.triggerPrint()" title="Browser Print / Save As PDF">
+            <i class="bi bi-printer-fill me-1" aria-hidden="true"></i>Print
           </button>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close modal"></button>
+          <button type="button" class="btn-close ms-1" data-bs-dismiss="modal" aria-label="Close modal"></button>
         </div>
       </div>
       <div class="modal-body p-0" id="reportBody"></div>
@@ -2031,8 +2351,28 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     MODAL: SUPABASE CLOUD SNAPSHOTS HISTORY
+     MODAL: COMMAND PALETTE (CTRL + K)
      ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modal-command-palette" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-md">
+    <div class="modal-content shadow-lg border-0">
+      <div class="modal-header py-2 px-3 border-bottom bg-surface">
+        <div class="input-group input-group-sm w-100">
+          <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control border-0 shadow-none" id="cmd-palette-input" placeholder="Type a command or client name/PAN... (Esc to close)" oninput="App.handleCommandPaletteSearch(this.value)" autocomplete="off" />
+        </div>
+      </div>
+      <div class="modal-body p-2" id="cmd-palette-results" style="max-height: 320px; overflow-y: auto;">
+        <!-- Dynamic search results or quick action links -->
+      </div>
+      <div class="modal-footer py-1 px-3 bg-surface-subtle border-top d-flex justify-content-between small text-muted">
+        <div><span><kbd>Ctrl+K</kbd> to open</span> &bull; <span><kbd>Enter</kbd> to select</span></div>
+        <div><span><kbd>Esc</kbd> to close</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="modal-cloud-backups" tabindex="-1" aria-labelledby="modalCloudBackupsTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content shadow-lg border-0">
@@ -2122,10 +2462,122 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     MODAL: ADMIN SECURITY PIN & RECOVERY
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modal-admin-pin" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="true" aria-labelledby="adminPinModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+    <div class="modal-content admin-pin-modal-content border-0 shadow-2xl">
+      <!-- Modal Header / Close -->
+      <div class="modal-header border-0 pb-0 justify-content-end">
+        <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close" onclick="App.cancelAdminPin()"></button>
+      </div>
+
+      <div class="modal-body px-4 pt-0 pb-4 text-center">
+        <!-- VIEW 1: ENTER PIN -->
+        <div id="admin-pin-enter-view">
+          <div class="admin-pin-shield mb-3 mx-auto">
+            <i class="bi bi-shield-lock-fill"></i>
+          </div>
+          <h5 class="fw-bold mb-1" id="adminPinModalTitle">Admin Security Verification</h5>
+          <p class="text-muted small mb-4">Enter your 4-digit security PIN to unlock the Admin Panel</p>
+
+          <!-- 4 Digits Input -->
+          <div class="d-flex justify-content-center gap-2 mb-3" id="admin-pin-boxes">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="admin-pin-box" id="admin-pin-1" autocomplete="off" />
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="admin-pin-box" id="admin-pin-2" autocomplete="off" />
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="admin-pin-box" id="admin-pin-3" autocomplete="off" />
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="admin-pin-box" id="admin-pin-4" autocomplete="off" />
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mb-3 px-1">
+            <button type="button" class="btn btn-sm btn-link text-decoration-none text-muted p-0" id="btn-toggle-pin-mask" onclick="App.togglePinVisibility()">
+              <i class="bi bi-eye-fill me-1"></i><span>Show PIN</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-link text-decoration-none text-info p-0" onclick="App.showAdminForgotPin()">
+              <i class="bi bi-question-circle me-1"></i>Forgot PIN?
+            </button>
+          </div>
+
+          <!-- Error Alert -->
+          <div class="alert alert-danger py-2 px-3 small d-none mb-3 text-start" id="admin-pin-error">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i> <span id="admin-pin-error-text">Incorrect PIN. Please try again.</span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="d-grid gap-2">
+            <button type="button" class="btn btn-primary fw-bold py-2 shadow-sm" id="btn-submit-admin-pin" onclick="App.verifyAdminPin()">
+              <i class="bi bi-unlock-fill me-1"></i> Unlock Admin Panel
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" onclick="App.cancelAdminPin()">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- VIEW 2: FORGOT PIN RECOVERY -->
+        <div id="admin-pin-recovery-view" class="d-none text-start">
+          <div class="text-center mb-3">
+            <div class="admin-pin-shield recovery-shield mb-3 mx-auto">
+              <i class="bi bi-phone-vibrate-fill"></i>
+            </div>
+            <h5 class="fw-bold mb-1">PIN Recovery Verification</h5>
+            <p class="text-muted small mb-0">Enter registered mobile number to retrieve your Admin PIN</p>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted mb-1">Registered Recovery Mobile</label>
+            <div class="input-group">
+              <span class="input-group-text bg-surface border-end-0 fw-semibold text-muted">+91</span>
+              <input type="tel" class="form-control" id="admin-recovery-mobile-input" placeholder="Enter 10-digit mobile number" maxlength="14" autocomplete="off" onkeyup="if(event.key==='Enter') App.verifyRecoveryMobile()" />
+            </div>
+            <div class="form-text small" style="font-size: 11px;">Enter the 10-digit mobile number configured for admin verification.</div>
+          </div>
+
+          <!-- Recovery Error Alert -->
+          <div class="alert alert-danger py-2 px-3 small d-none mb-3" id="admin-recovery-error">
+            <i class="bi bi-x-circle-fill me-1"></i> <span id="admin-recovery-error-text">Mobile number does not match registered admin number.</span>
+          </div>
+
+          <!-- Recovery Success Alert with the PIN -->
+          <div class="alert alert-success py-3 px-3 d-none mb-3" id="admin-recovery-success">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-check-circle-fill text-success fs-5"></i>
+              <strong class="text-success">Verification Successful!</strong>
+            </div>
+            <p class="small mb-2 text-muted">Your Admin Security Access PIN is:</p>
+            <div class="d-flex align-items-center justify-content-between p-2 rounded bg-surface border mb-3">
+              <span class="fs-3 fw-bold font-monospace text-primary tracking-wider" id="admin-recovered-pin-val">3572</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="App.copyRecoveredPin()" title="Copy PIN">
+                <i class="bi bi-clipboard me-1"></i>Copy
+              </button>
+            </div>
+            <div class="d-grid">
+              <button type="button" class="btn btn-success btn-sm fw-bold py-2" onclick="App.autoFillAndUnlockAdmin()">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Auto-fill PIN &amp; Unlock Admin
+              </button>
+            </div>
+          </div>
+
+          <div class="d-grid gap-2" id="admin-recovery-buttons">
+            <button type="button" class="btn btn-primary fw-bold py-2" onclick="App.verifyRecoveryMobile()">
+              <i class="bi bi-shield-check me-1"></i> Verify Mobile &amp; Show PIN
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.showAdminPinEnterView()">
+              <i class="bi bi-arrow-left me-1"></i> Back to PIN Login
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      SCRIPTS
      ══════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="js/bank-logos.js"></script>
 <script src="js/tax-engine.js"></script>
 <script src="js/tds-engine.js"></script>

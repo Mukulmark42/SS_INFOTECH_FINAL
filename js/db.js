@@ -37,18 +37,38 @@ const DB = (() => {
     const clientCount = all().length;
     const stmtCount = getStatementRecords().length;
     const slipCount = getSlipRecords().length;
-    return clientCount === 0 && stmtCount === 0 && slipCount === 0;
+    const admin = getAdmin();
+    const hasCustomBanks = Array.isArray(admin.bankConfigs) && admin.bankConfigs.length > 0;
+    const hasCustomDeds = Array.isArray(admin.deductors) && admin.deductors.length > 8;
+    const hasCustomAYs = Array.isArray(admin.customAYs) && admin.customAYs.length > 0;
+    const hasCustomCompany = admin.company && admin.company !== 'SS INFOTECH';
+    const slipComps = getSlipCompanies();
+    const hasCustomSlips = slipComps.length > 2;
+
+    return clientCount === 0 && stmtCount === 0 && slipCount === 0 && !hasCustomBanks && !hasCustomDeds && !hasCustomAYs && !hasCustomCompany && !hasCustomSlips;
   }
 
-  /** Load all clients */
-  function all() {
+  /** Load all raw clients including trash */
+  function _rawAll() {
     try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
     catch { return []; }
   }
 
+  /** Load all active clients (not in trash) */
+  function all() {
+    return _rawAll().filter(c => !c.deletedAt);
+  }
+
+  /** Load all soft-deleted clients (Recycle Bin) */
+  function trash() {
+    return _rawAll()
+      .filter(c => !!c.deletedAt)
+      .sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
+  }
+
   /** Save client (create or update by ID) */
   function save(client) {
-    const clients = all();
+    const clients = _rawAll();
     const idx = clients.findIndex(c => c.id === client.id);
     if (idx >= 0) {
       clients[idx] = { ...clients[idx], ...client, updatedAt: Date.now() };
@@ -62,24 +82,86 @@ const DB = (() => {
     return client;
   }
 
-  /** Delete client by ID */
+  /** Soft delete client by ID (moves to Recycle Bin) */
   function remove(id) {
-    const clients = all().filter(c => c.id !== id);
-    _persist(clients);
+    const clients = _rawAll();
+    const idx = clients.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      clients[idx].deletedAt = Date.now();
+      _persist(clients);
+      return true;
+    }
+    return false;
   }
 
-  /** Bulk delete clients by Array of IDs */
+  /** Restore a soft-deleted client from Recycle Bin */
+  function restore(id) {
+    const clients = _rawAll();
+    const idx = clients.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      delete clients[idx].deletedAt;
+      _persist(clients);
+      return true;
+    }
+    return false;
+  }
+
+  /** Bulk soft delete clients */
   function bulkRemove(ids) {
     if (!Array.isArray(ids) || !ids.length) return 0;
     const idSet = new Set(ids);
-    const clients = all().filter(c => !idSet.has(c.id));
+    const clients = _rawAll();
+    let count = 0;
+    clients.forEach(c => {
+      if (idSet.has(c.id) && !c.deletedAt) {
+        c.deletedAt = Date.now();
+        count++;
+      }
+    });
+    _persist(clients);
+    return count;
+  }
+
+  /** Bulk restore clients from Recycle Bin */
+  function bulkRestore(ids) {
+    if (!Array.isArray(ids) || !ids.length) return 0;
+    const idSet = new Set(ids);
+    const clients = _rawAll();
+    let count = 0;
+    clients.forEach(c => {
+      if (idSet.has(c.id) && c.deletedAt) {
+        delete c.deletedAt;
+        count++;
+      }
+    });
+    _persist(clients);
+    return count;
+  }
+
+  /** Permanently remove client by ID */
+  function permanentRemove(id) {
+    const clients = _rawAll().filter(c => c.id !== id);
+    _persist(clients);
+  }
+
+  /** Bulk permanently delete clients */
+  function bulkPermanentRemove(ids) {
+    if (!Array.isArray(ids) || !ids.length) return 0;
+    const idSet = new Set(ids);
+    const clients = _rawAll().filter(c => !idSet.has(c.id));
     _persist(clients);
     return ids.length;
   }
 
-  /** Find client by ID */
+  /** Empty all records currently in Recycle Bin */
+  function emptyTrash() {
+    const activeClients = _rawAll().filter(c => !c.deletedAt);
+    _persist(activeClients);
+  }
+
+  /** Find client by ID (searches all including trash) */
   function findById(id) {
-    return all().find(c => c.id === id) || null;
+    return _rawAll().find(c => c.id === id) || null;
   }
 
   /** Search by name, PAN, or mobile */
@@ -361,9 +443,14 @@ const DB = (() => {
   }
 
   return { all, save, remove, bulkRemove, findById, search, duplicate, stats, exportCSV, getStorageUsage, isEmpty,
+           trash, restore, bulkRestore, permanentRemove, bulkPermanentRemove, emptyTrash,
            getAdmin, saveAdmin,
            getSlipCompanies, saveSlipCompany, removeSlipCompany,
            getSlipRecords, getSlipRecordsByEmployee, getSlipRecordsByCompany,
            saveSlipRecord, removeSlipRecord, generateEmpCode,
            getStatementRecords, saveStatementRecord, removeStatementRecord };
 })();
+
+if (typeof module !== 'undefined') {
+  module.exports = DB;
+}

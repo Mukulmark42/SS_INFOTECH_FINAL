@@ -12,7 +12,8 @@ const App = (() => {
   let currentStep   = 1;
   const TOTAL_STEPS = 5;
   let banks         = [];
-  let selectedIncome = { savings: true, stcg: false, pl: false, bs: false };
+  let selectedIncome = { savings: true, salary: false, stcg: false, ltcg: false, pl: false, bs: true, deductions: false };
+  let currentClientTab = 'active';
   let selectedReport = 'classic';
   let editingClientId = null;
   let activePrintData = null;
@@ -92,12 +93,357 @@ const App = (() => {
     });
   }
 
+  // ── Admin Security PIN & Recovery ───────────────────────────
+  const DEFAULT_ADMIN_PIN = '3572';
+  const RECOVERY_MOBILE = '9735545164';
+  let _pinMasked = true;
+
+  function _getAdminPin() {
+    try {
+      return localStorage.getItem('ss_admin_pin') || DEFAULT_ADMIN_PIN;
+    } catch (e) {
+      return DEFAULT_ADMIN_PIN;
+    }
+  }
+
+  function _setAdminPin(pin) {
+    try {
+      localStorage.setItem('ss_admin_pin', pin);
+    } catch (e) {
+      console.warn('Unable to persist admin pin:', e);
+    }
+  }
+
+  function _isAdminUnlocked() {
+    try {
+      return sessionStorage.getItem('ss_admin_unlocked') === 'true';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _setAdminUnlocked(unlocked) {
+    try {
+      if (unlocked) {
+        sessionStorage.setItem('ss_admin_unlocked', 'true');
+      } else {
+        sessionStorage.removeItem('ss_admin_unlocked');
+      }
+    } catch (e) {
+      console.warn('Unable to update session lock state:', e);
+    }
+  }
+
+  function _updateAdminPinDisplays() {
+    const pinEl = document.getElementById('admin-current-pin-display');
+    if (pinEl) {
+      pinEl.textContent = _getAdminPin();
+    }
+  }
+
+  function openAdminPinModal() {
+    const modalEl = document.getElementById('modal-admin-pin');
+    if (!modalEl) return;
+
+    showAdminPinEnterView();
+
+    for (let i = 1; i <= 4; i++) {
+      const box = document.getElementById(`admin-pin-${i}`);
+      if (box) box.value = '';
+    }
+    _hideAdminPinError();
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+
+    setTimeout(() => {
+      const b1 = document.getElementById('admin-pin-1');
+      if (b1) {
+        b1.focus();
+        b1.select();
+      }
+    }, 250);
+  }
+
+  function cancelAdminPin() {
+    const modalEl = document.getElementById('modal-admin-pin');
+    if (modalEl) {
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
+  }
+
+  function togglePinVisibility() {
+    _pinMasked = !_pinMasked;
+    const type = _pinMasked ? 'password' : 'text';
+    for (let i = 1; i <= 4; i++) {
+      const el = document.getElementById(`admin-pin-${i}`);
+      if (el) el.type = type;
+    }
+    const btn = document.getElementById('btn-toggle-pin-mask');
+    if (btn) {
+      btn.innerHTML = _pinMasked
+        ? '<i class="bi bi-eye-fill me-1"></i><span>Show PIN</span>'
+        : '<i class="bi bi-eye-slash-fill me-1"></i><span>Hide PIN</span>';
+    }
+  }
+
+  function _showAdminPinError(msg) {
+    const errEl = document.getElementById('admin-pin-error');
+    const textEl = document.getElementById('admin-pin-error-text');
+    if (errEl) {
+      if (textEl) textEl.textContent = msg || 'Incorrect PIN. Please try again.';
+      errEl.classList.remove('d-none');
+    }
+  }
+
+  function _hideAdminPinError() {
+    const errEl = document.getElementById('admin-pin-error');
+    if (errEl) errEl.classList.add('d-none');
+  }
+
+  function verifyAdminPin() {
+    const boxes = [
+      document.getElementById('admin-pin-1'),
+      document.getElementById('admin-pin-2'),
+      document.getElementById('admin-pin-3'),
+      document.getElementById('admin-pin-4'),
+    ];
+    const entered = boxes.map(b => b ? b.value.trim() : '').join('');
+    const currentPin = _getAdminPin();
+
+    if (entered === currentPin) {
+      _setAdminUnlocked(true);
+      const modalEl = document.getElementById('modal-admin-pin');
+      if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+      navTo('admin');
+      if (typeof showCloudToast === 'function') {
+        showCloudToast('Admin access granted', 'success');
+      }
+    } else {
+      _showAdminPinError('Incorrect PIN. Please try again or click Forgot PIN.');
+      const container = document.getElementById('admin-pin-boxes');
+      if (container) {
+        container.classList.remove('pin-shake');
+        void container.offsetWidth;
+        container.classList.add('pin-shake');
+      }
+      boxes.forEach(b => { if (b) b.value = ''; });
+      if (boxes[0]) boxes[0].focus();
+    }
+  }
+
+  function showAdminForgotPin() {
+    const enterView = document.getElementById('admin-pin-enter-view');
+    const recoveryView = document.getElementById('admin-pin-recovery-view');
+    if (enterView) enterView.classList.add('d-none');
+    if (recoveryView) recoveryView.classList.remove('d-none');
+
+    const input = document.getElementById('admin-recovery-mobile-input');
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 150);
+    }
+    const errEl = document.getElementById('admin-recovery-error');
+    if (errEl) errEl.classList.add('d-none');
+    const successEl = document.getElementById('admin-recovery-success');
+    if (successEl) successEl.classList.add('d-none');
+    const btns = document.getElementById('admin-recovery-buttons');
+    if (btns) btns.classList.remove('d-none');
+  }
+
+  function showAdminPinEnterView() {
+    const enterView = document.getElementById('admin-pin-enter-view');
+    const recoveryView = document.getElementById('admin-pin-recovery-view');
+    if (enterView) enterView.classList.remove('d-none');
+    if (recoveryView) recoveryView.classList.add('d-none');
+
+    const b1 = document.getElementById('admin-pin-1');
+    if (b1) {
+      setTimeout(() => { b1.focus(); b1.select(); }, 150);
+    }
+    _hideAdminPinError();
+  }
+
+  function verifyRecoveryMobile() {
+    const input = document.getElementById('admin-recovery-mobile-input');
+    const errEl = document.getElementById('admin-recovery-error');
+    const errText = document.getElementById('admin-recovery-error-text');
+    const successEl = document.getElementById('admin-recovery-success');
+    const pinDisplay = document.getElementById('admin-recovered-pin-val');
+    const btns = document.getElementById('admin-recovery-buttons');
+
+    if (!input) return;
+    const raw = input.value.trim();
+    const cleaned = raw.replace(/\D/g, '').slice(-10);
+
+    if (cleaned === RECOVERY_MOBILE) {
+      if (errEl) errEl.classList.add('d-none');
+      if (successEl) successEl.classList.remove('d-none');
+      if (pinDisplay) pinDisplay.textContent = _getAdminPin();
+      if (btns) btns.classList.add('d-none');
+    } else {
+      if (successEl) successEl.classList.add('d-none');
+      if (errEl) {
+        if (errText) {
+          errText.textContent = raw 
+            ? 'Mobile number does not match registered admin number.' 
+            : 'Please enter your registered 10-digit mobile number.';
+        }
+        errEl.classList.remove('d-none');
+      }
+      input.focus();
+    }
+  }
+
+  function autoFillAndUnlockAdmin() {
+    const pin = _getAdminPin();
+    for (let i = 1; i <= 4; i++) {
+      const box = document.getElementById(`admin-pin-${i}`);
+      if (box) box.value = pin[i - 1] || '';
+    }
+    _setAdminUnlocked(true);
+    const modalEl = document.getElementById('modal-admin-pin');
+    if (modalEl) {
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
+    navTo('admin');
+    if (typeof showCloudToast === 'function') {
+      showCloudToast('Admin panel unlocked with recovered PIN!', 'success');
+    }
+  }
+
+  function copyRecoveredPin() {
+    const pin = _getAdminPin();
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(pin).then(() => {
+        if (typeof showCloudToast === 'function') {
+          showCloudToast('Admin PIN copied: ' + pin, 'info');
+        } else {
+          alert('PIN copied to clipboard: ' + pin);
+        }
+      }).catch(() => {});
+    }
+  }
+
+  function lockAdmin() {
+    _setAdminUnlocked(false);
+    for (let i = 1; i <= 4; i++) {
+      const box = document.getElementById(`admin-pin-${i}`);
+      if (box) box.value = '';
+    }
+    navTo('dashboard');
+    if (typeof showCloudToast === 'function') {
+      showCloudToast('Admin Panel locked successfully', 'info');
+    }
+  }
+
+  function promptChangeAdminPin() {
+    const cur = _getAdminPin();
+    const val = prompt('Enter new 4-digit Admin Security PIN:', cur);
+    if (val === null) return;
+    const cleaned = val.trim();
+    if (!/^\d{4}$/.test(cleaned)) {
+      alert('Invalid PIN! Please enter exactly 4 digits (0-9).');
+      return;
+    }
+    _setAdminPin(cleaned);
+    _updateAdminPinDisplays();
+    if (typeof showCloudToast === 'function') {
+      showCloudToast('Admin PIN updated to ' + cleaned, 'success');
+    } else {
+      alert('Admin PIN updated to ' + cleaned);
+    }
+  }
+
+  function resetAdminPinToDefault() {
+    if (confirm('Reset Admin PIN to default (3572)?')) {
+      _setAdminPin(DEFAULT_ADMIN_PIN);
+      _updateAdminPinDisplays();
+      if (typeof showCloudToast === 'function') {
+        showCloudToast('Admin PIN reset to default (3572)', 'info');
+      } else {
+        alert('Admin PIN reset to default (3572)');
+      }
+    }
+  }
+
+  function _bindPinInputs() {
+    const boxes = [
+      document.getElementById('admin-pin-1'),
+      document.getElementById('admin-pin-2'),
+      document.getElementById('admin-pin-3'),
+      document.getElementById('admin-pin-4'),
+    ];
+    if (!boxes[0]) return;
+
+    boxes.forEach((box, idx) => {
+      box.addEventListener('input', () => {
+        const val = box.value.replace(/\D/g, '');
+        box.value = val.slice(-1);
+        _hideAdminPinError();
+
+        if (box.value && idx < 3) {
+          boxes[idx + 1].focus();
+          boxes[idx + 1].select();
+        }
+
+        const full = boxes.map(b => b ? b.value : '').join('');
+        if (full.length === 4) {
+          verifyAdminPin();
+        }
+      });
+
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace') {
+          if (!box.value && idx > 0) {
+            boxes[idx - 1].focus();
+            boxes[idx - 1].value = '';
+          } else {
+            box.value = '';
+          }
+          _hideAdminPinError();
+        } else if (e.key === 'ArrowLeft' && idx > 0) {
+          boxes[idx - 1].focus();
+        } else if (e.key === 'ArrowRight' && idx < 3) {
+          boxes[idx + 1].focus();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          verifyAdminPin();
+        }
+      });
+
+      box.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        const digits = text.replace(/\D/g, '').slice(0, 4);
+        if (!digits) return;
+        digits.split('').forEach((d, i) => {
+          if (boxes[i]) boxes[i].value = d;
+        });
+        _hideAdminPinError();
+        if (digits.length >= 4) {
+          boxes[3].focus();
+          verifyAdminPin();
+        } else if (boxes[digits.length]) {
+          boxes[digits.length].focus();
+        }
+      });
+    });
+  }
+
   // ── Init ───────────────────────────────────────────────────
   function init() {
     _bindNav();
     _bindTheme();
     _bindSidebar();
     _bindUppercaseInputs();
+    _bindKeyboardShortcuts();
+    _bindPinInputs();
     _initBanks();
     _initBankAutocomplete();
     _bindReportModal();
@@ -111,6 +457,10 @@ const App = (() => {
 
   // ── Navigation ─────────────────────────────────────────────
   function navTo(page) {
+    if (page === 'admin' && !_isAdminUnlocked()) {
+      openAdminPinModal();
+      return;
+    }
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const el = document.getElementById(`page-${page}`);
@@ -169,14 +519,158 @@ const App = (() => {
   function _bindTheme() {
     const t = document.getElementById('themeToggle');
     if (!t) return;
-    const saved = localStorage.getItem('theme') || 'light';
+    const saved = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', saved);
+    document.documentElement.setAttribute('data-bs-theme', saved);
     t.addEventListener('click', () => {
       const current = document.documentElement.getAttribute('data-theme');
       const next = current === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
+      document.documentElement.setAttribute('data-bs-theme', next);
       localStorage.setItem('theme', next);
     });
+  }
+
+  // ── Keyboard Shortcuts & Command Palette (Ctrl+K) ──────────
+  function _bindKeyboardShortcuts() {
+    window.addEventListener('keydown', (e) => {
+      // Ctrl+K or Cmd+K: Open Command Palette
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        openCommandPalette();
+        return;
+      }
+
+      // Ctrl+N or Cmd+N (when not focused in text inputs): New Computation
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 'N')) {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          e.preventDefault();
+          navTo('new-computation');
+          return;
+        }
+      }
+
+      // Ctrl+S or Cmd+S: Save current client
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        const compPage = document.getElementById('page-new-computation');
+        if (compPage && compPage.classList.contains('active')) {
+          saveClient();
+        } else {
+          showCloudToast('Switch to New Computation to save client', 'info');
+        }
+        return;
+      }
+
+      // Ctrl+P or Cmd+P: When report modal is open, trigger print
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        const reportModal = document.getElementById('reportModal');
+        if (reportModal && reportModal.classList.contains('show')) {
+          e.preventDefault();
+          triggerPrint();
+          return;
+        }
+      }
+    });
+  }
+
+  function openCommandPalette() {
+    const modalEl = document.getElementById('modal-command-palette');
+    if (!modalEl) return;
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+
+    const input = document.getElementById('cmd-palette-input');
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 150);
+    }
+    handleCommandPaletteSearch('');
+  }
+
+  function handleCommandPaletteSearch(query) {
+    const q = (query || '').toLowerCase().trim();
+    const container = document.getElementById('cmd-palette-results');
+    if (!container) return;
+
+    const quickActions = [
+      { id: 'new-comp', title: 'New Tax Computation', desc: 'Create computation for client', icon: 'bi-file-earmark-plus text-primary', shortcut: 'Ctrl+N' },
+      { id: 'client-db', title: 'Client Database', desc: 'View, search and manage client records', icon: 'bi-people-fill text-info', shortcut: '' },
+      { id: 'recycle-bin', title: 'Recycle Bin / Trash', desc: 'Restore or permanently delete removed clients', icon: 'bi-trash-fill text-warning', shortcut: '' },
+      { id: 'bank-stmt', title: 'Bank Statement Generator', desc: 'Generate SBI, HDFC or ICICI bank statements', icon: 'bi-bank text-success', shortcut: '' },
+      { id: 'salary-slip', title: 'Salary Slip Generator', desc: 'Generate professional salary slips', icon: 'bi-receipt text-secondary', shortcut: '' },
+      { id: 'admin-config', title: 'Admin Settings', desc: 'AY slabs, firm details, deductors & backups', icon: 'bi-gear-fill text-dark', shortcut: '' },
+      { id: 'cloud-sync', title: 'Cloud Sync (Supabase)', desc: 'Backup local data to Supabase cloud', icon: 'bi-cloud-arrow-up-fill text-primary', shortcut: '' },
+    ];
+
+    let html = '';
+
+    const matchedActions = q ? quickActions.filter(a => a.title.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q)) : quickActions;
+
+    if (matchedActions.length > 0) {
+      html += `<div class="text-xs text-uppercase fw-bold text-muted px-2 py-1" style="font-size:10px">Quick Actions</div>`;
+      html += matchedActions.map(a => `
+        <div class="cmd-item d-flex align-items-center justify-content-between p-2 rounded cursor-pointer mb-1" onclick="App.runPaletteAction('${a.id}')">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi ${a.icon} fs-5"></i>
+            <div>
+              <div class="fw-semibold small">${_esc(a.title)}</div>
+              <div class="text-muted" style="font-size:11px">${_esc(a.desc)}</div>
+            </div>
+          </div>
+          ${a.shortcut ? `<div><kbd class="small">${a.shortcut}</kbd></div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    const clients = DB.search(q);
+    if (clients.length > 0) {
+      html += `<div class="text-xs text-uppercase fw-bold text-muted px-2 pt-2 pb-1" style="font-size:10px">Clients (${clients.length})</div>`;
+      html += clients.slice(0, 6).map(c => `
+        <div class="cmd-item d-flex align-items-center justify-content-between p-2 rounded cursor-pointer mb-1" onclick="App.openClientFromPalette('${c.id}')">
+          <div class="d-flex align-items-center gap-2">
+            <div class="badge bg-primary-subtle text-primary fw-bold" style="font-size:11px">${_esc(c.pan || 'PAN')}</div>
+            <div>
+              <div class="fw-semibold small">${_esc(c.name || 'Unnamed')}</div>
+              <div class="text-muted" style="font-size:11px">AY ${_esc(c.ay || '')} &bull; ${_esc(c.mobile || '')} &bull; Total: ₹${((c.computation?.totalIncome)||0).toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:11px" onclick="event.stopPropagation(); App.printClient('${c.id}')"><i class="bi bi-printer me-1"></i>Print</button>
+          </div>
+        </div>
+      `).join('');
+    } else if (q && matchedActions.length === 0) {
+      html = `<div class="text-center text-muted py-4 small">No results matching "<strong>${_esc(q)}</strong>"</div>`;
+    }
+
+    container.innerHTML = html;
+  }
+
+  function runPaletteAction(actionId) {
+    const modalEl = document.getElementById('modal-command-palette');
+    if (modalEl) {
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
+
+    if (actionId === 'new-comp') navTo('new-computation');
+    else if (actionId === 'client-db') { switchClientDbTab('active'); navTo('clients'); }
+    else if (actionId === 'recycle-bin') { switchClientDbTab('trash'); navTo('clients'); }
+    else if (actionId === 'bank-stmt') navTo('bank-statement');
+    else if (actionId === 'salary-slip') navTo('salary-slip');
+    else if (actionId === 'admin-config') navTo('admin');
+    else if (actionId === 'cloud-sync') quickSyncCloud('push');
+  }
+
+  function openClientFromPalette(clientId) {
+    const modalEl = document.getElementById('modal-command-palette');
+    if (modalEl) {
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
+    editClient(clientId);
   }
 
   // ── Wizard ─────────────────────────────────────────────────
@@ -262,7 +756,18 @@ const App = (() => {
       }
     }
     if (step === 4) {
-      if (!_v('f-income') || parseFloat(_v('f-income')) <= 0) { alert('Please enter desired total income'); return false; }
+      const salaryGross = parseFloat(_v('f-sal-gross')) || parseFloat(_v('f-salary-gross')) || 0;
+      const total       = parseFloat(_v('f-income')) || 0;
+      const stcg        = parseFloat(_v('f-stcg')) || 0;
+      const ltcg        = parseFloat(_v('f-ltcg')) || 0;
+      const pl          = parseFloat(_v('f-pl')) || 0;
+      if (total <= 0 && salaryGross <= 0 && stcg <= 0 && ltcg <= 0 && pl <= 0) {
+        alert('Please enter desired total annual income or salary details');
+        return false;
+      }
+      if (total <= 0 && salaryGross > 0) {
+        _setVal('f-income', salaryGross);
+      }
     }
     return true;
   }
@@ -283,6 +788,150 @@ const App = (() => {
     const f = document.getElementById('f-filing'); if (f) f.value = '139(1)';
     const n = document.getElementById('f-nature'); if (n) n.value = '';
     const bc= document.getElementById('f-bcode'); if (bc) bc.value = '';
+  }
+
+  // ── AIS / TIS / 26AS JSON Import ──────────────────────────
+  function handleAisJsonUpload(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const json = JSON.parse(text);
+        _applyAisData(json);
+      } catch (err) {
+        console.error('Error parsing AIS JSON:', err);
+        alert('Could not parse the selected file as valid JSON. Please verify the file format.');
+      } finally {
+        if (event.target) event.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function _applyAisData(data) {
+    if (!data || typeof data !== 'object') {
+      alert('Invalid JSON structure in imported file.');
+      return;
+    }
+
+    // 1. PAN
+    const pan = data.pan || data.taxpayerInfo?.pan || data.partA?.pan || data.taxpayerPan || data.panNumber || data.client?.pan || '';
+    if (pan) _setVal('f-pan', String(pan).toUpperCase().trim());
+
+    // 2. Name
+    const name = data.name || data.taxpayerInfo?.name || data.taxpayerInfo?.taxpayerName || data.partA?.fullName || data.partA?.name || data.taxpayerName || data.client?.name || '';
+    if (name) _setVal('f-name', String(name).toUpperCase().trim());
+
+    // 3. Father's Name
+    const father = data.father || data.fatherName || data.taxpayerInfo?.fatherName || data.client?.father || '';
+    if (father) _setVal('f-father', String(father).toUpperCase().trim());
+
+    // 4. Date of Birth
+    let dob = data.dob || data.taxpayerInfo?.dob || data.taxpayerInfo?.dateOfBirth || data.partA?.dob || data.client?.dob || '';
+    if (dob) {
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(dob)) {
+        const [d, m, y] = dob.split('/');
+        dob = `${y}-${m}-${d}`;
+      } else if (/^\d{2}-\d{2}-\d{4}$/.test(dob)) {
+        const [d, m, y] = dob.split('-');
+        dob = `${y}-${m}-${d}`;
+      }
+      _setVal('f-dob', dob);
+    }
+
+    // 5. Mobile & Email
+    const mobile = data.mobile || data.taxpayerInfo?.mobile || data.partA?.mobile || data.client?.mobile || '';
+    if (mobile) _setVal('f-mobile', String(mobile).replace(/[^0-9]/g, '').slice(-10));
+
+    const email = data.email || data.taxpayerInfo?.email || data.partA?.email || data.client?.email || '';
+    if (email) _setVal('f-email', String(email).trim());
+
+    // 6. Address
+    const address = data.address || data.taxpayerInfo?.address || data.partA?.address || data.client?.address || '';
+    if (address) _setVal('f-address', String(address).trim());
+
+    // 7. Assessment Year
+    const ay = data.ay || data.assessmentYear || data.assYr || data.taxpayerInfo?.assessmentYear || '';
+    if (ay) {
+      const formattedAY = ay.includes('-') ? ay : (ay.length === 8 ? `${ay.slice(0,4)}-${ay.slice(6,8)}` : ay);
+      _setSelect('f-ay', formattedAY);
+    }
+
+    // 8. Gross Salary
+    let salary = 0;
+    if (data.salary !== undefined) salary = Number(data.salary) || 0;
+    else if (data.grossSalary !== undefined) salary = Number(data.grossSalary) || 0;
+    else if (data.partB?.salary) {
+      if (Array.isArray(data.partB.salary)) {
+        salary = data.partB.salary.reduce((sum, item) => sum + (Number(item.grossSalary || item.amount || item.taxableAmount) || 0), 0);
+      } else if (typeof data.partB.salary === 'number') {
+        salary = data.partB.salary;
+      }
+    } else if (data.tdsOnSalary && Array.isArray(data.tdsOnSalary)) {
+      salary = data.tdsOnSalary.reduce((sum, item) => sum + (Number(item.totalSalaryPaid || item.salary || item.amount) || 0), 0);
+    }
+
+    if (salary > 0) {
+      selectedIncome.salary = true;
+      const card = document.getElementById('toggle-salary');
+      if (card) {
+        card.classList.add('selected');
+        const chk = card.querySelector('.itc-check');
+        if (chk) chk.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+      }
+      _renderIncomeInputs();
+      _setVal('f-salary-gross', salary);
+    }
+
+    // 9. Savings Bank Interest
+    let savingsInt = 0;
+    if (data.savingsInterest !== undefined) savingsInt = Number(data.savingsInterest) || 0;
+    else if (data.partB?.interestSavings) {
+      if (Array.isArray(data.partB.interestSavings)) {
+        savingsInt = data.partB.interestSavings.reduce((sum, item) => sum + (Number(item.amount || item.interest) || 0), 0);
+      }
+    } else if (Array.isArray(data.partB?.tisDetails)) {
+      data.partB.tisDetails.forEach(item => {
+        if ((item.infoCode || '').toUpperCase().includes('INT-SB') || (item.infoDesc || '').toUpperCase().includes('SAVINGS')) {
+          savingsInt += (Number(item.reportedAmount || item.amount) || 0);
+        }
+      });
+    }
+
+    if (savingsInt > 0) {
+      _setVal('f-savings', savingsInt);
+    }
+
+    // 10. Business Turnover / Gross Receipts
+    const turnover = Number(data.turnover || data.desiredIncome || data.grossReceipts || data.businessIncome || 0);
+    if (turnover > 0) {
+      _setVal('f-income', turnover);
+    }
+
+    // 11. TDS Deductor Matching
+    if (Array.isArray(data.tdsEntries) || Array.isArray(data.tds?.entries) || Array.isArray(data.tdsOtherThanSalary)) {
+      const entries = data.tdsEntries || data.tds?.entries || data.tdsOtherThanSalary;
+      const deductors = DB.getAdmin().deductors || [];
+      entries.forEach(e => {
+        const tan = (e.tan || e.deductorTan || '').toUpperCase();
+        if (!tan) return;
+        const matchIdx = deductors.findIndex(d => d.tan.toUpperCase() === tan);
+        if (matchIdx !== -1) {
+          const card = document.querySelector(`.ded-card[data-value="${matchIdx}"]`);
+          if (card) {
+            card.classList.add('selected');
+            const icon = card.querySelector('.ded-card-check i');
+            if (icon) icon.className = 'bi bi-check-circle-fill';
+          }
+        }
+      });
+    }
+
+    recalcIncome();
+    showCloudToast('AIS / 26AS JSON imported successfully! Populated PAN, Name & Income fields.', 'success', 'AIS / TIS Import');
   }
 
   // ── Presumptive Taxation (44AD / 44ADA) ────────────────────
@@ -475,11 +1124,42 @@ const App = (() => {
         </div>
       `;
     }
+    if (selectedIncome.salary) {
+      html += `
+        <div class="p-3 mb-3 border rounded bg-surface-subtle">
+          <h6 class="fw-bold mb-2 text-primary"><i class="bi bi-briefcase-fill me-1"></i> Salary Income Details (ITR-1 Sahaj Mode)</h6>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Gross Salary (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-sal-gross" placeholder="e.g. 750000" oninput="App.recalcIncome()" />
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Professional Tax (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-sal-ptax" placeholder="e.g. 2400" oninput="App.recalcIncome()" />
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">HRA Exemption (Old Regime) (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-sal-hra" placeholder="e.g. 60000" oninput="App.recalcIncome()" />
+              </div>
+            </div>
+          </div>
+          <div class="form-text mt-1 text-muted">Standard Deduction of ₹75,000 (New Regime AY 25-26/26-27) or ₹50,000 (Old Regime) is automatically subtracted.</div>
+        </div>
+      `;
+    }
     if (selectedIncome.stcg) {
       html += `
         <div class="row g-3 mb-3">
           <div class="col-md-5">
-            <label class="form-label">Short Term Capital Gain (₹)</label>
+            <label class="form-label">Short Term Capital Gain (111A) (₹)</label>
             <div class="input-group">
               <span class="input-group-text">₹</span>
               <input type="number" class="form-control" id="f-stcg" placeholder="e.g. 8000" oninput="App.recalcIncome()" />
@@ -488,14 +1168,69 @@ const App = (() => {
         </div>
       `;
     }
+    if (selectedIncome.ltcg) {
+      html += `
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Long Term Capital Gain (112A) (₹)</label>
+            <div class="input-group">
+              <span class="input-group-text">₹</span>
+              <input type="number" class="form-control" id="f-ltcg" placeholder="e.g. 150000" oninput="App.recalcIncome()" />
+            </div>
+            <div class="form-text">Budget 2024: Exemption up to ₹1,25,000 u/s 112A; balance taxed @ 12.5%</div>
+          </div>
+        </div>
+      `;
+    }
     if (selectedIncome.pl) {
       html += `
         <div class="row g-3 mb-3">
           <div class="col-md-5">
-            <label class="form-label">P&L / Other Income (₹)</label>
+            <label class="form-label">P&amp;L / Other Income (₹)</label>
             <div class="input-group">
               <span class="input-group-text">₹</span>
               <input type="number" class="form-control" id="f-pl" placeholder="e.g. 35000" oninput="App.recalcIncome()" />
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    if (selectedIncome.deductions) {
+      html += `
+        <div class="p-3 mb-3 border rounded bg-surface-subtle">
+          <h6 class="fw-bold mb-2 text-success"><i class="bi bi-shield-check me-1"></i> Chapter VI-A Deductions (Applicable under Old Regime)</h6>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Section 80C (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-ded-80c" placeholder="Max 1,50,000" oninput="App.recalcIncome()" />
+              </div>
+              <div class="form-text">EPF, PPF, LIC, ELSS</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Section 80D (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-ded-80d" placeholder="Health Insurance" oninput="App.recalcIncome()" />
+              </div>
+              <div class="form-text">Mediclaim Self/Parents</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Section 80CCD(1B) (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-ded-80ccd" placeholder="Max 50,000" oninput="App.recalcIncome()" />
+              </div>
+              <div class="form-text">Additional NPS</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Section 80G (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-ded-80g" placeholder="Donations" oninput="App.recalcIncome()" />
+              </div>
+              <div class="form-text">Eligible Donations</div>
             </div>
           </div>
         </div>
@@ -505,28 +1240,136 @@ const App = (() => {
   }
 
   function recalcIncome() {
-    const total   = parseFloat(_v('f-income')) || 0;
-    const stcg    = parseFloat(_v('f-stcg'))   || 0;
-    const pl      = parseFloat(_v('f-pl'))      || 0;
-    const admin   = DB.getAdmin();
-    let savings   = parseFloat(_v('f-savings')) || 0;
+    const total      = parseFloat(_v('f-income'))     || 0;
+    const salaryGross= parseFloat(_v('f-sal-gross'))  || 0;
+    const salaryPtax = parseFloat(_v('f-sal-ptax'))   || 0;
+    const salaryHra  = parseFloat(_v('f-sal-hra'))    || 0;
+    const stcg       = parseFloat(_v('f-stcg'))       || 0;
+    const ltcg       = parseFloat(_v('f-ltcg'))       || 0;
+    const pl         = parseFloat(_v('f-pl'))         || 0;
+    const ded80c     = parseFloat(_v('f-ded-80c'))    || 0;
+    const ded80d     = parseFloat(_v('f-ded-80d'))    || 0;
+    const ded80ccd   = parseFloat(_v('f-ded-80ccd'))  || 0;
+    const ded80g     = parseFloat(_v('f-ded-80g'))    || 0;
+
+    const ay         = _v('f-ay') || '2026-27';
+    const taxRegime  = _v('f-regime') || 'New';
+    const isOld      = taxRegime.toLowerCase() === 'old';
+    const admin      = DB.getAdmin();
+    let savings      = parseFloat(_v('f-savings')) || 0;
 
     // Auto-generate savings if not specified
     if (!savings || savings <= 0) {
       savings = InterestEngine.autoGenerate(total, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
     }
 
-    const business = Math.max(0, total - savings - stcg - pl);
+    // Salary Standard Deduction
+    const stdDedAmt = Math.min(salaryGross, (isOld || ay === '2023-24' || ay === '2024-25') ? 50000 : 75000);
+    const netSalary = Math.max(0, salaryGross - stdDedAmt - salaryPtax - (isOld ? salaryHra : 0));
 
-    // Update display
+    // Business Income from 44AD / 44ADA
+    const business = Math.max(0, total - savings - stcg - ltcg - pl - netSalary);
+
+    // Live Old vs New Regime Comparator
+    if (typeof TaxEngine !== 'undefined' && TaxEngine.compareRegimes) {
+      const cmp = TaxEngine.compareRegimes({
+        ay,
+        businessIncome: business,
+        savingsInterest: savings,
+        salaryGross,
+        salaryPtax,
+        salaryHra,
+        stcg,
+        ltcg,
+        pl,
+        deduction80C: ded80c,
+        deduction80D: ded80d,
+        deduction80CCD1B: ded80ccd,
+        deduction80G: ded80g,
+      });
+
+      const taxNewEl = document.getElementById('regime-tax-new');
+      const taxOldEl = document.getElementById('regime-tax-old');
+      const pillEl   = document.getElementById('regime-savings-pill');
+      const badgeEl  = document.getElementById('regime-recommend-badge');
+      const boxNew   = document.getElementById('regime-box-new');
+      const boxOld   = document.getElementById('regime-box-old');
+
+      if (taxNewEl) taxNewEl.textContent = '₹ ' + Math.round(cmp.taxNew).toLocaleString('en-IN');
+      if (taxOldEl) taxOldEl.textContent = '₹ ' + Math.round(cmp.taxOld).toLocaleString('en-IN');
+
+      if (pillEl) {
+        if (cmp.isEqual) {
+          pillEl.textContent = 'Equal Tax (₹ 0)';
+          pillEl.className = 'badge bg-secondary py-1 px-2 text-wrap';
+        } else {
+          pillEl.textContent = `Save ₹ ${Math.round(cmp.savings).toLocaleString('en-IN')} (${cmp.recommended})`;
+          pillEl.className = 'badge bg-success py-1 px-2 text-wrap';
+        }
+      }
+
+      if (badgeEl) {
+        badgeEl.textContent = `${cmp.recommended} Regime Recommended`;
+        badgeEl.className = cmp.recommended === 'New' ? 'badge bg-warning text-dark fw-bold' : 'badge bg-success text-white fw-bold';
+      }
+
+      if (boxNew && boxOld) {
+        boxNew.classList.toggle('regime-active-glow', taxRegime === 'New');
+        boxOld.classList.toggle('regime-active-glow', taxRegime === 'Old');
+      }
+    }
+
+    // Update Live Breakdown
+    const brkSalary = document.getElementById('brk-salary');
+    const brkSalaryRow = document.getElementById('brk-salary-row');
+    if (brkSalaryRow && brkSalary) {
+      brkSalaryRow.style.display = salaryGross > 0 ? 'flex' : 'none';
+      brkSalary.textContent = '₹ ' + Math.round(netSalary).toLocaleString('en-IN');
+    }
+
     document.getElementById('brk-business').textContent = '₹ ' + Math.round(business).toLocaleString('en-IN');
     document.getElementById('brk-savings').textContent  = '₹ ' + Math.round(savings).toLocaleString('en-IN');
-    document.getElementById('brk-total').textContent    = '₹ ' + Math.round(total).toLocaleString('en-IN');
 
     const stcgRow = document.getElementById('brk-stcg-row');
+    const ltcgRow = document.getElementById('brk-ltcg-row');
     const plRow   = document.getElementById('brk-pl-row');
-    if (stcgRow) { stcgRow.style.display = stcg > 0 ? 'flex' : 'none'; document.getElementById('brk-stcg').textContent = '₹ ' + stcg.toLocaleString('en-IN'); }
-    if (plRow)   { plRow.style.display   = pl   > 0 ? 'flex' : 'none'; document.getElementById('brk-pl').textContent   = '₹ ' + pl.toLocaleString('en-IN');   }
+    const dedRow  = document.getElementById('brk-deductions-row');
+
+    if (stcgRow) {
+      stcgRow.style.display = stcg > 0 ? 'flex' : 'none';
+      const el = document.getElementById('brk-stcg');
+      if (el) el.textContent = '₹ ' + stcg.toLocaleString('en-IN');
+    }
+
+    if (ltcgRow) {
+      ltcgRow.style.display = ltcg > 0 ? 'flex' : 'none';
+      const el = document.getElementById('brk-ltcg');
+      if (el) el.textContent = '₹ ' + ltcg.toLocaleString('en-IN');
+    }
+
+    if (plRow) {
+      plRow.style.display = pl > 0 ? 'flex' : 'none';
+      const el = document.getElementById('brk-pl');
+      if (el) el.textContent = '₹ ' + pl.toLocaleString('en-IN');
+    }
+
+    // Deductions row
+    const totalDeds = isOld ? (ded80c + ded80d + ded80ccd + ded80g) : 0;
+    if (dedRow) {
+      dedRow.style.display = (isOld && totalDeds > 0) ? 'flex' : 'none';
+      const el = document.getElementById('brk-deductions');
+      if (el) el.textContent = '- ₹ ' + Math.round(totalDeds).toLocaleString('en-IN');
+    }
+
+    const netTaxable = Math.max(0, (business + savings + netSalary + stcg + ltcg + pl) - totalDeds);
+    document.getElementById('brk-total').textContent = '₹ ' + Math.round(netTaxable).toLocaleString('en-IN');
+  }
+
+  function applyTaxRegime(regime) {
+    const el = document.getElementById('f-regime');
+    if (el) el.value = regime;
+    recalcIncome();
+    showCloudToast(`Switched to ${regime} Tax Regime`, 'info');
   }
 
   // ── Balance Sheet ────────────────────────────────────────
@@ -791,6 +1634,111 @@ const App = (() => {
     }, 200);
   }
 
+  function downloadReportPdf() {
+    const reportBody = document.getElementById('reportBody');
+    if (!reportBody || !reportBody.firstElementChild) {
+      alert('No report content available to export.');
+      return;
+    }
+    const d = activePrintData || _buildComputationData();
+    const pan = ((d.client && d.client.pan) || 'CLIENT').toUpperCase();
+    const ay = ((d.client && d.client.ay) || 'AY').replace(/[^a-zA-Z0-9]/g, '-');
+    const repType = selectedReport === 'ack' ? 'ITR_Ack' : (selectedReport === 'modern' ? 'Computation_Modern' : 'Computation_Classic');
+    const filename = `${pan}_${ay}_${repType}.pdf`;
+
+    if (typeof html2pdf === 'undefined') {
+      alert('PDF generation library is loading or unavailable. Using standard print dialog.');
+      triggerPrint();
+      return;
+    }
+
+    const opt = {
+      margin:       [8, 8, 8, 8],
+      filename:     filename,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    showCloudToast('Generating PDF document...', 'info');
+    html2pdf().set(opt).from(reportBody).save().then(() => {
+      showCloudToast('PDF downloaded successfully!', 'success');
+    }).catch(err => {
+      console.error('PDF generation error:', err);
+      alert('Could not generate PDF directly. Falling back to print.');
+      triggerPrint();
+    });
+  }
+
+  function shareWhatsApp() {
+    const d = activePrintData || _buildComputationData();
+    const client = d.client || {};
+    const comp = d.computation || {};
+    const name = client.name || 'Valued Client';
+    const pan = client.pan || '—';
+    const ay = client.ay || '—';
+    const totalIncome = (comp.totalIncome || 0).toLocaleString('en-IN');
+    const taxPayable = comp.taxPayable || 0;
+    const refund = comp.refund || 0;
+    const taxStatus = refund > 0 
+      ? `Refund Due: ₹${refund.toLocaleString('en-IN')}` 
+      : (taxPayable > 0 ? `Tax Payable: ₹${taxPayable.toLocaleString('en-IN')}` : `Tax Payable: Nil`);
+    const ackNo = client.ackNo ? `\n• Ack No: ${client.ackNo}` : '';
+    const mobile = (client.mobile || '').replace(/[^0-9]/g, '');
+
+    const text = `*SS INFOTECH – Tax Computation Summary*
+Dear ${name},
+Here is your Income Tax summary for *A.Y. ${ay}*:
+• PAN: *${pan}*
+• Gross Total Income: *₹${totalIncome}*
+• Status: *${taxStatus}*${ackNo}
+
+Thank you for choosing SS INFOTECH for your Tax Compliance services.`;
+
+    const encodedText = encodeURIComponent(text);
+    const waUrl = mobile && mobile.length >= 10 
+      ? `https://api.whatsapp.com/send?phone=91${mobile.slice(-10)}&text=${encodedText}` 
+      : `https://api.whatsapp.com/send?text=${encodedText}`;
+
+    window.open(waUrl, '_blank');
+  }
+
+  function shareEmail() {
+    const d = activePrintData || _buildComputationData();
+    const client = d.client || {};
+    const comp = d.computation || {};
+    const name = client.name || 'Valued Client';
+    const pan = client.pan || '—';
+    const ay = client.ay || '—';
+    const email = client.email || '';
+    const totalIncome = (comp.totalIncome || 0).toLocaleString('en-IN');
+    const taxPayable = comp.taxPayable || 0;
+    const refund = comp.refund || 0;
+    const taxStatus = refund > 0 
+      ? `Refund Due: Rs. ${refund.toLocaleString('en-IN')}` 
+      : (taxPayable > 0 ? `Tax Payable: Rs. ${taxPayable.toLocaleString('en-IN')}` : `Tax Payable: Nil`);
+    const ackNo = client.ackNo ? `• Ack No: ${client.ackNo}\n` : '';
+
+    const subject = encodeURIComponent(`Income Tax Computation Summary - AY ${ay} - ${pan}`);
+    const body = encodeURIComponent(`Dear ${name},
+
+Please find below the summary of your Income Tax Computation for Assessment Year ${ay}:
+
+• Name: ${name}
+• PAN: ${pan}
+• Assessment Year: ${ay}
+• Gross Total Income: Rs. ${totalIncome}
+• Tax Status: ${taxStatus}
+${ackNo}
+Please contact us if you have any questions or require the detailed computation sheet.
+
+Best regards,
+SS INFOTECH
+Tax & Financial Consultancy Services`);
+
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  }
+
   function selectReport(type) {
     selectedReport = type;
     const btnC = document.getElementById('rt-classic');
@@ -844,18 +1792,33 @@ const App = (() => {
     const pl       = parseFloat(_v('f-pl'))      || 0;
     let savings    = parseFloat(_v('f-savings')) || 0;
 
+    const salaryGross = parseFloat(_v('f-sal-gross')) || parseFloat(_v('f-salary-gross')) || 0;
+    const salaryPtax  = parseFloat(_v('f-sal-ptax'))  || 0;
+    const salaryHra   = parseFloat(_v('f-sal-hra'))   || 0;
+    const ltcg        = parseFloat(_v('f-ltcg'))       || 0;
+    const ded80c      = parseFloat(_v('f-ded-80c'))    || 0;
+    const ded80d      = parseFloat(_v('f-ded-80d'))    || 0;
+    const ded80ccd    = parseFloat(_v('f-ded-80ccd'))  || 0;
+    const ded80g      = parseFloat(_v('f-ded-80g'))    || 0;
+
+    const taxRegime   = _v('f-regime') || 'New';
+    const isOld       = taxRegime.toLowerCase() === 'old';
+    const stdDedAmt   = Math.min(salaryGross, (isOld || ay === '2023-24' || ay === '2024-25') ? 50000 : 75000);
+    const netSalary   = Math.max(0, salaryGross - stdDedAmt - salaryPtax - (isOld ? salaryHra : 0));
+
+    const declaredTotal = total > 0 ? total : (netSalary + savings + stcg + ltcg + pl);
+
     if (!savings || savings <= 0) {
-      savings = InterestEngine.autoGenerate(total, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
+      savings = InterestEngine.autoGenerate(declaredTotal, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
     }
 
-    const businessIncome = Math.max(0, total - savings - stcg - pl);
+    const businessIncome = Math.max(0, declaredTotal - savings - stcg - ltcg - pl - netSalary);
     const presumptiveSection = _v('f-presumptive-section') || '44AD';
     const is44ADA            = presumptiveSection === '44ADA';
     const profitPct          = is44ADA ? 50 : (admin.profitPct || 20);
     const profitDec          = profitPct / 100;
     const turnover           = profitDec > 0 ? Math.round(businessIncome / profitDec) : 0;
     const natureOfBiz        = _v('f-nature');
-    const taxRegime          = _v('f-regime') || 'New';
 
     // Parse Deductors
     const selectedDeductors = _getSelectedDeductors();
@@ -872,8 +1835,16 @@ const App = (() => {
       ay,
       businessIncome,
       savingsInterest: savings,
+      salaryGross,
+      salaryPtax,
+      salaryHra,
       stcg,
+      ltcg,
       pl,
+      deduction80C: ded80c,
+      deduction80D: ded80d,
+      deduction80CCD1B: ded80ccd,
+      deduction80G: ded80g,
       tds: tdsData.totalTDS,
       presumptiveSection,
       adminOverrides: { regime: taxRegime },
@@ -910,6 +1881,14 @@ const App = (() => {
       filingDate:  _v('f-filing-date'),
       evcMode:     _v('f-evc-mode') || 'Aadhaar OTP',
       selectedDeductors: selectedDeductors,
+      salaryGross,
+      salaryPtax,
+      salaryHra,
+      ltcg,
+      deduction80C: ded80c,
+      deduction80D: ded80d,
+      deduction80CCD1B: ded80ccd,
+      deduction80G: ded80g,
     };
 
     return {
@@ -929,72 +1908,91 @@ const App = (() => {
 
     const pr = (lbl, val, bold = false) =>
       `<div class="preview-row"><span>${lbl}</span><span ${bold?'class="fw-bold"':''}>${val}</span></div>`;
-    const prTotal = (lbl, val, color) =>
-      `<div class="preview-row preview-total" style="color:${color}">
-         <span>${lbl}</span><span>₹ ${fmtNum(val)}</span>
-       </div>`;
 
-    // Left panel: Client + Business + Banks
-    document.getElementById('preview-summary').innerHTML = `
-      <h6 class="mb-2" style="color:var(--primary); font-size:.8rem;">📋 CLIENT &amp; BUSINESS DETAILS</h6>
-      <div style="font-size:.72rem; background:var(--surface2); border-radius:6px; padding:4px 8px; margin-bottom:8px; font-family:monospace; color:var(--primary);">${compNo}</div>
-      ${pr('Name', `<strong>${data.client.name}</strong>`)}
-      ${pr('PAN', `<code>${data.client.pan}</code>`)}
-      ${pr('Mobile', data.client.mobile || '—')}
-      ${pr('Date of Birth', data.client.dob ? new Date(data.client.dob).toLocaleDateString('en-IN') : '—')}
-      ${pr('Assessment Year', `<strong>${data.client.ay}</strong>`)}
-      ${data.client.bname ? pr('Business Name', data.client.bname) : ''}
-      ${pr('Nature of Business', data.client.nature || '—')}
-      ${pr('Business Code', data.client.bcode || '—')}
-      ${pr('Filed u/s', data.client.filing || '—')}
-      ${data.client.ackNo ? pr('e-Filing Ack No', `<code>${data.client.ackNo}</code>`) : ''}
-      <hr style="margin:6px 0; border-color:var(--border)" />
-      <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">BUSINESS SUMMARY (44AD)</div>
-      ${pr('Declared Profit %', `${data.profitPct || 20}%`)}
-      ${pr('Gross Turnover', `₹ ${fmtNum(data.turnover)}`, true)}
-      ${pr('Declared Business Income', `₹ ${fmtNum(c.businessIncome)}`, true)}
-      ${pr('Savings Interest', `₹ ${fmtNum(c.savingsInterest)}`)}
-      ${c.stcg > 0 ? pr('Short Term Capital Gain', `₹ ${fmtNum(c.stcg)}`) : ''}
-      ${c.pl   > 0 ? pr('P&amp;L Income', `₹ ${fmtNum(c.pl)}`) : ''}
-      <hr style="margin:6px 0; border-color:var(--border)" />
-      <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">BANK ACCOUNTS (${data.banks.length})</div>
-      ${data.banks.map(b => pr(b.name, `A/C ...${(b.accountNo||'').slice(-4)} ${b.primary?'<span style="color:#059669">●Primary</span>':''}`)).join('')}
-      <hr style="margin:6px 0; border-color:var(--border)" />
-      <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">TDS DEDUCTED</div>
-      ${data.tds.tds194H > 0 ? pr('194H Commission', `₹ ${fmtNum(data.tds.tds194H)}`) : ''}
-      ${data.tds.tds194C > 0 ? pr('194C Contractor', `₹ ${fmtNum(data.tds.tds194C)}`) : ''}
-      ${(data.tds.tds194J||0) > 0 ? pr('194J Professional', `₹ ${fmtNum(data.tds.tds194J)}`) : ''}
-      ${data.tds.tds194N > 0 ? pr('194N Cash Withdrawal', `₹ ${fmtNum(data.tds.tds194N)}`) : ''}
-      ${pr('Total TDS Credit', `<strong>₹ ${fmtNum(data.tds.totalTDS)}</strong>`)}
-    `;
+    // Left panel: Client + Income Heads + Banks
+    const summaryEl = document.getElementById('preview-summary');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <h6 class="mb-2" style="color:var(--primary); font-size:.8rem;">📋 CLIENT &amp; INCOME DETAILS</h6>
+        <div style="font-size:.72rem; background:var(--surface2); border-radius:6px; padding:4px 8px; margin-bottom:8px; font-family:monospace; color:var(--primary);">${compNo}</div>
+        ${pr('Name', `<strong>${data.client.name}</strong>`)}
+        ${pr('PAN', `<code>${data.client.pan}</code>`)}
+        ${pr('Mobile', data.client.mobile || '—')}
+        ${pr('Date of Birth', data.client.dob ? new Date(data.client.dob).toLocaleDateString('en-IN') : '—')}
+        ${pr('Assessment Year', `<strong>${data.client.ay}</strong>`)}
+        ${pr('Tax Regime', `<strong>${data.client.regime || 'New'} Regime</strong>`)}
+        ${data.client.bname ? pr('Business Name', data.client.bname) : ''}
+        ${data.client.nature ? pr('Nature of Business', data.client.nature) : ''}
+        ${data.client.bcode ? pr('Business Code', data.client.bcode) : ''}
+        ${pr('Filed u/s', data.client.filing || '—')}
+        ${data.client.ackNo ? pr('e-Filing Ack No', `<code>${data.client.ackNo}</code>`) : ''}
+        <hr style="margin:6px 0; border-color:var(--border)" />
+        ${(c.salaryGross || 0) > 0 ? `
+          <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">SALARY SUMMARY (ITR-1)</div>
+          ${pr('Gross Salary', `₹ ${fmtNum(c.salaryGross)}`)}
+          ${pr('Standard Deduction', `– ₹ ${fmtNum(c.salaryStdDeduction)}`)}
+          ${(c.salaryPtax || 0) > 0 ? pr('Professional Tax', `– ₹ ${fmtNum(c.salaryPtax)}`) : ''}
+          ${(c.salaryHraExemption || 0) > 0 ? pr('HRA Exemption', `– ₹ ${fmtNum(c.salaryHraExemption)}`) : ''}
+          ${pr('Net Taxable Salary', `₹ ${fmtNum(c.netSalary)}`, true)}
+          <hr style="margin:6px 0; border-color:var(--border)" />
+        ` : ''}
+        ${(c.businessIncome || 0) > 0 || (data.turnover || 0) > 0 ? `
+          <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">BUSINESS SUMMARY (${data.client.presumptiveSection || '44AD'})</div>
+          ${pr('Declared Profit %', `${data.profitPct || 20}%`)}
+          ${pr('Gross Turnover', `₹ ${fmtNum(data.turnover)}`, true)}
+          ${pr('Declared Business Income', `₹ ${fmtNum(c.businessIncome)}`, true)}
+          <hr style="margin:6px 0; border-color:var(--border)" />
+        ` : ''}
+        <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">BANK ACCOUNTS (${data.banks.length})</div>
+        ${data.banks.map(b => pr(b.name, `A/C ...${(b.accountNo||'').slice(-4)} ${b.primary?'<span style="color:#059669">●Primary</span>':''}`)).join('')}
+        <hr style="margin:6px 0; border-color:var(--border)" />
+        <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">TDS DEDUCTED</div>
+        ${(data.tds.tds194H || 0) > 0 ? pr('194H Commission', `₹ ${fmtNum(data.tds.tds194H)}`) : ''}
+        ${(data.tds.tds194C || 0) > 0 ? pr('194C Contractor', `₹ ${fmtNum(data.tds.tds194C)}`) : ''}
+        ${(data.tds.tds194J || 0) > 0 ? pr('194J Professional', `₹ ${fmtNum(data.tds.tds194J)}`) : ''}
+        ${(data.tds.tds194N || 0) > 0 ? pr('194N Cash Withdrawal', `₹ ${fmtNum(data.tds.tds194N)}`) : ''}
+        ${pr('Total TDS Credit', `<strong>₹ ${fmtNum(data.tds.totalTDS)}</strong>`)}
+      `;
+    }
 
     // Right panel: Income summary + Tax computation
     const statusColor = c.refund > 0 ? '#059669' : c.taxDue > 0 ? '#dc2626' : '#4f46e5';
     const statusLabel = c.refund > 0 ? '✅ Refund Due' : c.taxDue > 0 ? '⚠️ Tax Payable' : '✅ Nil';
-    document.getElementById('preview-tax').innerHTML = `
-      <h6 class="mb-2" style="color:var(--primary); font-size:.8rem;">🧾 TAX COMPUTATION</h6>
-      <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">INCOME SUMMARY</div>
-      ${pr('Business Income (44AD)', `₹ ${fmtNum(c.businessIncome)}`)}
-      ${pr('Savings Bank Interest', `₹ ${fmtNum(c.savingsInterest)}`)}
-      ${c.stcg > 0 ? pr('Short Term Capital Gain', `₹ ${fmtNum(c.stcg)}`) : ''}
-      ${c.pl   > 0 ? pr('P&amp;L Income', `₹ ${fmtNum(c.pl)}`) : ''}
-      ${pr('Gross Total Income', `<strong>₹ ${fmtNum(c.grossTotalIncome)}</strong>`, true)}
-      ${pr('Less: 80TTA Deduction', `– ₹ ${fmtNum(c.deduction80TTA)}`)}
-      ${pr('Total Income (u/s 288A)', `<strong>₹ ${fmtNum(c.totalIncome)}</strong>`, true)}
-      <hr style="margin:6px 0; border-color:var(--border)" />
-      <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">TAX CALCULATION</div>
-      ${pr('Tax on Income (slab)', `₹ ${fmtNum(c.taxBeforeRebate)}`)}
-      ${pr('Less: Rebate u/s 87A', `– ₹ ${fmtNum(c.rebate)}`)}
-      ${pr('Tax after Rebate', `₹ ${fmtNum(c.taxAfterRebate)}`)}
-      ${pr('Health &amp; Education Cess @ 4%', `₹ ${fmtNum(c.cess)}`)}
-      ${pr('Total Tax Liability', `<strong>₹ ${fmtNum(c.totalTaxPayable)}</strong>`, true)}
-      ${pr('Less: TDS Credit', `– ₹ ${fmtNum(c.tdsCredit)}`)}
-      <hr style="margin:6px 0; border-color:var(--border)" />
-      <div class="preview-row preview-total" style="color:${statusColor}; font-size:.95rem;">
-        <span>${statusLabel}</span>
-        <span>₹ ${fmtNum(c.refund > 0 ? c.refund : c.taxDue)}</span>
-      </div>
-    `;
+    const taxEl = document.getElementById('preview-tax');
+    if (taxEl) {
+      taxEl.innerHTML = `
+        <h6 class="mb-2" style="color:var(--primary); font-size:.8rem;">🧾 TAX COMPUTATION</h6>
+        <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">INCOME SUMMARY</div>
+        ${(c.netSalary || 0) > 0 ? pr('Net Salary (after standard deduction)', `₹ ${fmtNum(c.netSalary)}`) : ''}
+        ${(c.businessIncome || 0) > 0 ? pr(`Business Income (${data.client.presumptiveSection || '44AD'})`, `₹ ${fmtNum(c.businessIncome)}`) : ''}
+        ${pr('Savings Bank Interest', `₹ ${fmtNum(c.savingsInterest)}`)}
+        ${(c.stcg || 0) > 0 ? pr('Short Term Capital Gain (111A)', `₹ ${fmtNum(c.stcg)}`) : ''}
+        ${(c.ltcg || 0) > 0 ? pr(`Long Term Capital Gain (112A)`, `₹ ${fmtNum(c.ltcg)}`) : ''}
+        ${(c.pl || 0) > 0 ? pr('P&amp;L Income', `₹ ${fmtNum(c.pl)}`) : ''}
+        ${pr('Gross Total Income', `<strong>₹ ${fmtNum(c.grossTotalIncome)}</strong>`, true)}
+        ${(c.deduction80TTA || 0) > 0 ? pr('Less: 80TTA Deduction', `– ₹ ${fmtNum(c.deduction80TTA)}`) : ''}
+        ${(c.deduction80C || 0) > 0 ? pr('Less: Section 80C', `– ₹ ${fmtNum(c.deduction80C)}`) : ''}
+        ${(c.deduction80D || 0) > 0 ? pr('Less: Section 80D (Mediclaim)', `– ₹ ${fmtNum(c.deduction80D)}`) : ''}
+        ${(c.deduction80CCD1B || 0) > 0 ? pr('Less: Section 80CCD(1B) (NPS)', `– ₹ ${fmtNum(c.deduction80CCD1B)}`) : ''}
+        ${(c.deduction80G || 0) > 0 ? pr('Less: Section 80G (Donations)', `– ₹ ${fmtNum(c.deduction80G)}`) : ''}
+        ${pr('Total Taxable Income', `<strong>₹ ${fmtNum(c.totalIncome)}</strong>`, true)}
+        <hr style="margin:6px 0; border-color:var(--border)" />
+        <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">TAX CALCULATION (${data.client.regime || 'New'} Regime)</div>
+        ${pr('Tax on Regular Income (slab)', `₹ ${fmtNum(c.taxOnRegular || c.taxBeforeRebate)}`)}
+        ${(c.taxOnSTCG || 0) > 0 ? pr('Tax on STCG @ 15%', `₹ ${fmtNum(c.taxOnSTCG)}`) : ''}
+        ${(c.taxOnLTCG || 0) > 0 ? pr('Tax on LTCG u/s 112A @ 12.5%', `₹ ${fmtNum(c.taxOnLTCG)}`) : ''}
+        ${(c.rebate || 0) > 0 ? pr('Less: Rebate u/s 87A', `– ₹ ${fmtNum(c.rebate)}`) : ''}
+        ${pr('Tax after Rebate', `₹ ${fmtNum(c.taxAfterRebate)}`)}
+        ${pr('Health &amp; Education Cess @ 4%', `₹ ${fmtNum(c.cess)}`)}
+        ${pr('Total Tax Liability', `<strong>₹ ${fmtNum(c.totalTaxPayable)}</strong>`, true)}
+        ${pr('Less: TDS Credit', `– ₹ ${fmtNum(c.tdsCredit)}`)}
+        <hr style="margin:6px 0; border-color:var(--border)" />
+        <div class="preview-row preview-total" style="color:${statusColor}; font-size:.95rem;">
+          <span>${statusLabel}</span>
+          <span>₹ ${fmtNum(c.refund > 0 ? c.refund : c.taxDue)}</span>
+        </div>
+      `;
+    }
   }
 
   // ── Generate Report (with AI Validation) ──────────────────
@@ -1052,36 +2050,36 @@ const App = (() => {
       ? data.profitPct
       : (is44ADA ? 50 : (admin.profitPct || 20));
     const profitPct = profitPctNum / 100;
-    const cfg       = TaxEngine.getConfig(data.client.ay || '2025-26');
+    const cfg       = c.cfg || TaxEngine.getConfig(data.client.ay || '2026-27', data.client.regime);
 
-    // 1. Profit % check
-    if (data.turnover > 0) {
+    // 1. Profit % & Turnover check (only if business income > 0)
+    if (c.businessIncome > 0 && data.turnover > 0) {
       const actualPct = c.businessIncome / data.turnover;
       if (Math.abs(actualPct - profitPct) > 0.001) {
         errors.push(`Profit % mismatch: Expected ${(profitPct*100).toFixed(0)}%, got ${(actualPct*100).toFixed(2)}%.`);
       }
+      const expectedTurnover = profitPct > 0 ? Math.round(c.businessIncome / profitPct) : 0;
+      if (Math.abs((data.turnover || 0) - expectedTurnover) > 10) {
+        errors.push(`Turnover mismatch: Expected ₹${expectedTurnover.toLocaleString('en-IN')}, computed ₹${(data.turnover||0).toLocaleString('en-IN')}.`);
+      }
     }
 
-    // 2. Turnover formula check
-    const expectedTurnover = profitPct > 0 ? Math.round(c.businessIncome / profitPct) : 0;
-    if (Math.abs((data.turnover || 0) - expectedTurnover) > 10) {
-      errors.push(`Turnover mismatch: Expected ₹${expectedTurnover.toLocaleString('en-IN')}, computed ₹${(data.turnover||0).toLocaleString('en-IN')}.`);
-    }
-
-    // 3. GTI reconciliation
-    const expectedGTI = c.businessIncome + c.savingsInterest + c.stcg + c.pl;
+    // 2. GTI reconciliation
+    const expectedGTI = (c.businessIncome || 0) + (c.savingsInterest || 0) + (c.stcg || 0) + (c.ltcg || 0) + (c.pl || 0) + (c.netSalary || 0);
     if (Math.abs(c.grossTotalIncome - expectedGTI) > 5) {
       errors.push(`Gross Total Income does not reconcile. Sum of heads = ₹${expectedGTI.toLocaleString('en-IN')}, GTI = ₹${c.grossTotalIncome.toLocaleString('en-IN')}.`);
     }
 
-    // 4. Tax slab check
-    const expectedTax = TaxEngine.computeSlabTax(Math.max(0, c.totalIncome - c.stcg), cfg.slabs)
-                        + Math.round(c.stcg * (cfg.stcgRate || 0.15));
+    // 3. Tax calculation check
+    const taxableLTCG = Math.max(0, (c.ltcg || 0) - (cfg.ltcgExemption || 125000));
+    const expectedTax = TaxEngine.computeSlabTax(Math.max(0, c.regularIncome), cfg.slabs)
+                        + Math.round((c.stcg || 0) * (cfg.stcgRate || 0.15))
+                        + Math.round(taxableLTCG * (cfg.ltcgRate || 0.125));
     if (Math.abs(c.taxBeforeRebate - expectedTax) > 20) {
       errors.push(`Tax calculation error: Expected ₹${expectedTax.toLocaleString('en-IN')}, got ₹${c.taxBeforeRebate.toLocaleString('en-IN')}.`);
     }
 
-    // 5. Rebate 87A check
+    // 4. Rebate 87A check
     if (c.totalIncome <= cfg.rebateLimit && c.rebate === 0 && c.taxBeforeRebate > 0) {
       errors.push(`Rebate u/s 87A should apply (income ₹${c.totalIncome.toLocaleString('en-IN')} ≤ ₹${cfg.rebateLimit.toLocaleString('en-IN')}) but is ₹0.`);
     }
@@ -1089,7 +2087,7 @@ const App = (() => {
       errors.push(`Rebate u/s 87A applied but income ₹${c.totalIncome.toLocaleString('en-IN')} exceeds limit ₹${cfg.rebateLimit.toLocaleString('en-IN')}.`);
     }
 
-    // 6. TDS reasonableness
+    // 5. TDS reasonableness
     if (data.turnover > 0 && tds.totalTDS > 0) {
       const tdsRatio = (tds.totalTDS / data.turnover) * 100;
       if (tdsRatio > 3) {
@@ -1097,12 +2095,12 @@ const App = (() => {
       }
     }
 
-    // 7. Savings interest reasonableness
+    // 6. Savings interest reasonableness
     if (c.savingsInterest > 50000) {
       warnings.push(`Savings Bank Interest ₹${c.savingsInterest.toLocaleString('en-IN')} is unusually high. Verify bank statements.`);
     }
-    if (c.savingsInterest > cfg.tttaLimit) {
-      warnings.push(`Savings interest ₹${c.savingsInterest.toLocaleString('en-IN')} exceeds 80TTA deduction limit of ₹${cfg.tttaLimit.toLocaleString('en-IN')}. Excess is fully taxable.`);
+    if (c.savingsInterest > (cfg.tttaLimit || 10000)) {
+      warnings.push(`Savings interest ₹${c.savingsInterest.toLocaleString('en-IN')} exceeds 80TTA deduction limit of ₹${(cfg.tttaLimit || 10000).toLocaleString('en-IN')}. Excess is fully taxable.`);
     }
 
     return { errors, warnings, valid: errors.length === 0 };
@@ -1180,25 +2178,54 @@ const App = (() => {
 
   // ── Client Table ────────────────────────────────────────────
   function _renderClientTable(data) {
-    const clients = data || DB.all();
+    const isTrash = currentClientTab === 'trash';
+    const allActive = DB.all();
+    const allTrash = (DB.trash && DB.trash()) || [];
+
+    const badgeActive = document.getElementById('badge-active-count');
+    const badgeTrash  = document.getElementById('badge-trash-count');
+    if (badgeActive) badgeActive.textContent = allActive.length;
+    if (badgeTrash)  badgeTrash.textContent  = allTrash.length;
+
+    const restoreSelectedBtn = document.getElementById('btn-restore-selected');
+    if (restoreSelectedBtn) {
+      restoreSelectedBtn.style.display = (isTrash && selectedClientIds.size > 0) ? 'inline-block' : 'none';
+    }
+
+    const btnBulk = document.getElementById('btn-bulk-delete');
+    if (btnBulk) {
+      btnBulk.className = isTrash ? 'btn btn-danger btn-sm' : 'btn btn-outline-danger btn-sm';
+      btnBulk.innerHTML = isTrash
+        ? `<i class="bi bi-trash-fill me-1"></i>Delete Permanently (<span id="bulk-selected-count">${selectedClientIds.size}</span>)`
+        : `<i class="bi bi-trash3 me-1"></i>Move to Trash (<span id="bulk-selected-count">${selectedClientIds.size}</span>)`;
+    }
+
+    const clients = data || (isTrash ? allTrash : allActive);
     const grid    = document.getElementById('clientGrid');
     const noMsg   = document.getElementById('no-clients');
     const tbody   = document.getElementById('clientTbody');
 
     // Update stats
-    const allClients = DB.all();
     const csTotal = document.getElementById('cs-total');
     const csRefund = document.getElementById('cs-refund');
     const csPayable = document.getElementById('cs-payable');
     const csNil = document.getElementById('cs-nil');
-    if (csTotal) csTotal.textContent = allClients.length;
-    if (csRefund) csRefund.textContent = allClients.filter(c => (c.computation?.refund || 0) > 0).length;
-    if (csPayable) csPayable.textContent = allClients.filter(c => (c.computation?.taxDue || 0) > 0).length;
-    if (csNil) csNil.textContent = allClients.filter(c => (c.computation?.refund || 0) === 0 && (c.computation?.taxDue || 0) === 0).length;
+    if (csTotal) csTotal.textContent = allActive.length;
+    if (csRefund) csRefund.textContent = allActive.filter(c => (c.computation?.refund || 0) > 0).length;
+    if (csPayable) csPayable.textContent = allActive.filter(c => (c.computation?.taxDue || 0) > 0).length;
+    if (csNil) csNil.textContent = allActive.filter(c => (c.computation?.refund || 0) === 0 && (c.computation?.taxDue || 0) === 0).length;
 
     if (!clients.length) {
       if (grid) grid.innerHTML = '';
-      if (noMsg) noMsg.style.display = 'block';
+      if (noMsg) {
+        noMsg.style.display = 'block';
+        const titleEl = noMsg.querySelector('.empty-title');
+        const subEl = noMsg.querySelector('.empty-sub');
+        if (titleEl) titleEl.textContent = isTrash ? 'Recycle Bin is empty' : 'No clients found';
+        if (subEl) subEl.textContent = isTrash ? 'Deleted clients will appear here and can be restored' : 'Create your first computation to get started';
+        const createBtn = noMsg.querySelector('button');
+        if (createBtn) createBtn.style.display = isTrash ? 'none' : 'inline-block';
+      }
       if (tbody) tbody.innerHTML = '';
       return;
     }
@@ -1212,12 +2239,12 @@ const App = (() => {
         const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
         const isRefund = (comp.refund || 0) > 0;
         const isPayable = (comp.taxDue || 0) > 0;
-        const isNil = !isRefund && !isPayable;
         const statusClass = isRefund ? 'success' : isPayable ? 'danger' : 'primary';
         const statusLabel = isRefund ? 'Refund' : isPayable ? 'Payable' : 'Nil';
         const statusAmt = isRefund ? comp.refund : isPayable ? comp.taxDue : 0;
         const compNo = c.compNo || '—';
         const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+        const deletedDate = c.deletedAt ? new Date(c.deletedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
         const isChecked = selectedClientIds.has(c.id);
 
         return `
@@ -1225,17 +2252,23 @@ const App = (() => {
             <div class="cc-header">
               <div class="d-flex align-items-center gap-2">
                 <input type="checkbox" class="form-check-input client-select-chk" value="${_esc(c.id)}" onchange="App.toggleClientSelect('${_esc(c.id)}', this.checked)" ${isChecked ? 'checked' : ''} aria-label="Select client" />
-                <div class="cc-avatar" style="background:var(--primary);color:#fff">${initials}</div>
+                <div class="cc-avatar" style="background:${isTrash ? '#ef4444' : 'var(--primary)'};color:#fff">${initials}</div>
               </div>
               <div class="cc-info">
                 <div class="cc-name">${_esc(name)}</div>
                 <div class="cc-pan"><code>${_esc(c.pan) || '—'}</code></div>
               </div>
-              <div class="cc-badge badge-${statusClass}">
-                <i class="bi ${isRefund ? 'bi-arrow-down-left' : isPayable ? 'bi-arrow-up-right' : 'bi-check-circle'}"></i>
-                ${statusLabel}
-                ${statusAmt > 0 ? ' ₹' + statusAmt.toLocaleString('en-IN') : ''}
-              </div>
+              ${isTrash ? `
+                <div class="badge bg-danger">
+                  <i class="bi bi-trash3-fill me-1"></i>Deleted ${deletedDate}
+                </div>
+              ` : `
+                <div class="cc-badge badge-${statusClass}">
+                  <i class="bi ${isRefund ? 'bi-arrow-down-left' : isPayable ? 'bi-arrow-up-right' : 'bi-check-circle'}"></i>
+                  ${statusLabel}
+                  ${statusAmt > 0 ? ' ₹' + statusAmt.toLocaleString('en-IN') : ''}
+                </div>
+              `}
             </div>
             <div class="cc-body">
               <div class="cc-row"><span class="cc-label">AY</span><span class="cc-val">${_esc(c.ay) || '—'}</span></div>
@@ -1248,12 +2281,21 @@ const App = (() => {
               <div class="cc-row"><span class="cc-label">Date</span><span class="cc-val" style="font-size:10px;color:var(--text-muted)">${date}</span></div>
             </div>
             <div class="cc-footer">
-              <button class="cc-action" title="Edit" onclick="App.editClient('${_esc(c.id)}')"><i class="bi bi-pencil-fill"></i></button>
-              <button class="cc-action" title="Print Computation" onclick="App.printClient('${_esc(c.id)}')"><i class="bi bi-printer-fill"></i></button>
-              <button class="cc-action" title="Print ITR Acknowledgement" onclick="App.printClientAck('${_esc(c.id)}')"><i class="bi bi-file-earmark-check-fill" style="color:var(--primary)"></i></button>
-              <button class="cc-action" title="Download JSON" onclick="App.downloadClientRecord('${_esc(c.id)}')"><i class="bi bi-download"></i></button>
-              <button class="cc-action" title="Duplicate" onclick="App.duplicateClient('${_esc(c.id)}')"><i class="bi bi-copy"></i></button>
-              <button class="cc-action cc-danger" title="Delete" onclick="App.deleteClient('${_esc(c.id)}')"><i class="bi bi-trash-fill"></i></button>
+              ${isTrash ? `
+                <button class="btn btn-sm btn-outline-success py-1 px-3 d-flex align-items-center gap-1" title="Restore to Active Database" onclick="App.restoreClient('${_esc(c.id)}')">
+                  <i class="bi bi-arrow-counterclockwise"></i> Restore
+                </button>
+                <button class="btn btn-sm btn-outline-danger py-1 px-3 d-flex align-items-center gap-1" title="Delete Permanently" onclick="App.permanentDeleteClient('${_esc(c.id)}')">
+                  <i class="bi bi-trash-fill"></i> Delete Permanently
+                </button>
+              ` : `
+                <button class="cc-action" title="Edit" onclick="App.editClient('${_esc(c.id)}')"><i class="bi bi-pencil-fill"></i></button>
+                <button class="cc-action" title="Print Computation" onclick="App.printClient('${_esc(c.id)}')"><i class="bi bi-printer-fill"></i></button>
+                <button class="cc-action" title="Print ITR Acknowledgement" onclick="App.printClientAck('${_esc(c.id)}')"><i class="bi bi-file-earmark-check-fill" style="color:var(--primary)"></i></button>
+                <button class="cc-action" title="Download JSON" onclick="App.downloadClientRecord('${_esc(c.id)}')"><i class="bi bi-download"></i></button>
+                <button class="cc-action" title="Duplicate" onclick="App.duplicateClient('${_esc(c.id)}')"><i class="bi bi-copy"></i></button>
+                <button class="cc-action cc-danger" title="Move to Recycle Bin" onclick="App.deleteClient('${_esc(c.id)}')"><i class="bi bi-trash-fill"></i></button>
+              `}
             </div>
           </div>
         `;
@@ -1269,6 +2311,58 @@ const App = (() => {
         return `<tr><td>${i+1}</td><td>${_esc(c.name)}</td><td>${_esc(c.pan)}</td><td>${_esc(c.mobile)}</td><td>${_esc(c.ay)}</td><td>${(comp.totalIncome)||0}</td><td></td><td></td></tr>`;
       }).join('');
     }
+  }
+
+  function switchClientDbTab(tab) {
+    currentClientTab = tab;
+    selectedClientIds.clear();
+
+    const activeBtn = document.getElementById('tab-clients-active');
+    const trashBtn  = document.getElementById('tab-clients-trash');
+    const trashBar  = document.getElementById('trash-actions-bar');
+
+    if (activeBtn) activeBtn.classList.toggle('active', tab === 'active');
+    if (trashBtn)  trashBtn.classList.toggle('active', tab === 'trash');
+    if (trashBar)  trashBar.style.display = tab === 'trash' ? 'flex' : 'none';
+
+    _renderClientTable();
+  }
+
+  function restoreClient(id) {
+    DB.restore(id);
+    showCloudToast('Client restored to active database', 'success');
+    _renderClientTable();
+    _refreshDashboard();
+  }
+
+  function permanentDeleteClient(id) {
+    if (!confirm('Permanently delete this client record? This action cannot be undone.')) return;
+    DB.permanentRemove(id);
+    showCloudToast('Client record permanently removed', 'warning');
+    _renderClientTable();
+    _refreshDashboard();
+  }
+
+  function restoreSelectedClients() {
+    if (!selectedClientIds.size) return;
+    const count = DB.bulkRestore(Array.from(selectedClientIds));
+    selectedClientIds.clear();
+    showCloudToast(`${count} clients restored to active database`, 'success');
+    _renderClientTable();
+    _refreshDashboard();
+  }
+
+  function emptyTrash() {
+    const trashCount = (DB.trash && DB.trash().length) || 0;
+    if (!trashCount) {
+      alert('Recycle Bin is already empty.');
+      return;
+    }
+    if (!confirm(`Permanently delete all ${trashCount} records in the Recycle Bin? This action is irreversible.`)) return;
+    DB.emptyTrash();
+    showCloudToast('Recycle Bin emptied', 'warning');
+    _renderClientTable();
+    _refreshDashboard();
   }
 
   // ── Bulk Client Operations ────────────────────────────────
@@ -1318,13 +2412,19 @@ const App = (() => {
   function bulkDeleteSelectedClients() {
     const count = selectedClientIds.size;
     if (count === 0) return;
-    if (!confirm(`Are you sure you want to delete ${count} selected client record(s)? This action cannot be undone.`)) return;
-
-    DB.bulkRemove(Array.from(selectedClientIds));
-    selectedClientIds.clear();
+    if (currentClientTab === 'trash') {
+      if (!confirm(`Permanently delete ${count} selected client record(s)? This action cannot be undone.`)) return;
+      DB.bulkPermanentRemove(Array.from(selectedClientIds));
+      selectedClientIds.clear();
+      showCloudToast(`${count} client records permanently removed`, 'warning');
+    } else {
+      if (!confirm(`Move ${count} selected client record(s) to Recycle Bin? You can restore them within 30 days.`)) return;
+      DB.bulkRemove(Array.from(selectedClientIds));
+      selectedClientIds.clear();
+      showCloudToast(`${count} client records moved to Recycle Bin`, 'success');
+    }
     _refreshDashboard();
     _renderClientTable();
-    alert(`✅ Successfully deleted ${count} client record(s).`);
   }
 
   function exportClientsCSV() {
@@ -1442,8 +2542,13 @@ const App = (() => {
   }
 
   function deleteClient(id) {
-    if (!confirm('Are you sure you want to delete this client?')) return;
+    if (currentClientTab === 'trash') {
+      permanentDeleteClient(id);
+      return;
+    }
+    if (!confirm('Move this client to Recycle Bin? You can restore it anytime within 30 days.')) return;
     DB.remove(id);
+    showCloudToast('Client moved to Recycle Bin', 'info');
     _renderClientTable();
     _refreshDashboard();
   }
@@ -1539,26 +2644,37 @@ const App = (() => {
     const el = document.getElementById('recentClients');
     if (!el) return;
     if (!list || !list.length) {
-      el.innerHTML = '<div class="text-center text-muted py-4">No clients yet</div>';
+      el.innerHTML = '<div class="text-center py-4" style="font-size:13px;color:rgba(212,228,250,0.5)!important"><i class="bi bi-inbox me-2"></i>No computation records found yet</div>';
       return;
     }
-    el.innerHTML = list.map(c => `
-      <div class="recent-item" onclick="App.editClient('${_esc(c.id)}')">
-        <div class="recent-avatar">${_esc((c.name||'C').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase())}</div>
-        <div>
-          <div class="recent-name">${_esc(c.name) || '—'}</div>
-          <div class="recent-pan">${_esc(c.pan) || '—'} &nbsp;|&nbsp; ${_esc(c.mobile) || ''}</div>
+    el.innerHTML = list.map((c, idx) => {
+      const avatarClass = 'recent-avatar-' + (idx % 4);
+      const initials = _esc((c.name || 'C').trim().split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'C');
+      return `
+        <div class="recent-item" onclick="App.editClient('${_esc(c.id)}')">
+          <div class="recent-avatar ${avatarClass}">${initials}</div>
+          <div style="min-width:0;flex:1">
+            <div class="recent-name">${_esc(c.name) || 'Unnamed Client'}</div>
+            <div class="recent-pan">${_esc(c.pan) || 'PAN: —'} &nbsp;&bull;&nbsp; ${_esc(c.mobile) || 'No Mobile'}</div>
+          </div>
+          <div class="recent-ay">AY ${_esc(c.ay) || '2026-27'}</div>
         </div>
-        <div class="recent-ay">AY ${_esc(c.ay) || '—'}</div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function _renderAYChart(byAY) {
     const canvas = document.getElementById('chartAY');
     if (!canvas) return;
-    const labels = Object.keys(byAY);
-    const values = Object.values(byAY);
+
+    let labels = Object.keys(byAY || {});
+    let values = Object.values(byAY || {});
+
+    // If no client records exist yet, provide default AY slots with 0s for a beautiful, populated empty-state chart
+    if (!labels.length) {
+      labels = ['2023-24', '2024-25', '2025-26', '2026-27'];
+      values = [0, 0, 0, 0];
+    }
 
     if (chartAY) chartAY.destroy();
     chartAY = new Chart(canvas, {
@@ -1568,16 +2684,49 @@ const App = (() => {
         datasets: [{
           label: 'Clients',
           data: values,
-          backgroundColor: ['#4f46e5','#7c3aed','#059669','#d97706'].slice(0, labels.length),
-          borderRadius: 6,
+          backgroundColor: ['#8083ff', '#571bc1', '#10b981', '#fbbf24', '#f87171'].slice(0, labels.length),
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 38,
         }],
       },
       options: {
         responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 } },
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(5, 20, 36, 0.92)',
+            titleColor: '#ffffff',
+            bodyColor: '#c0c1ff',
+            borderColor: 'rgba(192, 193, 255, 0.25)',
+            borderWidth: 1,
+            padding: 10,
+            cornerRadius: 8,
+            displayColors: false,
+            callbacks: {
+              label: (ctx) => `Filed Clients: ${ctx.parsed.y}`
+            }
+          }
         },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: {
+              color: 'rgba(212, 228, 250, 0.75)',
+              font: { family: 'Inter', size: 11, weight: 600 }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+            ticks: {
+              stepSize: 1,
+              color: 'rgba(212, 228, 250, 0.65)',
+              font: { family: 'Inter', size: 11 }
+            }
+          }
+        }
       },
     });
   }
@@ -1589,26 +2738,56 @@ const App = (() => {
 
   // ── Admin Panel ─────────────────────────────────────────────
   function _initAdminPanel() {
+    // Reset tab filter so all setting cards are fully visible when viewing Admin
+    if (typeof filterAdminSection === 'function') {
+      filterAdminSection('all');
+    }
+
     const admin = DB.getAdmin();
-    _setVal('admin-profit',  admin.profitPct  || 20);
-    _setVal('admin-int-min', admin.intMin     || 1200);
-    _setVal('admin-int-max', admin.intMax     || 8000);
-    _setVal('admin-194h',    admin.rate194H   || 0.20);
-    _setVal('admin-194c',    admin.rate194C   || 0.05);
-    _setVal('admin-194nf',   admin.rate194NF  || 0.012);
-    _setVal('admin-company', admin.company    || 'SS INFOTECH');
-    _setVal('admin-footer',  admin.footer     || 'Professional Tax Computation Services');
+    _setVal('admin-profit',    admin.profitPct  || 20);
+    _setVal('admin-int-min',   admin.intMin     || 1200);
+    _setVal('admin-int-max',   admin.intMax     || 8000);
+    _setVal('admin-194h',      admin.rate194H   || 0.20);
+    _setVal('admin-194c',      admin.rate194C   || 0.05);
+    _setVal('admin-194nf',     admin.rate194NF  || 0.012);
+    _setVal('admin-company',   admin.company    || 'SS INFOTECH');
+    _setVal('admin-footer',    admin.footer     || 'Professional Tax Computation Services');
     _setVal('admin-signatory', admin.signatory || 'Proprietor');
 
-    _renderAYTable();
-    _renderCustomAYs();
-    _renderDeductors();
-    _renderBankConfigs();
-    _renderNatureCodes();
-    _renderSlipCompanies();
-    _populateDynamicDropdowns();
-    updateProjectStorageStats();
-    _initSupabaseUI();
+    // Individual isolated renderers with error boundaries
+    try { _renderAYTable(); } catch (e) { console.error('Error rendering AY table:', e); }
+    try { _renderCustomAYs(); } catch (e) { console.error('Error rendering custom AYs:', e); }
+    try { _renderDeductors(); } catch (e) { console.error('Error rendering deductors:', e); }
+    try { _renderBankConfigs(); } catch (e) { console.error('Error rendering bank configs:', e); }
+    try { _renderNatureCodes(); } catch (e) { console.error('Error rendering nature codes:', e); }
+    try { _renderSlipCompanies(); } catch (e) { console.error('Error rendering slip companies:', e); }
+    try { _populateDynamicDropdowns(); } catch (e) { console.error('Error populating dynamic dropdowns:', e); }
+    try { updateProjectStorageStats(); } catch (e) { console.error('Error updating storage stats:', e); }
+    try { _initSupabaseUI(); } catch (e) { console.error('Error initializing Supabase UI:', e); }
+    try { _updateAdminSummaryStats(); } catch (e) { console.error('Error updating admin summary stats:', e); }
+    try { _updateAdminPinDisplays(); } catch (e) { console.error('Error updating admin PIN displays:', e); }
+  }
+
+  function _updateAdminSummaryStats() {
+    try {
+      const admin = DB.getAdmin();
+      const banksList = typeof _getBankConfigObjects === 'function' ? _getBankConfigObjects() : (admin.bankConfigs || []);
+      const banksCount = banksList.length;
+      const compsList = (typeof DB !== 'undefined' && typeof DB.getSlipCompanies === 'function') ? DB.getSlipCompanies() : (admin.slipCompanies || []);
+      const compsCount = compsList.length;
+      const dedsCount = (admin.deductors || []).length;
+      const tradesList = typeof _getNatureCodes === 'function' ? _getNatureCodes() : (admin.natureCodes || []);
+      const tradesCount = tradesList.length;
+      const cloudStatus = (typeof SupabaseSync !== 'undefined' && SupabaseSync.isConfigured()) ? 'Cloud' : 'Local';
+
+      _setText('admin-stat-banks', banksCount);
+      _setText('admin-stat-companies', compsCount);
+      _setText('admin-stat-deductors', dedsCount);
+      _setText('admin-stat-trades', tradesCount);
+      _setText('admin-stat-cloud', cloudStatus);
+    } catch (e) {
+      console.warn('Error in _updateAdminSummaryStats:', e);
+    }
   }
 
   function saveAdminConfig() {
@@ -1626,6 +2805,7 @@ const App = (() => {
       signatory:  document.getElementById('admin-signatory')?.value  || 'Proprietor',
     };
     DB.saveAdmin(admin);
+    _updateAdminSummaryStats();
     alert('✅ Configuration saved successfully!');
   }
 
@@ -1781,6 +2961,14 @@ const App = (() => {
     } else {
       iconEl.innerHTML = '<i class="bi bi-cloud-fill"></i>';
       iconEl.style.color = 'var(--primary-light)';
+    }
+  }
+
+  function showCloudToast(message, type = 'info', title = 'SS INFOTECH') {
+    if (typeof message === 'object' && message !== null) {
+      _showCloudToast(message);
+    } else {
+      _showCloudToast({ title, message, type, delay: 4500 });
     }
   }
 
@@ -2337,16 +3525,17 @@ const App = (() => {
   function _renderAYTable() {
     const tbody = document.getElementById('ayTbody');
     if (!tbody) return;
-    const ays = TaxEngine.AY_CONFIG;
+    const ays = (typeof TaxEngine !== 'undefined' && TaxEngine.AY_CONFIG) ? TaxEngine.AY_CONFIG : {};
     tbody.innerHTML = Object.entries(ays).map(([ay, cfg]) => {
-      const isNew = (cfg.regime || '').toLowerCase().includes('new');
-      const badgeClass = isNew ? 'badge bg-success-subtle text-success border border-success-subtle' : 'badge bg-secondary-subtle text-secondary border';
+      const isNew = ((cfg && cfg.regime) || '').toLowerCase().includes('new');
+      const badgeClass = isNew ? 'ay-regime-badge new' : 'ay-regime-badge old';
       return `
       <tr>
-        <td class="fw-semibold font-monospace">AY ${ay}</td>
-        <td><span class="${badgeClass}">${cfg.regime || 'New Default'}</span></td>
-        <td class="text-success font-monospace">₹ ${(cfg.rebateLimit||0).toLocaleString('en-IN')}</td>
-        <td class="font-monospace">₹ ${(cfg.basicExemption||0).toLocaleString('en-IN')}</td>
+        <td class="fw-semibold font-monospace">AY ${_esc(ay)}</td>
+        <td><span class="${badgeClass}">${_esc(cfg?.regime || 'New Default')}</span></td>
+        <td class="text-success font-monospace">₹ ${((cfg && cfg.rebateLimit) || 0).toLocaleString('en-IN')}</td>
+        <td class="font-monospace">₹ ${((cfg && cfg.basicExemption) || 0).toLocaleString('en-IN')}</td>
+        <td class="text-warning font-monospace">₹ ${((cfg && cfg.stdDeduction) || 0).toLocaleString('en-IN')}</td>
       </tr>
     `;
     }).join('');
@@ -2363,7 +3552,7 @@ const App = (() => {
     }
     list.innerHTML = ays.map((ay, i) => `
       <li class="admin-ay-item">
-        <span class="font-monospace">AY ${ay}</span>
+        <span class="font-monospace">AY ${_esc(String(ay))}</span>
         <button type="button" onclick="App.removeCustomAY(${i})" title="Remove AY"><i class="bi bi-x-circle-fill"></i></button>
       </li>
     `).join('');
@@ -2425,31 +3614,38 @@ const App = (() => {
     const deds = admin.deductors || [];
     if (deds.length === 0) {
       list.innerHTML = '<div class="ded-empty-msg">No deductors added yet. Click <i class="bi bi-lightning-fill"></i> to add presets.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     const searchVal = (document.getElementById('admin-deductor-search')?.value || '').toLowerCase();
     const filtered = deds.map((d, i) => ({ ...d, idx: i })).filter(d => {
       if (!searchVal) return true;
-      return d.name.toLowerCase().includes(searchVal) || d.tan.toLowerCase().includes(searchVal) || (d.category || '').toLowerCase().includes(searchVal);
+      return (d?.name || '').toLowerCase().includes(searchVal) || (d?.tan || '').toLowerCase().includes(searchVal) || (d?.category || '').toLowerCase().includes(searchVal);
     });
     if (filtered.length === 0) {
       list.innerHTML = '<div class="ded-empty-msg">No matching deductors found.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     list.innerHTML = filtered.map(d => `
       <div class="ded-admin-card" id="ded-admin-${d.idx}">
         <div class="ded-card-icon"><i class="bi ${_getDedIcon(d.category)}"></i></div>
         <div class="ded-admin-info">
-          <div class="ded-admin-name">${d.name}</div>
-          <div class="ded-admin-tan">${d.tan}</div>
+          <div class="ded-admin-name d-flex align-items-center gap-2 flex-wrap">
+            <span>${_esc(d?.name || '')}</span>
+            <span class="ded-admin-cat">${_esc(d?.category || 'Other')}</span>
+          </div>
+          <div class="mt-1">
+            <span class="font-mono fw-semibold" style="font-size:11px;background:rgba(6,182,212,0.12);color:#67e8f9;border:1px solid rgba(6,182,212,0.28);padding:2px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace;">${_esc(d?.tan || '')}</span>
+          </div>
         </div>
-        <span class="ded-admin-cat">${d.category || 'Other'}</span>
         <div class="ded-admin-actions">
           <button class="btn btn-sm btn-outline-primary" onclick="App.editCustomDeductor(${d.idx})" title="Edit"><i class="bi bi-pencil"></i></button>
           <button class="btn btn-sm btn-danger" onclick="App.removeCustomDeductor(${d.idx})" title="Delete"><i class="bi bi-trash"></i></button>
         </div>
       </div>
     `).join('');
+    _updateAdminSummaryStats();
   }
 
   function filterDeductors() {
@@ -2589,6 +3785,7 @@ const App = (() => {
   }
 
   function _bankName(b) {
+    if (!b) return '';
     return (typeof b === 'string') ? b : (b.name || '');
   }
 
@@ -2632,6 +3829,7 @@ const App = (() => {
     if (Array.isArray(list) && list.length > 0) {
       let needsSave = false;
       const repaired = list.map(b => {
+        if (!b) return null;
         if (typeof b === 'string') {
           needsSave = true;
           const logoData = _resolveBankLogo(b, null);
@@ -2644,7 +3842,7 @@ const App = (() => {
           return { ...b, logoData };
         }
         return b;
-      });
+      }).filter(Boolean);
       if (needsSave) {
         admin.bankConfigs = repaired;
         DB.saveAdmin(admin);
@@ -2653,12 +3851,13 @@ const App = (() => {
     }
     return PRESET_BANKS.map(name => {
       const logoData = _resolveBankLogo(name, null);
-      return { name, logoData, logoText: name.slice(0, 2) };
+      return { name, logoData, logoText: (name ? name.slice(0, 2) : 'BK') };
     });
   }
 
   function _getBankConfigObjects() {
     return _getBankConfigs().map(b => {
+      if (!b) return null;
       const name = typeof b === 'string' ? b : (b.name || '');
       const logoData = _resolveBankLogo(name, typeof b === 'object' ? b.logoData : null);
       return {
@@ -2666,10 +3865,10 @@ const App = (() => {
         ifsc: b.ifsc || '',
         branch: b.branch || '',
         logoData,
-        logoText: b.logoText || name.slice(0, 2),
+        logoText: b.logoText || (name ? name.slice(0, 2) : 'BK'),
         address: b.address || ''
       };
-    });
+    }).filter(Boolean);
   }
 
   const BRANDFETCH_API_KEY = 'lJ4dlae8YLrTAa4ueHBuIHSocbZFY7V4Wh5QmB402s_vUAfl-VC6fVNwIGIc7qyCYP42a-6mWMgvQdlcbG7pcQ';
@@ -3081,21 +4280,23 @@ const App = (() => {
     const banks = _getBankConfigObjects();
     if (banks.length === 0) {
       list.innerHTML = '<div class="ded-empty-msg">No banks added yet. Click <i class="bi bi-lightning-fill"></i> to add presets.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     const searchVal = (document.getElementById('admin-bank-search')?.value || '').toLowerCase();
     const filtered = banks.map((b, i) => ({ bank: b, idx: i })).filter(b => {
       if (!searchVal) return true;
-      const combined = `${b.bank.name} ${b.bank.branch || ''} ${b.bank.address || ''} ${b.bank.ifsc || ''}`.toLowerCase();
+      const combined = `${b?.bank?.name || ''} ${b?.bank?.branch || ''} ${b?.bank?.address || ''} ${b?.bank?.ifsc || ''}`.toLowerCase();
       return combined.includes(searchVal);
     });
     if (filtered.length === 0) {
       list.innerHTML = '<div class="ded-empty-msg">No matching banks found.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     list.innerHTML = filtered.map(({ bank, idx }) => {
-      const initial = (bank.logoText || bank.name.slice(0, 2) || 'B').toUpperCase();
-      const resolvedLogo = _resolveBankLogo(bank.name, bank.logoData);
+      const initial = (bank?.logoText || (bank?.name ? bank.name.slice(0, 2) : 'B') || 'B').toUpperCase();
+      const resolvedLogo = _resolveBankLogo(bank?.name || '', bank?.logoData);
 
       const logoHtml = resolvedLogo
         ? `<img src="${resolvedLogo}" alt="${initial}" style="width:100%;height:100%;object-fit:contain;" onerror="this.onerror=null;this.parentElement.style.background='#1a3c6e';this.parentElement.innerHTML='<span style=\\'font-weight:800;color:#fff;\\'>${initial}</span>';" />`
@@ -3106,11 +4307,11 @@ const App = (() => {
         <div class="slip-comp-card-logo" style="${gradStyle}">${logoHtml}</div>
         <div class="ded-admin-info">
           <div class="ded-admin-name d-flex align-items-center gap-2 flex-wrap">
-            <span>${_esc(bank.name)}</span>
-            ${bank.ifsc ? `<span class="badge bg-light text-primary border font-monospace" style="font-size:10px;">${_esc(bank.ifsc)}</span>` : ''}
-            ${bank.branch ? `<span class="badge bg-info-subtle text-info border" style="font-size:10px;"><i class="bi bi-geo-alt me-1"></i>${_esc(bank.branch)}</span>` : ''}
+            <span class="fw-bold">${_esc(bank?.name || '')}</span>
+            ${bank?.ifsc ? `<span class="font-mono font-semibold" style="font-size:10.5px;background:rgba(128,131,255,0.12);color:#c0c1ff;border:1px solid rgba(128,131,255,0.28);padding:2px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace;">${_esc(bank.ifsc)}</span>` : ''}
+            ${bank?.branch ? `<span class="badge bg-info-subtle text-info border" style="font-size:10px;"><i class="bi bi-geo-alt me-1"></i>${_esc(bank.branch)}</span>` : ''}
           </div>
-          ${bank.address ? `<div class="ded-admin-tan" style="font-family:inherit;font-size:11px"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${_esc(bank.address)}</div>` : ''}
+          ${bank?.address ? `<div class="ded-admin-tan mt-1" style="font-family:inherit;font-size:11px"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${_esc(bank.address)}</div>` : ''}
         </div>
         <div class="ded-admin-actions">
           <button class="btn btn-sm btn-outline-primary" onclick="App.editBankConfig(${idx})" title="Edit"><i class="bi bi-pencil"></i></button>
@@ -3119,6 +4320,7 @@ const App = (() => {
       </div>
     `;
     }).join('');
+    _updateAdminSummaryStats();
   }
 
   let _editBankLogoData = null;
@@ -3320,7 +4522,7 @@ const App = (() => {
 
   function _getNatureCodes() {
     const admin = DB.getAdmin();
-    return admin.natureCodes && admin.natureCodes.length ? admin.natureCodes : DEFAULT_NATURE_CODES;
+    return (admin.natureCodes && Array.isArray(admin.natureCodes) && admin.natureCodes.length) ? admin.natureCodes : DEFAULT_NATURE_CODES;
   }
 
   function _renderNatureCodes() {
@@ -3329,23 +4531,28 @@ const App = (() => {
     const codes = _getNatureCodes();
     if (codes.length === 0) {
       list.innerHTML = '<div class="ded-empty-msg">No nature codes added yet. Click <i class="bi bi-lightning-fill"></i> to add presets.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     const searchVal = (document.getElementById('admin-nature-search')?.value || '').toLowerCase();
     const filtered = codes.map((c, i) => ({ ...c, idx: i })).filter(c => {
       if (!searchVal) return true;
-      return c.nature.toLowerCase().includes(searchVal) || c.code.toLowerCase().includes(searchVal);
+      return (c?.nature || '').toLowerCase().includes(searchVal) || (c?.code || '').toLowerCase().includes(searchVal);
     });
     if (filtered.length === 0) {
       list.innerHTML = '<div class="ded-empty-msg">No matching nature codes found.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     list.innerHTML = filtered.map(c => `
       <div class="ded-admin-card" id="nature-admin-${c.idx}">
-        <div class="ded-card-icon"><i class="bi bi-sliders"></i></div>
+        <div class="ded-card-icon" style="background:rgba(245,158,11,0.12);color:#fcd34d;border:1px solid rgba(245,158,11,0.25);"><i class="bi bi-sliders"></i></div>
         <div class="ded-admin-info">
-          <div class="ded-admin-name">${c.nature}</div>
-          <div class="ded-admin-tan">${c.code}</div>
+          <div class="ded-admin-name d-flex align-items-center gap-2 flex-wrap">
+            <span class="font-mono fw-bold" style="font-size:11px;background:rgba(245,158,11,0.14);color:#fcd34d;border:1px solid rgba(245,158,11,0.3);padding:2px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace;">${_esc(c?.code || '')}</span>
+            <span class="fw-semibold">${_esc(c?.nature || '')}</span>
+          </div>
+          <div class="mt-0.5 text-muted" style="font-size:11px;">ITR-3 &amp; 4 Classified Activity</div>
         </div>
         <div class="ded-admin-actions">
           <button class="btn btn-sm btn-outline-primary" onclick="App.editNatureCode(${c.idx})" title="Edit"><i class="bi bi-pencil"></i></button>
@@ -3353,6 +4560,7 @@ const App = (() => {
         </div>
       </div>
     `).join('');
+    _updateAdminSummaryStats();
   }
 
   function filterNatureCodes() {
@@ -3450,7 +4658,9 @@ const App = (() => {
         <option value="2026-27" selected>AY 2026-27 (Current A.Y.)</option>
       `;
       (admin.customAYs || []).forEach(ay => {
-        aySelect.innerHTML += `<option value="${ay}">AY ${ay}</option>`;
+        if (ay) {
+          aySelect.innerHTML += `<option value="${_esc(String(ay))}">AY ${_esc(String(ay))}</option>`;
+        }
       });
       if (currentVal) aySelect.value = currentVal;
     }
@@ -3473,13 +4683,14 @@ const App = (() => {
 
       let customCards = '';
       (admin.deductors || []).forEach((d, i) => {
+        if (!d) return;
         const isSelected = selectedVals.includes(String(i));
         customCards += `
           <div class="ded-card ${isSelected ? 'selected' : ''}" data-value="${i}" onclick="App.onDeductorChange(this)">
             <div class="ded-card-icon"><i class="bi ${_getDedIcon(d.category)}"></i></div>
             <div class="ded-card-body">
-              <div class="ded-card-name">${d.name}</div>
-              <div class="ded-card-tan">${d.tan}</div>
+              <div class="ded-card-name">${_esc(d.name || '')}</div>
+              <div class="ded-card-tan">${_esc(d.tan || '')}</div>
             </div>
             <div class="ded-card-check"><i class="bi ${isSelected ? 'bi-check-circle-fill' : 'bi-circle'}"></i></div>
           </div>
@@ -3495,7 +4706,8 @@ const App = (() => {
       natureSelect.innerHTML = `<option value="">-- Select --</option>`;
       const codes = _getNatureCodes();
       codes.forEach(c => {
-        natureSelect.innerHTML += `<option value="${c.nature}" data-code="${c.code}">${c.nature}</option>`;
+        if (!c) return;
+        natureSelect.innerHTML += `<option value="${_esc(c.nature || '')}" data-code="${_esc(c.code || '')}">${_esc(c.nature || '')}</option>`;
       });
       if (currentVal) natureSelect.value = currentVal;
     }
@@ -3575,22 +4787,28 @@ const App = (() => {
   function _renderSlipCompanies() {
     const list = document.getElementById('admin-slip-comp-list');
     if (!list) return;
-    const comps = DB.getSlipCompanies();
+    const comps = (typeof DB !== 'undefined' && typeof DB.getSlipCompanies === 'function') ? DB.getSlipCompanies() : [];
     if (!comps.length) {
       list.innerHTML = '<div class="text-center text-muted py-3" style="font-size:12px">No companies added yet. Add a company above to use in Salary Slip generator.</div>';
+      _updateAdminSummaryStats();
       return;
     }
     list.innerHTML = comps.map((c, i) => {
-      const logoHtml = c.logoData
+      const initial = (c?.logoText || (c?.name ? c.name[0] : 'C') || 'C').toUpperCase();
+      const logoHtml = c?.logoData
         ? `<img src="${c.logoData}" alt="Logo" />`
-        : `<span>${(c.logoText || c.name[0] || 'C').toUpperCase()}</span>`;
-      const gradStyle = c.logoData ? 'background:transparent' : '';
+        : `<span>${initial}</span>`;
+      const gradStyle = c?.logoData ? 'background:transparent' : '';
       return `
       <div class="ded-admin-card" id="slip-comp-${i}">
         <div class="slip-comp-card-logo" style="${gradStyle}">${logoHtml}</div>
         <div class="ded-admin-info">
-          <div class="ded-admin-name">${_esc(c.name)}${c.tagline ? ' <small style="color:#888;font-weight:400">— ' + _esc(c.tagline) + '</small>' : ''}</div>
-          <div class="ded-admin-tan" style="font-family:inherit;font-size:11px">${_esc(c.address || 'No address')}</div>
+          <div class="ded-admin-name d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-bold">${_esc(c?.name || '')}</span>
+            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;">Active</span>
+            ${c?.tagline ? '<small class="text-muted">— ' + _esc(c.tagline) + '</small>' : ''}
+          </div>
+          <div class="ded-admin-tan mt-1" style="font-family:inherit;font-size:11px">${_esc(c?.address || 'No address')} ${c?.phone ? '• ' + _esc(c.phone) : ''}</div>
         </div>
         <div class="ded-admin-actions">
           <button class="btn btn-sm btn-outline-primary" onclick="App.editSlipCompany(${i})"><i class="bi bi-pencil"></i></button>
@@ -3598,6 +4816,7 @@ const App = (() => {
         </div>
       </div>`;
     }).join('');
+    _updateAdminSummaryStats();
   }
 
   function addSlipCompany() {
@@ -4682,6 +5901,179 @@ const App = (() => {
     }
   }
 
+  // ── Bank Quick Presets & Demo Populator ─────────────────────
+  const _bankPresets = {
+    icici: {
+      name: 'ICICI BANK',
+      style: 'icici',
+      ifsc: 'ICIC0000914',
+      branch: 'BASIRHAT',
+      branchCode: '0914',
+      micr: '743211009',
+      actypeBiz: 'CAA',
+      actypeSal: 'SALARY',
+      branchAddress: 'ICICI BANK LTD., BASIRHAT BRANCH, BHAWANIPUR, PO.-BASIRHAT COLLEGE, DIST.- 24 PARGANAS (NORTH).743 412, WEST BENGAL'
+    },
+    axis: {
+      name: 'AXIS BANK',
+      style: 'axis',
+      ifsc: 'UTIB0000060',
+      branch: 'FORT, MUMBAI',
+      branchCode: '0060',
+      micr: '400211002',
+      actypeBiz: 'CAA',
+      actypeSal: 'SALARY',
+      branchAddress: 'AXIS BANK LTD, FORT BRANCH, GROUND FLOOR, SIR P M ROAD, FORT, MUMBAI - 400001, MAHARASHTRA'
+    },
+    sbi: {
+      name: 'STATE BANK OF INDIA',
+      style: 'standard',
+      ifsc: 'SBIN0000001',
+      branch: 'MUMBAI MAIN BRANCH',
+      branchCode: '0001',
+      micr: '400002010',
+      actypeBiz: 'CA',
+      actypeSal: 'SALARY',
+      branchAddress: 'STATE BANK OF INDIA, MUMBAI MAIN BRANCH, SAMCHAR MARG, FORT, MUMBAI - 400023'
+    },
+    hdfc: {
+      name: 'HDFC BANK',
+      style: 'standard',
+      ifsc: 'HDFC0000060',
+      branch: 'FORT BRANCH',
+      branchCode: '0060',
+      micr: '400240015',
+      actypeBiz: 'CAA',
+      actypeSal: 'SALARY',
+      branchAddress: 'HDFC BANK LTD, MANECKJI WADIA BUILDING, NANIK MOTWANI MARG, FORT, MUMBAI - 400001'
+    },
+    pnb: {
+      name: 'PUNJAB NATIONAL BANK',
+      style: 'standard',
+      ifsc: 'PUNB0000100',
+      branch: 'CONNAUGHT PLACE',
+      branchCode: '0100',
+      micr: '110024001',
+      actypeBiz: 'CA',
+      actypeSal: 'SALARY',
+      branchAddress: 'PUNJAB NATIONAL BANK, 7 BHIKAJI CAMA PLACE, NEW DELHI - 110066'
+    },
+    kotak: {
+      name: 'KOTAK MAHINDRA BANK',
+      style: 'standard',
+      ifsc: 'KKBK0000958',
+      branch: 'NARIMAN POINT',
+      branchCode: '0958',
+      micr: '400485012',
+      actypeBiz: 'CA',
+      actypeSal: 'SALARY',
+      branchAddress: 'KOTAK MAHINDRA BANK, BAKHTAWAR, 229 NARIMAN POINT, MUMBAI - 400021'
+    }
+  };
+
+  function applyBankPreset(presetKey, persona) {
+    const targetPersona = persona || _currentStatementPersona || 'business';
+    const preset = _bankPresets[presetKey];
+    if (!preset) return;
+
+    const isBiz = targetPersona === 'business';
+    const pfx = isBiz ? 'bs' : 'bss';
+
+    const styleEl = document.getElementById(`${pfx}-style`);
+    if (styleEl) styleEl.value = preset.style;
+
+    const bankEl = document.getElementById(`${pfx}-bank`);
+    if (bankEl) {
+      bankEl.value = preset.name;
+      previewBankLogo(preset.name, isBiz ? 'bs-logo-preview' : 'bss-logo-preview');
+    }
+
+    const ifscEl = document.getElementById(`${pfx}-ifsc`);
+    if (ifscEl) ifscEl.value = preset.ifsc;
+
+    const branchEl = document.getElementById(`${pfx}-branch`);
+    if (branchEl) branchEl.value = preset.branch;
+    const branchCodeEl = document.getElementById(`${pfx}-branchcode`);
+    if (branchCodeEl) branchCodeEl.value = preset.branchCode;
+
+    const micrEl = document.getElementById(`${pfx}-micr`);
+    if (micrEl) micrEl.value = preset.micr;
+
+    const acTypeEl = document.getElementById(`${pfx}-actype`);
+    if (acTypeEl) acTypeEl.value = isBiz ? preset.actypeBiz : preset.actypeSal;
+
+    const branchAddrEl = document.getElementById(`${pfx}-branchaddress`);
+    if (branchAddrEl && preset.branchAddress) branchAddrEl.value = preset.branchAddress;
+
+    const containerId = isBiz ? 'bs-preset-chips-business' : 'bs-preset-chips-salary';
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.querySelectorAll('.bank-preset-chip').forEach(chip => {
+        const onclickAttr = chip.getAttribute('onclick') || '';
+        if (onclickAttr.includes(`'${presetKey}'`)) {
+          chip.classList.add('active');
+        } else {
+          chip.classList.remove('active');
+        }
+      });
+    }
+
+    showCloudToast(`Applied ${preset.name} preset (${preset.style.toUpperCase()})`, 'info');
+  }
+
+  function fillStatementDemoData(persona) {
+    const targetPersona = persona || _currentStatementPersona || 'business';
+    const isBiz = targetPersona === 'business';
+
+    if (isBiz) {
+      const hEl = document.getElementById('bs-holder'); if (hEl) hEl.value = 'MUKUL RAHAMAN';
+      const acEl = document.getElementById('bs-acno'); if (acEl) acEl.value = '091405003332';
+      const cEl = document.getElementById('bs-custid'); if (cEl) cEl.value = '573886835';
+      const emEl = document.getElementById('bs-email'); if (emEl) emEl.value = 'MUKUL.INFOTECH@GMAIL.COM';
+      const mEl = document.getElementById('bs-mobile'); if (mEl) mEl.value = '9830051642';
+      const pEl = document.getElementById('bs-pan'); if (pEl) pEl.value = 'CYMPR5097Q';
+      const nEl = document.getElementById('bs-nominee'); if (nEl) nEl.value = 'NAFICHA RAHAMAN';
+      const aEl = document.getElementById('bs-holderaddress'); if (aEl) aEl.value = 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA';
+      const obEl = document.getElementById('bs-openbal'); if (obEl) obEl.value = '85420.00';
+      const obtEl = document.getElementById('bs-openbal-type'); if (obtEl) obtEl.value = 'CR';
+
+      _statementTransactions = [
+        { date: '01/04/2026', chqNo: '', desc: 'NEFT/INW/N091230492/GLOBAL TECH SOLUTIONS', chqVal: '-', wdl: 0, dep: 125000, bal: 210420, remarks: '-' },
+        { date: '04/04/2026', chqNo: '450912', desc: 'CHQ WDL - OFFICE LEASE RENT PAYMENT', chqVal: '450912', wdl: 35000, dep: 0, bal: 175420, remarks: '-' },
+        { date: '08/04/2026', chqNo: '', desc: 'UPI/610293849102/CLOUD SERVER HOSTING', chqVal: '-', wdl: 4899, dep: 0, bal: 170521, remarks: '-' },
+        { date: '15/04/2026', chqNo: '', desc: 'RTGS/INW/R019284729/TAX CONSULTING FEE', chqVal: '-', wdl: 0, dep: 98500, bal: 269021, remarks: '-' },
+        { date: '22/04/2026', chqNo: '450913', desc: 'VENDOR PAY - HARDWARE UPGRADE & NETWORKING', chqVal: '450913', wdl: 42000, dep: 0, bal: 227021, remarks: '-' },
+        { date: '30/04/2026', chqNo: '', desc: 'INT CR - QUARTERLY SAVINGS/CURRENT INTEREST', chqVal: '-', wdl: 0, dep: 1845, bal: 228866, remarks: '-' }
+      ];
+      _renderStatementTx();
+      _calcStatementTotals();
+    } else {
+      const hEl = document.getElementById('bss-holder'); if (hEl) hEl.value = 'MUKUL RAHAMAN';
+      const acEl = document.getElementById('bss-acno'); if (acEl) acEl.value = '091405003332';
+      const cEl = document.getElementById('bss-custid'); if (cEl) cEl.value = '573886835';
+      const emEl = document.getElementById('bss-email'); if (emEl) emEl.value = 'MUKUL.SALARY@GMAIL.COM';
+      const mEl = document.getElementById('bss-mobile'); if (mEl) mEl.value = '9830051642';
+      const pEl = document.getElementById('bss-pan'); if (pEl) pEl.value = 'CYMPR5097Q';
+      const nEl = document.getElementById('bss-nominee'); if (nEl) nEl.value = 'NAFICHA RAHAMAN';
+      const aEl = document.getElementById('bss-holderaddress'); if (aEl) aEl.value = 'FLAT 4B, GREENWOOD APARTMENTS, KOLKATA 700028, WEST BENGAL';
+      const obEl = document.getElementById('bss-openbal'); if (obEl) obEl.value = '42150.00';
+      const obtEl = document.getElementById('bss-openbal-type'); if (obtEl) obtEl.value = 'CR';
+
+      _salaryStatementTransactions = [
+        { date: '01/04/2026', chqNo: '', desc: 'CMS/SALARY CREDITED FOR MARCH 2026/SS INFOTECH', chqVal: '-', wdl: 0, dep: 78500, bal: 120650, remarks: '-' },
+        { date: '03/04/2026', chqNo: '', desc: 'UPI/610293849102/MONTHLY GROCERIES STORE', chqVal: '-', wdl: 8450, dep: 0, bal: 112200, remarks: '-' },
+        { date: '05/04/2026', chqNo: '', desc: 'ECS/HDFC HOME LOAN EMI DEDUCTION', chqVal: '-', wdl: 26400, dep: 0, bal: 85800, remarks: '-' },
+        { date: '12/04/2026', chqNo: '', desc: 'ATM WDL - CASH WITHDRAWAL ICICI ATM BASIRHAT', chqVal: '-', wdl: 10000, dep: 0, bal: 75800, remarks: '-' },
+        { date: '20/04/2026', chqNo: '', desc: 'UPI/582910394812/ELECTRICITY BILL WBSEDCL', chqVal: '-', wdl: 2340, dep: 0, bal: 73460, remarks: '-' },
+        { date: '30/04/2026', chqNo: '', desc: 'CMS/SALARY CREDITED FOR APRIL 2026/SS INFOTECH', chqVal: '-', wdl: 0, dep: 78500, bal: 151960, remarks: '-' }
+      ];
+      _renderSalaryStatementTx();
+      _calcSalaryStatementTotals();
+    }
+
+    showCloudToast('Populated authentic demo data for testing!', 'success');
+  }
+
   // ── 1. Business Person Statement Page Logic ──────────────────
   function _initBankStatementPage() {
     _populateBankStatementDropdown();
@@ -4726,7 +6118,18 @@ const App = (() => {
           const codeEl = document.getElementById('bs-branchcode');
           if (codeEl && !codeEl.value) codeEl.value = '0914';
           const styleEl = document.getElementById('bs-style');
-          if (styleEl) styleEl.value = 'icici';
+          if (styleEl && !styleEl.value) styleEl.value = 'icici';
+        } else if (bVal.toUpperCase().includes('AXIS')) {
+          const ifscEl = document.getElementById('bs-ifsc');
+          if (ifscEl && (!ifscEl.value || ifscEl.value.startsWith('ICIC'))) ifscEl.value = 'UTIB0005971';
+          const codeEl = document.getElementById('bs-branchcode');
+          if (codeEl && (!codeEl.value || codeEl.value === '0914')) codeEl.value = '5971';
+          const branchEl = document.getElementById('bs-branch');
+          if (branchEl && (!branchEl.value || branchEl.value === 'BASIRHAT')) branchEl.value = 'BERACHAMPA';
+          const branchAddrEl = document.getElementById('bs-branchaddress');
+          if (branchAddrEl && (!branchAddrEl.value || branchAddrEl.value.includes('ICICI'))) {
+            branchAddrEl.value = 'AXIS BANK LTD, , GR FL JL NO 68 DAG NO 1415, KHATIAN NO 3871, BERACHAMPA, 743424, BERACHAMPA, WEST BENGAL, INDIA';
+          }
         }
       };
 
@@ -4977,6 +6380,11 @@ const App = (() => {
         address: U(document.getElementById('bs-holderaddress')?.value),
         branchAddress: U(document.getElementById('bs-branchaddress')?.value),
         openingBalance: parseFloat(document.getElementById('bs-opening')?.value) || 0,
+        email: document.getElementById('bs-email')?.value?.trim() || '',
+        pan: U(document.getElementById('bs-pan')?.value),
+        mobile: document.getElementById('bs-mobile')?.value || '',
+        nomineeName: U(document.getElementById('bs-nominee')?.value),
+        micr: document.getElementById('bs-micr')?.value || '',
       },
       fromDate: document.getElementById('bs-from')?.value || '',
       toDate: document.getElementById('bs-to')?.value || '',
@@ -5040,6 +6448,17 @@ const App = (() => {
     const bAddrEl = document.getElementById('bs-branchaddress');
     if (bAddrEl) bAddrEl.value = r.branchAddress || '';
 
+    const emailEl = document.getElementById('bs-email');
+    if (emailEl) emailEl.value = r.email || '';
+    const panEl = document.getElementById('bs-pan');
+    if (panEl) panEl.value = r.pan || '';
+    const mobileEl = document.getElementById('bs-mobile');
+    if (mobileEl) mobileEl.value = r.mobile || '';
+    const nomEl = document.getElementById('bs-nominee');
+    if (nomEl) nomEl.value = r.nomineeName || '';
+    const micrEl = document.getElementById('bs-micr');
+    if (micrEl) micrEl.value = r.micr || '';
+
     const fromEl = document.getElementById('bs-from');
     if (fromEl) fromEl.value = r.fromDate || '';
 
@@ -5100,6 +6519,11 @@ const App = (() => {
       ifsc: data.account.ifsc,
       branch: data.account.branch,
       openingBalance: data.account.openingBalance,
+      email: data.account.email || '',
+      pan: data.account.pan || '',
+      mobile: data.account.mobile || '',
+      nomineeName: data.account.nomineeName || '',
+      micr: data.account.micr || '',
       fromDate: data.fromDate,
       toDate: data.toDate,
       minBalance: data.minBalance,
@@ -5127,7 +6551,7 @@ const App = (() => {
 
     _editingStatementId = null;
 
-    ['bs-bank','bs-holder','bs-acno','bs-ifsc','bs-branch','bs-branchcode','bs-custid','bs-holderaddress','bs-branchaddress','bs-from','bs-to'].forEach(id => {
+    ['bs-bank','bs-holder','bs-acno','bs-ifsc','bs-branch','bs-branchcode','bs-custid','bs-holderaddress','bs-branchaddress','bs-from','bs-to','bs-email','bs-mobile','bs-pan','bs-nominee','bs-micr'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     _statementBankLogoData = null;
@@ -5141,6 +6565,11 @@ const App = (() => {
     const brCodeEl = document.getElementById('bs-branchcode'); if (brCodeEl) brCodeEl.value = '0914';
     const hAddrEl = document.getElementById('bs-holderaddress'); if (hAddrEl) hAddrEl.value = 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA';
     const bAddrEl = document.getElementById('bs-branchaddress'); if (bAddrEl) bAddrEl.value = 'ICICI BANK LTD., BASIRHAT BRANCH, BHAWANIPUR, PO.-BASIRHAT COLLEGE, DIST.- 24 PARGANAS (NORTH).743 412, NORTH 24 PARGANAS, WEST BENGAL, INDIA';
+    const emailEl = document.getElementById('bs-email'); if (emailEl) emailEl.value = 'MUXXXXN1@GMAIL.COM';
+    const mobileEl = document.getElementById('bs-mobile'); if (mobileEl) mobileEl.value = 'XXXXXX5164';
+    const panEl = document.getElementById('bs-pan'); if (panEl) panEl.value = 'CYMPR5097Q';
+    const nomEl = document.getElementById('bs-nominee'); if (nomEl) nomEl.value = 'NAFICHA RAHAN';
+    const micrEl = document.getElementById('bs-micr'); if (micrEl) micrEl.value = '743211009';
     const openingEl = document.getElementById('bs-opening'); if (openingEl) openingEl.value = '30211';
     const minEl = document.getElementById('bs-min-balance'); if (minEl) minEl.value = String(STMT_MIN_BALANCE);
     const container = document.getElementById('stmt-tx-list');
@@ -5237,7 +6666,18 @@ const App = (() => {
           const codeEl = document.getElementById('bss-branchcode');
           if (codeEl && !codeEl.value) codeEl.value = '0914';
           const styleEl = document.getElementById('bss-style');
-          if (styleEl) styleEl.value = 'icici';
+          if (styleEl && !styleEl.value) styleEl.value = 'icici';
+        } else if (bVal.toUpperCase().includes('AXIS')) {
+          const ifscEl = document.getElementById('bss-ifsc');
+          if (ifscEl && (!ifscEl.value || ifscEl.value.startsWith('ICIC'))) ifscEl.value = 'UTIB0005971';
+          const codeEl = document.getElementById('bss-branchcode');
+          if (codeEl && (!codeEl.value || codeEl.value === '0914')) codeEl.value = '5971';
+          const branchEl = document.getElementById('bss-branch');
+          if (branchEl && (!branchEl.value || branchEl.value === 'BASIRHAT')) branchEl.value = 'BERACHAMPA';
+          const branchAddrEl = document.getElementById('bss-branchaddress');
+          if (branchAddrEl && (!branchAddrEl.value || branchAddrEl.value.includes('ICICI'))) {
+            branchAddrEl.value = 'AXIS BANK LTD, , GR FL JL NO 68 DAG NO 1415, KHATIAN NO 3871, BERACHAMPA, 743424, BERACHAMPA, WEST BENGAL, INDIA';
+          }
         }
       };
 
@@ -5555,6 +6995,11 @@ const App = (() => {
         address: U(document.getElementById('bss-holderaddress')?.value),
         branchAddress: U(document.getElementById('bss-branchaddress')?.value),
         openingBalance: parseFloat(document.getElementById('bss-opening')?.value) || 150000,
+        email: document.getElementById('bss-email')?.value?.trim() || '',
+        pan: U(document.getElementById('bss-pan')?.value),
+        mobile: document.getElementById('bss-mobile')?.value || '',
+        nomineeName: U(document.getElementById('bss-nominee')?.value),
+        micr: document.getElementById('bss-micr')?.value || '',
       },
       fromDate: document.getElementById('bss-from')?.value || '',
       toDate: document.getElementById('bss-to')?.value || '',
@@ -5618,6 +7063,17 @@ const App = (() => {
 
     const bAddrEl = document.getElementById('bss-branchaddress');
     if (bAddrEl) bAddrEl.value = r.branchAddress || '';
+
+    const emailEl = document.getElementById('bss-email');
+    if (emailEl) emailEl.value = r.email || '';
+    const panEl = document.getElementById('bss-pan');
+    if (panEl) panEl.value = r.pan || '';
+    const mobileEl = document.getElementById('bss-mobile');
+    if (mobileEl) mobileEl.value = r.mobile || '';
+    const nomEl = document.getElementById('bss-nominee');
+    if (nomEl) nomEl.value = r.nomineeName || '';
+    const micrEl = document.getElementById('bss-micr');
+    if (micrEl) micrEl.value = r.micr || '';
 
     const compEl = document.getElementById('bss-company');
     if (compEl) compEl.value = r.companyName || '';
@@ -5684,6 +7140,11 @@ const App = (() => {
       ifsc: data.account.ifsc,
       branch: data.account.branch,
       openingBalance: data.account.openingBalance,
+      email: data.account.email || '',
+      pan: data.account.pan || '',
+      mobile: data.account.mobile || '',
+      nomineeName: data.account.nomineeName || '',
+      micr: data.account.micr || '',
       fromDate: data.fromDate,
       toDate: data.toDate,
       minBalance: data.minBalance,
@@ -5710,7 +7171,7 @@ const App = (() => {
   function resetSalaryStatementForm() {
     _editingSalaryStatementId = null;
 
-    ['bss-bank','bss-holder','bss-acno','bss-ifsc','bss-branch','bss-branchcode','bss-custid','bss-holderaddress','bss-branchaddress','bss-from','bss-to'].forEach(id => {
+    ['bss-bank','bss-holder','bss-acno','bss-ifsc','bss-branch','bss-branchcode','bss-custid','bss-holderaddress','bss-branchaddress','bss-from','bss-to','bss-email','bss-mobile','bss-pan','bss-nominee','bss-micr'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     _salaryStatementBankLogoData = null;
@@ -5724,6 +7185,11 @@ const App = (() => {
     const brCodeEl = document.getElementById('bss-branchcode'); if (brCodeEl) brCodeEl.value = '0914';
     const hAddrEl = document.getElementById('bss-holderaddress'); if (hAddrEl) hAddrEl.value = 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA';
     const bAddrEl = document.getElementById('bss-branchaddress'); if (bAddrEl) bAddrEl.value = 'ICICI BANK LTD., BASIRHAT BRANCH, BHAWANIPUR, PO.-BASIRHAT COLLEGE, DIST.- 24 PARGANAS (NORTH).743 412, NORTH 24 PARGANAS, WEST BENGAL, INDIA';
+    const emailEl = document.getElementById('bss-email'); if (emailEl) emailEl.value = 'MUXXXXN1@GMAIL.COM';
+    const mobileEl = document.getElementById('bss-mobile'); if (mobileEl) mobileEl.value = 'XXXXXX5164';
+    const panEl = document.getElementById('bss-pan'); if (panEl) panEl.value = 'CYMPR5097Q';
+    const nomEl = document.getElementById('bss-nominee'); if (nomEl) nomEl.value = 'NAFICHA RAHAN';
+    const micrEl = document.getElementById('bss-micr'); if (micrEl) micrEl.value = '743211009';
     const actypeEl = document.getElementById('bss-actype'); if (actypeEl) actypeEl.value = 'SALARY';
     const compEl = document.getElementById('bss-company'); if (compEl) compEl.value = 'TECH MAHINDRA LTD';
     const salAmtEl = document.getElementById('bss-salary-amount'); if (salAmtEl) salAmtEl.value = '65000';
@@ -5802,7 +7268,12 @@ const App = (() => {
         branchAddress: r.branchAddress || '',
         ifsc: r.ifsc,
         branch: r.branch,
-        openingBalance: r.openingBalance
+        openingBalance: r.openingBalance,
+        email: r.email || '',
+        mobile: r.mobile || '',
+        pan: r.pan || '',
+        nomineeName: r.nomineeName || '',
+        micr: r.micr || ''
       },
       fromDate: r.fromDate,
       toDate: r.toDate,
@@ -5840,12 +7311,16 @@ const App = (() => {
     nextStep, prevStep,
     addBank, removeBank, setPrimary, syncBanks: _syncBanks,
     onNatureChange, onPresumptiveSectionChange, onDeductorChange,
-    toggleIncome, recalcIncome,
+    toggleIncome, recalcIncome, applyTaxRegime,
     selectReport, generateReport, generateAck, generateAckNoField, triggerPrint,
+    downloadReportPdf, shareWhatsApp, shareEmail,
+    handleAisJsonUpload,
     saveClient,
     searchClients, editClient, deleteClient, duplicateClient, printClient, printClientAck,
+    switchClientDbTab, restoreClient, permanentDeleteClient, restoreSelectedClients, emptyTrash,
     toggleSelectAllClients, toggleClientSelect, bulkDeleteSelectedClients, exportClientsCSV,
-    saveAdminConfig, downloadLocalBackup, restoreLocalBackup, filterAdminSection,
+    openCommandPalette, handleCommandPaletteSearch, runPaletteAction, openClientFromPalette,
+    saveAdminConfig, downloadLocalBackup, restoreLocalBackup, filterAdminSection, _updateAdminSummaryStats,
     addCustomAY, removeCustomAY,
     addCustomDeductor, removeCustomDeductor, editCustomDeductor, saveEditDeductor,
     addPresetDeductors, filterDeductors, _renderDeductors,
@@ -5867,6 +7342,7 @@ const App = (() => {
     autoGenSalaryStatementTxs, addSalaryStatementTxnRow, clearSalaryStatementTxns, recalcSalaryStatement,
     onSalaryStatementIFSCInput, lookupSalaryStatementIFSC,
     uploadStatementBankLogo, setBankStatementPersona,
+    applyBankPreset, fillStatementDemoData,
     generateBankStatement, resetBankStatementForm, renderSavedStatements, editStatementRecord, reprintStatementRecord, deleteStatementRecord,
     generateSalaryBankStatement, resetSalaryStatementForm, renderSavedSalaryStatements, editSalaryStatementRecord,
     downloadClientRecord, downloadAllClients,
@@ -5877,6 +7353,10 @@ const App = (() => {
     openCloudBackupsModal, refreshCloudBackupsList, restoreSpecificCloudBackup, mergeSpecificCloudBackup, deleteSpecificCloudBackup,
     handleTopbarCloudClick, quickSyncCloud,
     openSupabaseSqlModal, copySupabaseSql,
+    openAdminPinModal, cancelAdminPin, verifyAdminPin,
+    showAdminForgotPin, showAdminPinEnterView, verifyRecoveryMobile,
+    autoFillAndUnlockAdmin, copyRecoveredPin, togglePinVisibility,
+    lockAdmin, promptChangeAdminPin, resetAdminPinToDefault,
   };
 
   if (typeof window !== 'undefined') {

@@ -31,6 +31,8 @@ const TaxEngine = (() => {
       tttaLimit:      10000,
       allow80TTA:     false,
       stcgRate:       0.15,
+      ltcgRate:       0.10,
+      ltcgExemption:  100000,
       marginalRelief87A: false,
     },
     '2024-25': {
@@ -52,6 +54,8 @@ const TaxEngine = (() => {
       tttaLimit:      10000,
       allow80TTA:     false,
       stcgRate:       0.15,
+      ltcgRate:       0.10,
+      ltcgExemption:  100000,
       marginalRelief87A: true,
     },
     '2025-26': {
@@ -73,6 +77,8 @@ const TaxEngine = (() => {
       tttaLimit:      10000,
       allow80TTA:     false,
       stcgRate:       0.20,      // STCG raised to 20% from Budget 2024
+      ltcgRate:       0.125,     // LTCG raised to 12.5% from Budget 2024
+      ltcgExemption:  125000,    // LTCG exemption raised to ₹1.25L from Budget 2024
       marginalRelief87A: true,
     },
     '2026-27': {
@@ -95,6 +101,8 @@ const TaxEngine = (() => {
       tttaLimit:      10000,
       allow80TTA:     false,
       stcgRate:       0.20,
+      ltcgRate:       0.125,
+      ltcgExemption:  125000,
       marginalRelief87A: true,
     },
   };
@@ -116,6 +124,8 @@ const TaxEngine = (() => {
     tttaLimit:      10000,
     allow80TTA:     true,
     stcgRate:       0.15,
+    ltcgRate:       0.125,
+    ltcgExemption:  125000,
     marginalRelief87A: false,
   };
 
@@ -172,38 +182,83 @@ const TaxEngine = (() => {
   }
 
   /**
-   * Full computation pipeline.
+   * Full computation pipeline supporting Salary, Presumptive, Capital Gains,
+   * Chapter VI-A Deductions, Rebate 87A, and AY 2023-27 rules.
    */
   function compute(input) {
     const cfg = getConfig(input.ay, input.adminOverrides || {});
+    const isOld = (cfg.regime || '').toLowerCase() === 'old';
 
     const businessIncome  = Math.round(input.businessIncome  || 0);
     const savingsInterest = Math.round(input.savingsInterest || 0);
     const stcg            = Math.round(input.stcg            || 0);
+    const ltcg            = Math.round(input.ltcg            || 0);
     const pl              = Math.round(input.pl              || 0);
     const presumptiveSection = input.presumptiveSection || '44AD';
 
-    // ── 80TTA Deduction ──────────────────────────────────────
-    const deduction80TTA = cfg.allow80TTA
-      ? Math.min(savingsInterest, cfg.tttaLimit)
-      : 0;
+    // ── Salary Income Calculation ────────────────────────────
+    const salaryGross = Math.round(input.salaryGross || 0);
+    let salaryStdDeduction = 0;
+    let salaryPtax = 0;
+    let salaryHraExemption = 0;
+    let netSalary = 0;
+
+    if (salaryGross > 0) {
+      salaryStdDeduction = Math.min(salaryGross, cfg.stdDeduction || 50000);
+      salaryPtax = Math.min(salaryGross - salaryStdDeduction, Math.round(input.salaryPtax || 0));
+      salaryHraExemption = isOld ? Math.min(salaryGross - salaryStdDeduction - salaryPtax, Math.round(input.salaryHra || 0)) : 0;
+      netSalary = Math.max(0, salaryGross - salaryStdDeduction - salaryPtax - salaryHraExemption);
+    }
 
     // ── Gross Total Income ───────────────────────────────────
-    const grossTotalIncome = businessIncome + savingsInterest + stcg + pl;
+    const grossTotalIncome = businessIncome + savingsInterest + stcg + ltcg + pl + netSalary;
+
+    // ── Chapter VI-A Deductions ──────────────────────────────
+    let deduction80C     = 0;
+    let deduction80D     = 0;
+    let deduction80CCD1B = 0;
+    let deduction80G     = 0;
+    let deduction80TTA   = 0;
+    let totalDeductions  = 0;
+
+    // Incomes eligible for Chapter VI-A (excludes special rate capital gains)
+    const eligibleForDeductions = Math.max(0, grossTotalIncome - stcg - ltcg);
+
+    if (isOld) {
+      deduction80C     = Math.min(150000, Math.round(input.deduction80C || 0));
+      deduction80D     = Math.min(100000, Math.round(input.deduction80D || 0));
+      deduction80CCD1B = Math.min(50000,  Math.round(input.deduction80CCD1B || 0));
+      deduction80G     = Math.max(0,      Math.round(input.deduction80G || 0));
+      deduction80TTA   = cfg.allow80TTA ? Math.min(savingsInterest, cfg.tttaLimit || 10000) : 0;
+
+      const rawDeductions = deduction80C + deduction80D + deduction80CCD1B + deduction80G + deduction80TTA;
+      totalDeductions = Math.min(eligibleForDeductions, rawDeductions);
+    } else {
+      // New Regime: 80CCD(2) employer contribution could apply, default Chapter VI-A disallowed
+      deduction80TTA = 0;
+      totalDeductions = 0;
+    }
 
     // ── Total Income (before rounding) ───────────────────────
-    const totalIncomeBeforeRounding = grossTotalIncome - deduction80TTA;
+    const totalIncomeBeforeRounding = Math.max(0, grossTotalIncome - totalDeductions);
 
     // Round off u/s 288A (nearest ₹10)
     const totalIncome   = Math.round(totalIncomeBeforeRounding / 10) * 10;
     const roundOffAmt   = totalIncome - totalIncomeBeforeRounding;
 
     // ── Tax Computation ──────────────────────────────────────
-    // STCG (u/s 111A) is taxed at special flat rate; rest at slab rates
-    const regularIncome = Math.max(0, totalIncome - stcg);
+    // LTCG u/s 112A has an exemption (₹1.25L for AY 25-26+, ₹1L earlier)
+    const ltcgExemptionLimit = cfg.ltcgExemption || 125000;
+    const taxableLTCG = Math.max(0, ltcg - ltcgExemptionLimit);
+    const taxOnLTCG   = Math.round(taxableLTCG * (cfg.ltcgRate || 0.125));
+
+    // STCG u/s 111A flat special rate
+    const taxOnSTCG   = Math.round(stcg * (cfg.stcgRate || 0.15));
+
+    // Regular slab income
+    const regularIncome = Math.max(0, totalIncome - stcg - taxableLTCG);
     const taxOnRegular  = computeSlabTax(regularIncome, cfg.slabs);
-    const taxOnSTCG     = Math.round(stcg * (cfg.stcgRate || 0.15));
-    const taxBeforeRebate = taxOnRegular + taxOnSTCG;
+    const taxBeforeRebate = taxOnRegular + taxOnSTCG + taxOnLTCG;
 
     // ── Rebate u/s 87A ───────────────────────────────────────
     let rebate = 0;
@@ -211,7 +266,7 @@ const TaxEngine = (() => {
       if (totalIncome <= cfg.rebateLimit) {
         rebate = Math.min(taxBeforeRebate, cfg.rebateMax);
       } else if (cfg.marginalRelief87A) {
-        // Marginal Relief for 87A
+        // Marginal Relief for 87A: tax payable cannot exceed income in excess of rebate limit
         const margin = totalIncome - cfg.rebateLimit;
         if (margin > 0 && taxBeforeRebate > margin) {
           rebate = taxBeforeRebate - margin;
@@ -240,10 +295,12 @@ const TaxEngine = (() => {
 
     return {
       // Income heads
-      businessIncome, savingsInterest, stcg, pl,
+      businessIncome, savingsInterest, stcg, ltcg, pl,
+      salaryGross, salaryStdDeduction, salaryPtax, salaryHraExemption, netSalary,
       presumptiveSection,
       // Deductions
-      deduction80TTA,
+      deduction80C, deduction80D, deduction80CCD1B, deduction80G, deduction80TTA,
+      totalDeductions,
       // GTI and Net
       grossTotalIncome,
       totalIncomeBeforeRounding,
@@ -253,6 +310,8 @@ const TaxEngine = (() => {
       regularIncome,
       taxOnRegular,
       taxOnSTCG,
+      taxableLTCG,
+      taxOnLTCG,
       taxBeforeRebate,
       rebate,
       taxAfterRebate,
@@ -264,6 +323,46 @@ const TaxEngine = (() => {
       netTax, refund, taxDue,
       // Config used
       cfg,
+    };
+  }
+
+  /**
+   * Live Regime Comparator: Compares New vs Old Regime side-by-side
+   * and recommends the optimal choice with tax savings.
+   */
+  function compareRegimes(input) {
+    const newComp = compute({
+      ...input,
+      adminOverrides: { ...(input.adminOverrides || {}), regime: 'New' },
+    });
+
+    const oldComp = compute({
+      ...input,
+      adminOverrides: { ...(input.adminOverrides || {}), regime: 'Old' },
+    });
+
+    const taxNew = newComp.totalTaxPayable;
+    const taxOld = oldComp.totalTaxPayable;
+
+    let recommended = 'New';
+    let savings = 0;
+
+    if (taxOld < taxNew) {
+      recommended = 'Old';
+      savings = taxNew - taxOld;
+    } else {
+      recommended = 'New';
+      savings = taxOld - taxNew;
+    }
+
+    return {
+      newRegime: newComp,
+      oldRegime: oldComp,
+      taxNew,
+      taxOld,
+      recommended,
+      savings,
+      isEqual: taxNew === taxOld,
     };
   }
 
@@ -305,6 +404,7 @@ const TaxEngine = (() => {
 
   return {
     compute,
+    compareRegimes,
     computeSlabTax,
     computePresumptive,
     getConfig,
@@ -315,3 +415,7 @@ const TaxEngine = (() => {
     OLD_CONFIG: OLD_REGIME_CONFIG,
   };
 })();
+
+if (typeof module !== 'undefined') {
+  module.exports = TaxEngine;
+}

@@ -406,24 +406,79 @@ const SupabaseSync = (() => {
       localStorage.setItem('ssinfotech_slip_companies', JSON.stringify(Array.from(compMap.values())));
     }
 
-    // 5. Admin Deductors
-    if (payload.ssinfotech_admin && payload.ssinfotech_admin.deductors) {
+    // 5. Admin Masters (Deductors, Banks, Nature Codes, AYs, Company Info)
+    if (payload.ssinfotech_admin && typeof payload.ssinfotech_admin === 'object') {
       const localAdmin = JSON.parse(localStorage.getItem('ssinfotech_admin') || '{}');
-      const curDeds = localAdmin.deductors || [];
-      const tanMap = new Map();
-      curDeds.forEach(d => tanMap.set(d.tan || d.name, d));
-      payload.ssinfotech_admin.deductors.forEach(d => {
-        const k = d.tan || d.name;
-        if (!tanMap.has(k)) tanMap.set(k, d);
-      });
-      localAdmin.deductors = Array.from(tanMap.values());
+      const pAdmin = payload.ssinfotech_admin;
+
+      // Merge deductors
+      if (Array.isArray(pAdmin.deductors)) {
+        const curDeds = localAdmin.deductors || [];
+        const tanMap = new Map();
+        curDeds.forEach(d => tanMap.set(d.tan || d.name, d));
+        pAdmin.deductors.forEach(d => {
+          const k = d.tan || d.name;
+          if (!tanMap.has(k)) tanMap.set(k, d);
+        });
+        localAdmin.deductors = Array.from(tanMap.values());
+      }
+
+      // Merge bank configs
+      if (Array.isArray(pAdmin.bankConfigs)) {
+        const curBanks = localAdmin.bankConfigs || [];
+        const bankMap = new Map();
+        curBanks.forEach(b => bankMap.set((typeof b === 'string' ? b : b.name || '').toUpperCase(), b));
+        pAdmin.bankConfigs.forEach(b => {
+          const name = (typeof b === 'string' ? b : b.name || '').toUpperCase();
+          if (name && !bankMap.has(name)) bankMap.set(name, b);
+        });
+        localAdmin.bankConfigs = Array.from(bankMap.values());
+      }
+
+      // Merge nature codes
+      if (Array.isArray(pAdmin.natureCodes)) {
+        const curCodes = localAdmin.natureCodes || [];
+        const codeMap = new Map();
+        curCodes.forEach(c => {
+          if (c) {
+            const k = (c.nature || '') + '|' + (c.code || '');
+            codeMap.set(k, c);
+          }
+        });
+        pAdmin.natureCodes.forEach(c => {
+          if (c) {
+            const k = (c.nature || '') + '|' + (c.code || '');
+            if (!codeMap.has(k)) codeMap.set(k, c);
+          }
+        });
+        localAdmin.natureCodes = Array.from(codeMap.values());
+      }
+
+      // Merge custom AYs
+      if (Array.isArray(pAdmin.customAYs)) {
+        const curAYs = new Set(localAdmin.customAYs || []);
+        pAdmin.customAYs.forEach(ay => curAYs.add(ay));
+        localAdmin.customAYs = Array.from(curAYs);
+      }
+
+      // Company info (preserve local if existing, adopt cloud if missing)
+      if (!localAdmin.company && pAdmin.company) localAdmin.company = pAdmin.company;
+      if (!localAdmin.footer && pAdmin.footer) localAdmin.footer = pAdmin.footer;
+      if (!localAdmin.signatory && pAdmin.signatory) localAdmin.signatory = pAdmin.signatory;
+      if (localAdmin.profitPct === undefined && pAdmin.profitPct !== undefined) localAdmin.profitPct = pAdmin.profitPct;
+      if (localAdmin.intMin === undefined && pAdmin.intMin !== undefined) localAdmin.intMin = pAdmin.intMin;
+      if (localAdmin.intMax === undefined && pAdmin.intMax !== undefined) localAdmin.intMax = pAdmin.intMax;
+      if (localAdmin.rate194H === undefined && pAdmin.rate194H !== undefined) localAdmin.rate194H = pAdmin.rate194H;
+      if (localAdmin.rate194C === undefined && pAdmin.rate194C !== undefined) localAdmin.rate194C = pAdmin.rate194C;
+      if (localAdmin.rate194NF === undefined && pAdmin.rate194NF !== undefined) localAdmin.rate194NF = pAdmin.rate194NF;
+
       localStorage.setItem('ssinfotech_admin', JSON.stringify(localAdmin));
     }
   }
 
   /**
    * Automatic startup check for new devices or cloud updates.
-   * If local storage is empty, automatically restores the latest cloud backup.
+   * If local storage is empty, automatically restores the latest cloud backup safely with merge.
    * If local storage is not empty, checks if cloud has a newer snapshot.
    */
   async function checkStartupSync() {
@@ -442,10 +497,10 @@ const SupabaseSync = (() => {
 
       const totalCloudRecords = (latestValid.client_count || 0) + (latestValid.statement_count || 0) + (latestValid.slip_count || 0);
 
-      // Case 1: Fresh device / empty workspace, and cloud has data -> Auto Restore!
+      // Case 1: Fresh device / empty workspace, and cloud has data -> Auto Restore safely with merge!
       if (isLocalEmpty && totalCloudRecords > 0) {
         console.log('🔄 Fresh device detected with empty storage. Auto-restoring cloud snapshot:', latestValid.id);
-        const restoreRes = await restoreBackup(latestValid.id, { merge: false });
+        const restoreRes = await restoreBackup(latestValid.id, { merge: true });
         return {
           status: 'auto_restored',
           backup: latestValid,
