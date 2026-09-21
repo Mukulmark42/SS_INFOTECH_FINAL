@@ -310,41 +310,342 @@
         <!-- Step Indicator Bar -->
         <div class="wizard-steps" role="tablist" aria-label="Computation steps">
 
-          <div class="step active" data-step="1" role="tab" aria-selected="true" aria-controls="step-panel-1">
+          <div class="step active" data-step="1" role="tab" aria-selected="true" aria-controls="step-panel-1" onclick="App.goToStep(1)" style="cursor:pointer;" title="Step 1: ITR Format">
             <div class="step-num" aria-hidden="true">1</div>
-            <div class="step-lbl">Personal</div>
+            <div class="step-lbl">ITR Format</div>
           </div>
           <div class="step-line" aria-hidden="true"></div>
 
-          <div class="step" data-step="2" role="tab" aria-selected="false" aria-controls="step-panel-2">
+          <div class="step" data-step="2" role="tab" aria-selected="false" aria-controls="step-panel-2" onclick="App.goToStep(2)" style="cursor:pointer;" title="Step 2: Customer Details">
             <div class="step-num" aria-hidden="true">2</div>
-            <div class="step-lbl">Business</div>
+            <div class="step-lbl">Customer</div>
           </div>
           <div class="step-line" aria-hidden="true"></div>
 
-          <div class="step" data-step="3" role="tab" aria-selected="false" aria-controls="step-panel-3">
+          <div class="step" data-step="3" role="tab" aria-selected="false" aria-controls="step-panel-3" onclick="App.goToStep(3)" style="cursor:pointer;" title="Step 3: Business/Employment">
             <div class="step-num" aria-hidden="true">3</div>
+            <div class="step-lbl" id="step-lbl-3">Business</div>
+          </div>
+          <div class="step-line" aria-hidden="true"></div>
+
+          <div class="step" data-step="4" role="tab" aria-selected="false" aria-controls="step-panel-4" onclick="App.goToStep(4)" style="cursor:pointer;" title="Step 4: Bank Details">
+            <div class="step-num" aria-hidden="true">4</div>
             <div class="step-lbl">Bank</div>
           </div>
           <div class="step-line" aria-hidden="true"></div>
 
-          <div class="step" data-step="4" role="tab" aria-selected="false" aria-controls="step-panel-4">
-            <div class="step-num" aria-hidden="true">4</div>
+          <div class="step" data-step="5" role="tab" aria-selected="false" aria-controls="step-panel-5" onclick="App.goToStep(5)" style="cursor:pointer;" title="Step 5: Income Computation">
+            <div class="step-num" aria-hidden="true">5</div>
             <div class="step-lbl">Income</div>
           </div>
           <div class="step-line" aria-hidden="true"></div>
 
-          <div class="step" data-step="5" role="tab" aria-selected="false" aria-controls="step-panel-5">
-            <div class="step-num" aria-hidden="true">5</div>
+          <div class="step" data-step="6" role="tab" aria-selected="false" aria-controls="step-panel-6" onclick="App.goToStep(6)" style="cursor:pointer;" title="Step 6: Preview & Report">
+            <div class="step-num" aria-hidden="true">6</div>
             <div class="step-lbl">Preview</div>
           </div>
 
         </div><!-- /.wizard-steps -->
 
-        <!-- ── Step 1: Personal Details ── -->
+        <!-- ── Step 1: Select ITR Return Format ── -->
         <div class="wizard-panel active" id="step-panel-1" role="tabpanel" aria-labelledby="step-1">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pb-3 border-bottom">
+            <div>
+              <h5 class="panel-title mb-1">
+                <i class="bi bi-file-earmark-diff-fill text-primary me-2" aria-hidden="true"></i>Select ITR Return Format
+              </h5>
+              <div class="text-muted small">
+                Choose the applicable Income Tax Return format for your client to prepare computation fields and tax schedules.
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <button type="button" class="btn btn-primary px-4 fw-semibold shadow-sm" id="btn-itr-continue" onclick="App.nextStep()">
+                Proceed to Customer Details <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards Grid -->
+          <div class="itr-selection-grid mb-3" id="itr-cards-container">
+
+            <!-- Card 1: ITR-1 SAHAJ -->
+            <div class="itr-format-card" data-itr="ITR-1" onclick="App.selectItrFormat('ITR-1')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-person-badge-fill"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-1</div>
+                      <div class="itr-card-alias">SAHAJ</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-blue">Salaried</span>
+                </div>
+                <div class="itr-card-desc">
+                  For resident individuals with total income up to ₹50 Lakhs from Salary, Pension, One House Property, or Other Sources.
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Salary &amp; Pension Income (Form 16)</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Standard Deduction (₹75,000 New / ₹50,000 Old)</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Single House Property &amp; Bank Interest</li>
+                  <li class="text-muted"><i class="bi bi-dash-circle"></i> Not for Business, Profession, or Capital Gains</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Select ITR-1</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-1', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 2: ITR-4 SUGAM (Popular) -->
+            <div class="itr-format-card selected" data-itr="ITR-4" onclick="App.selectItrFormat('ITR-4')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-briefcase-fill"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-4</div>
+                      <div class="itr-card-alias">SUGAM</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-green">Popular &bull; Presumptive</span>
+                </div>
+                <div class="itr-card-desc">
+                  For Individuals, HUFs &amp; Small Firms with presumptive business or professional income under Sections 44AD, 44ADA, or 44AE.
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Section 44AD: Small Traders/Retailers (Deemed Profit 8% / 6%)</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Section 44ADA: Doctors, CA, IT Professionals (50% Profit)</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Section 44AE: Goods Carriages &amp; Transporters</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Simplified Balance Sheet &amp; No Tax Audit</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Selected (Active)</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-4', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 3: ITR-2 -->
+            <div class="itr-format-card" data-itr="ITR-2" onclick="App.selectItrFormat('ITR-2')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-2</div>
+                      <div class="itr-card-alias">Capital Gains / Multi-Property</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-purple">Capital Gains</span>
+                </div>
+                <div class="itr-card-desc">
+                  For Individuals and HUFs not having business income, who have Capital Gains, Multiple House Properties, or Foreign Assets.
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> STCG &amp; LTCG from Shares, Mutual Funds, Property</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> More than One House Property</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Foreign Income or Directorship in Companies</li>
+                  <li class="text-muted"><i class="bi bi-dash-circle"></i> No Proprietary Business / Profession Income</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Select ITR-2</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-2', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 4: ITR-3 -->
+            <div class="itr-format-card" data-itr="ITR-3" onclick="App.selectItrFormat('ITR-3')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-calculator-fill"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-3</div>
+                      <div class="itr-card-alias">Proprietorship / Audit</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-amber">Business &bull; Audit</span>
+                </div>
+                <div class="itr-card-desc">
+                  For Individuals and HUFs carrying on proprietary businesses or professions with regular books of account, P&amp;L, or Tax Audit.
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Full Trading Account, P&amp;L Account, Balance Sheet</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Section 44AB Tax Audit Cases &amp; Large Turnover</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Futures &amp; Options (F&amp;O), Intraday Trading</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Partner Remuneration &amp; Profits from Firms</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Select ITR-3</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-3', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 5: ITR-5 -->
+            <div class="itr-format-card" data-itr="ITR-5" onclick="App.selectItrFormat('ITR-5')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-people-fill"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-5</div>
+                      <div class="itr-card-alias">LLP / Partnership Firm</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-teal">Firms &bull; LLP</span>
+                </div>
+                <div class="itr-card-desc">
+                  For Partnership Firms, Limited Liability Partnerships (LLPs), Association of Persons (AOPs), and Body of Individuals (BOIs).
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Partnership Firms &amp; Registered LLPs</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> AOP, BOI &amp; Cooperative Societies</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Flat 30% Tax Rate / AMT Applicable</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Select ITR-5</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-5', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 6: ITR-6 -->
+            <div class="itr-format-card" data-itr="ITR-6" onclick="App.selectItrFormat('ITR-6')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-building-fill"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-6</div>
+                      <div class="itr-card-alias">Companies</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-indigo">Corporate</span>
+                </div>
+                <div class="itr-card-desc">
+                  For Companies other than companies claiming exemption under Section 11 (Private Ltd &amp; Public Ltd companies).
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Domestic &amp; Foreign Companies</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Minimum Alternate Tax (MAT u/s 115JB)</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Mandatory Electronic Filing with Digital Signature</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Select ITR-6</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-6', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 7: ITR-7 -->
+            <div class="itr-format-card" data-itr="ITR-7" onclick="App.selectItrFormat('ITR-7')">
+              <div>
+                <div class="itr-card-header">
+                  <div class="itr-card-icon-title">
+                    <div class="itr-card-icon">
+                      <i class="bi bi-bank2"></i>
+                    </div>
+                    <div>
+                      <div class="itr-card-code">ITR-7</div>
+                      <div class="itr-card-alias">Trusts &amp; Institutions</div>
+                    </div>
+                  </div>
+                  <span class="itr-badge-pill itr-badge-rose">Trusts &bull; NGO</span>
+                </div>
+                <div class="itr-card-desc">
+                  For Charitable/Religious Trusts, Political Parties, Colleges, and Scientific Research Institutions under Section 139(4A)-(4D).
+                </div>
+                <ul class="itr-card-bullets">
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Charitable Trusts u/s 139(4A) &amp; 12AB</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Political Parties u/s 139(4B)</li>
+                  <li><i class="bi bi-check-circle-fill text-success"></i> Educational / Medical Institutions u/s 139(4C)</li>
+                </ul>
+              </div>
+              <div class="itr-card-footer">
+                <div class="itr-select-indicator">
+                  <div class="itr-select-radio"><i class="bi bi-check"></i></div>
+                  <span class="itr-select-text">Select ITR-7</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); App.selectItrFormat('ITR-7', true);">
+                  Select &amp; Fill Details &rarr;
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div><!-- /#step-panel-1 -->
+
+        <!-- ── Step 2: Personal Details ── -->
+        <div class="wizard-panel" id="step-panel-2" role="tabpanel" aria-labelledby="step-2">
+
+          <!-- Active ITR Format Banner -->
+          <div class="active-itr-banner d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+              <div class="active-itr-banner-icon">
+                <i class="bi bi-file-earmark-check-fill" id="active-itr-banner-icon"></i>
+              </div>
+              <div>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge bg-primary px-2.5 py-1 text-uppercase fw-bold" id="active-itr-banner-code">ITR-4</span>
+                  <span class="fw-bold text-body fs-6" id="active-itr-banner-title">SUGAM (Presumptive Business / Profession)</span>
+                </div>
+                <div class="text-muted small mt-0.5" id="active-itr-banner-sub">
+                  Applicable for Section 44AD / 44ADA / 44AE presumptive taxpayers.
+                </div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm px-3 shadow-none" onclick="App.goToStep(1)">
+              <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Change ITR Format
+            </button>
+          </div>
+
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="panel-title mb-0"><i class="bi bi-person-vcard-fill me-2" aria-hidden="true"></i>Personal Details</h5>
+            <h5 class="panel-title mb-0"><i class="bi bi-person-vcard-fill me-2" aria-hidden="true"></i>Customer Personal Details</h5>
             <div>
               <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('ais-json-file').click()" title="Auto-fill PAN, Name &amp; Income from official AIS/TIS or 26AS JSON">
                 <i class="bi bi-file-earmark-code me-1"></i> Import AIS / 26AS JSON
@@ -421,9 +722,9 @@
             </div>
             <div class="col-md-3">
               <label class="form-label" for="f-form-no">ITR Form</label>
-              <select class="form-select" id="f-form-no">
-                <option value="ITR-4" selected>ITR-4 (SUGAM - Business/Presumptive)</option>
+              <select class="form-select" id="f-form-no" onchange="App.onFormNumberChange()">
                 <option value="ITR-1">ITR-1 (SAHAJ - Salary/Other)</option>
+                <option value="ITR-4" selected>ITR-4 (SUGAM - Business/Presumptive)</option>
                 <option value="ITR-2">ITR-2 (Capital Gains/House)</option>
                 <option value="ITR-3">ITR-3 (Proprietorship/Audit)</option>
                 <option value="ITR-5">ITR-5 (LLP/Firm)</option>
@@ -457,32 +758,73 @@
           </div>
         </div>
 
-        <!-- ── Step 2: Business & Profession Details ── -->
-        <div class="wizard-panel" id="step-panel-2" role="tabpanel">
-          <h5 class="panel-title"><i class="bi bi-briefcase-fill me-2" aria-hidden="true"></i>Business / Profession Details <span class="panel-title-sub" id="panel-sec-sub">(Section 44AD / 44ADA)</span></h5>
-          <div class="row g-3">
+        <!-- ── Step 3: Business & Profession / Employer Details ── -->
+        <div class="wizard-panel" id="step-panel-3" role="tabpanel">
+          <h5 class="panel-title" id="step-2-title"><i class="bi bi-briefcase-fill me-2" id="step-2-icon" aria-hidden="true"></i><span id="step-2-title-text">Business / Profession Details</span> <span class="panel-title-sub" id="panel-sec-sub">(Section 44AD / 44ADA)</span></h5>
+
+          <!-- Salary / Employer Section (Shown for ITR-1) -->
+          <div id="step-2-salary-fields" style="display:none;">
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="form-label" for="f-emp-name">Employer Name <span class="required-mark">*</span></label>
+                <input type="text" class="form-control text-uppercase" id="f-emp-name" placeholder="e.g. TATA CONSULTANCY SERVICES LTD" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="f-emp-cat">Employer Category</label>
+                <select class="form-select" id="f-emp-cat">
+                  <option value="Private" selected>Private / Corporate Sector</option>
+                  <option value="Central Govt">Central Government</option>
+                  <option value="State Govt">State Government</option>
+                  <option value="PSU">Public Sector Undertaking (PSU)</option>
+                  <option value="Pensioners">Pensioners</option>
+                  <option value="Others">Others</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="f-emp-tan">Employer TAN <span class="text-muted" style="font-size:11px;">(Optional)</span></label>
+                <input type="text" class="form-control text-uppercase font-monospace" id="f-emp-tan" maxlength="10" placeholder="e.g. MUMB12345C" />
+              </div>
+            </div>
+            <div class="info-box mt-3" id="sec-info-box-salary">
+              <i class="bi bi-info-circle-fill me-2" aria-hidden="true"></i>
+              <span>Under <strong>Form ITR-1 (Sahaj)</strong>, Standard Deduction of <strong>₹75,000</strong> (New Regime AY 25-26 &amp; 26-27) or <strong>₹50,000</strong> (Old Regime) is automatically deducted u/s 16(ia). Commercial turnover and balance sheet are not applicable.</span>
+            </div>
+          </div>
+
+          <!-- Business Section (Shown for ITR-4) -->
+          <div id="step-2-business-fields">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="f-presumptive-section">Presumptive Scheme <span class="required-mark">*</span></label>
+                <select class="form-select" id="f-presumptive-section" onchange="App.onPresumptiveSectionChange()">
+                  <option value="44AD" selected>Section 44AD (Business - Default 20%)</option>
+                  <option value="44ADA">Section 44ADA (Professional - Default 50%)</option>
+                </select>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label" for="f-bname">Business / Profession Name</label>
+                <input type="text" class="form-control text-uppercase" id="f-bname" placeholder="e.g. ABC Enterprises / Consultancy (Optional)" />
+              </div>
+              <div class="col-md-8">
+                <label class="form-label" for="f-nature">Nature of Business / Profession <span class="required-mark">*</span></label>
+                <select class="form-select" id="f-nature" onchange="App.onNatureChange()">
+                  <option value="">-- Select --</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="f-bcode">Business / Profession Code</label>
+                <input type="text" class="form-control" id="f-bcode" placeholder="Auto-populated" readonly />
+              </div>
+            </div>
+            <div class="info-box mt-3" id="sec-info-box">
+              <i class="bi bi-info-circle-fill me-2" aria-hidden="true"></i>
+              <span id="sec-info-text">Under <strong>Section 44AD</strong>, profit is automatically declared at <strong>20%</strong> of turnover. Turnover will be auto-calculated from your declared business income.</span>
+            </div>
+          </div>
+
+          <!-- Shared Tax Regime Row -->
+          <div class="row g-3 mt-1">
             <div class="col-md-4">
-              <label class="form-label" for="f-presumptive-section">Presumptive Scheme <span class="required-mark">*</span></label>
-              <select class="form-select" id="f-presumptive-section" onchange="App.onPresumptiveSectionChange()">
-                <option value="44AD" selected>Section 44AD (Business - Default 20%)</option>
-                <option value="44ADA">Section 44ADA (Professional - Default 50%)</option>
-              </select>
-            </div>
-            <div class="col-md-8">
-              <label class="form-label" for="f-bname">Business / Profession Name</label>
-              <input type="text" class="form-control text-uppercase" id="f-bname" placeholder="e.g. ABC Enterprises / Consultancy (Optional)" />
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="f-nature">Nature of Business / Profession <span class="required-mark">*</span></label>
-              <select class="form-select" id="f-nature" onchange="App.onNatureChange()">
-                <option value="">-- Select --</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label" for="f-bcode">Business / Profession Code</label>
-              <input type="text" class="form-control" id="f-bcode" placeholder="Auto-populated" readonly />
-            </div>
-            <div class="col-md-3">
               <label class="form-label" for="f-regime">Tax Regime</label>
               <select class="form-select" id="f-regime" onchange="App.recalcIncome()">
                 <option value="New" selected>New Regime (Sec 115BAC)</option>
@@ -490,14 +832,10 @@
               </select>
             </div>
           </div>
-          <div class="info-box mt-3" id="sec-info-box">
-            <i class="bi bi-info-circle-fill me-2" aria-hidden="true"></i>
-            <span id="sec-info-text">Under <strong>Section 44AD</strong>, profit is automatically declared at <strong>20%</strong> of turnover. Turnover will be auto-calculated from your declared business income.</span>
-          </div>
         </div>
 
-        <!-- ── Step 3: Bank Details ── -->
-        <div class="wizard-panel" id="step-panel-3" role="tabpanel">
+        <!-- ── Step 4: Bank Details ── -->
+        <div class="wizard-panel" id="step-panel-4" role="tabpanel">
           <h5 class="panel-title"><i class="bi bi-bank2 me-2" aria-hidden="true"></i>Bank Account Details</h5>
           <div id="bank-list" aria-live="polite"></div>
           <button class="btn btn-outline-primary mt-3" onclick="App.addBank()" aria-label="Add another bank account">
@@ -505,22 +843,65 @@
           </button>
         </div>
 
-        <!-- ── Step 4: Income Details ── -->
-        <div class="wizard-panel" id="step-panel-4" role="tabpanel">
+        <!-- ── Step 5: Income Details ── -->
+        <div class="wizard-panel" id="step-panel-5" role="tabpanel">
           <h5 class="panel-title"><i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Income Details</h5>
 
           <div class="row g-3 mb-4">
-            <div class="col-md-6">
-              <label class="form-label fw-bold" for="f-income">Desired Total Annual Income (₹) <span class="required-mark">*</span></label>
+            <div class="col-md-6" id="col-main-income">
+              <!-- Salaried Monthly Net Input (shown in ITR-1 Sahaj) -->
+              <div id="sal-monthly-group" class="mb-3 p-3 rounded border border-success-subtle" style="display:none; background-color: rgba(25, 135, 84, 0.05) !important;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label class="form-label fw-bold mb-0 text-success" for="f-sal-monthly">
+                    <i class="bi bi-calendar-check me-1"></i> Net Monthly Salary (In-Hand / Month) <span class="required-mark">*</span>
+                  </label>
+                  <span class="badge bg-success text-white">Monthly Input</span>
+                </div>
+                <div class="input-group input-group-lg mt-1">
+                  <span class="input-group-text bg-success text-white fw-bold">₹ / mo</span>
+                  <input type="number" class="form-control fw-bold text-success" id="f-sal-monthly" placeholder="e.g. 60000" oninput="App.onMonthlySalaryInput()" aria-label="Net monthly salary in rupees" />
+                </div>
+                <div class="form-text text-muted mt-1 small" id="help-f-sal-monthly">
+                  Enter monthly in-hand net salary. Annual Net Salary (× 12) & Gross Salary u/s 17(1) auto-calculate instantly.
+                </div>
+              </div>
+
+              <label class="form-label fw-bold" for="f-income" id="lbl-f-income">Desired Total Annual Income (₹) <span class="required-mark">*</span></label>
               <div class="input-group input-group-lg">
                 <span class="input-group-text">₹</span>
-                <input type="number" class="form-control" id="f-income" placeholder="e.g. 850000" onchange="App.recalcIncome()" aria-label="Annual income in rupees" />
+                <input type="number" class="form-control" id="f-income" placeholder="e.g. 850000" oninput="App.onMainIncomeInput()" aria-label="Annual income in rupees" />
               </div>
-              <div class="form-text">This is the income that will appear on the final computation.</div>
+              <div class="form-text" id="help-f-income">This is the income that will appear on the final computation.</div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6" id="step-4-business-tds">
               <label class="form-label fw-bold">Deductor / TDS Option</label>
               <div id="f-deductor-container" class="ded-grid" role="group" aria-label="Deductor selection">
+              </div>
+            </div>
+            <div class="col-md-6" id="step-4-salary-tds" style="display:none;">
+              <div class="p-3 rounded border bg-surface-subtle h-100 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <label class="form-label fw-bold mb-0 text-primary" for="f-sal-tds">
+                    <i class="bi bi-shield-check me-1"></i> TDS Deducted on Salary (Form 16)
+                  </label>
+                  <span class="badge bg-primary-subtle text-primary">u/s 192</span>
+                </div>
+                <div class="row g-2 align-items-center">
+                  <div class="col-7">
+                    <div class="input-group input-group-lg">
+                      <span class="input-group-text">₹</span>
+                      <input type="number" class="form-control" id="f-sal-tds" placeholder="e.g. 25000" oninput="App.onSalaryTdsInput()" />
+                    </div>
+                  </div>
+                  <div class="col-5">
+                    <button type="button" class="btn btn-outline-primary btn-sm w-100 py-2" onclick="App.autoMatchSalaryTDS()" title="Auto-match calculated tax liability (Zero tax due)">
+                      <i class="bi bi-magic me-1"></i> Match Tax
+                    </button>
+                  </div>
+                </div>
+                <div class="form-text mt-1 text-muted small">
+                  TDS as per Form 16 / 26AS. If TDS &gt; Tax, excess is claimed as <strong>Refund</strong>.
+                </div>
               </div>
             </div>
           </div>
@@ -532,7 +913,7 @@
                 <div class="itc-icon" aria-hidden="true"><i class="bi bi-piggy-bank-fill"></i></div>
                 <div class="itc-body">
                   <div class="itc-name">Savings Bank Interest</div>
-                  <div class="itc-badge">Mandatory</div>
+                  <div class="itc-badge" id="badge-savings">Mandatory</div>
                 </div>
                 <div class="itc-check" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></div>
               </div>
@@ -542,7 +923,7 @@
                 <div class="itc-icon" aria-hidden="true"><i class="bi bi-briefcase-fill"></i></div>
                 <div class="itc-body">
                   <div class="itc-name">Salary Income (ITR-1)</div>
-                  <div class="itc-badge optional">Optional</div>
+                  <div class="itc-badge optional" id="badge-salary">Optional</div>
                 </div>
                 <div class="itc-check" aria-hidden="true"><i class="bi bi-circle"></i></div>
               </div>
@@ -582,7 +963,7 @@
                 <div class="itc-icon" aria-hidden="true"><i class="bi bi-balance-scale"></i></div>
                 <div class="itc-body">
                   <div class="itc-name">Balance Sheet</div>
-                  <div class="itc-badge">Mandatory</div>
+                  <div class="itc-badge" id="badge-bs">Mandatory</div>
                 </div>
                 <div class="itc-check" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></div>
               </div>
@@ -644,15 +1025,27 @@
           <!-- Live Breakdown -->
           <div class="income-breakdown mt-4" id="income-breakdown" aria-live="polite" aria-label="Live income breakdown">
             <h6 class="breakdown-heading"><i class="bi bi-calculator me-2" aria-hidden="true"></i>Live Income Breakdown</h6>
-            <div class="breakdown-row" id="brk-salary-row" style="display:none">
-              <span>Salary Income (Net of Std Deduction)</span>
-              <span id="brk-salary">₹ 0</span>
+            <div class="breakdown-row text-success fw-bold" id="brk-sal-monthly-row" style="display:none">
+              <span><i class="bi bi-calendar3 me-1"></i>Monthly In-Hand Net Salary</span>
+              <span id="brk-sal-monthly">₹ 0 / mo</span>
             </div>
-            <div class="breakdown-row">
+            <div class="breakdown-row" id="brk-sal-gross-row" style="display:none">
+              <span>Gross Salary u/s 17(1)</span>
+              <span id="brk-sal-gross">₹ 0</span>
+            </div>
+            <div class="breakdown-row text-muted" id="brk-sal-std-row" style="display:none">
+              <span>Less: Standard Deduction u/s 16(ia)</span>
+              <span id="brk-sal-std">- ₹ 0</span>
+            </div>
+            <div class="breakdown-row" id="brk-salary-row" style="display:none">
+              <span>Net Taxable Salary</span>
+              <span id="brk-salary" class="fw-bold">₹ 0</span>
+            </div>
+            <div class="breakdown-row" id="brk-business-row">
               <span>Business Income (44AD / 44ADA)</span>
               <span class="fw-bold" id="brk-business">₹ 0</span>
             </div>
-            <div class="breakdown-row">
+            <div class="breakdown-row" id="brk-savings-row">
               <span>Savings Bank Interest</span>
               <span id="brk-savings">₹ 0</span>
             </div>
@@ -679,8 +1072,8 @@
           </div>
         </div>
 
-        <!-- ── Step 5: Preview & Generate ── -->
-        <div class="wizard-panel" id="step-panel-5" role="tabpanel">
+        <!-- ── Step 6: Preview & Generate ── -->
+        <div class="wizard-panel" id="step-panel-6" role="tabpanel">
           <h5 class="panel-title"><i class="bi bi-eye-fill me-2" aria-hidden="true"></i>Preview &amp; Generate</h5>
 
           <div class="row g-4">

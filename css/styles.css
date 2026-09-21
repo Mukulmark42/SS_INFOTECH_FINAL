@@ -1400,6 +1400,221 @@ body::before {
 
 [data-theme="light"] .wizard-footer { background: rgba(0,0,0,0.02); }
 
+/* ── 13b. ITR FORMAT SELECTION CARDS ──────────────────────── */
+.itr-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.itr-format-card {
+  position: relative;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.itr-format-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transition: var(--transition);
+}
+
+.itr-format-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] .itr-format-card:hover {
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.12);
+}
+
+.itr-format-card.selected {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.09) 0%, rgba(139, 92, 246, 0.04) 100%);
+  box-shadow: 0 0 0 1px var(--primary), 0 8px 28px rgba(99, 102, 241, 0.22);
+}
+
+.itr-format-card.selected::before {
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+}
+
+.itr-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.itr-card-icon-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.itr-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary-light);
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.itr-format-card.selected .itr-card-icon {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+}
+
+.itr-card-code {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.itr-card-alias {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.itr-badge-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.itr-badge-blue   { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+.itr-badge-green  { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.itr-badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+.itr-badge-amber  { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+.itr-badge-teal   { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; border: 1px solid rgba(20, 184, 166, 0.3); }
+.itr-badge-indigo { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+.itr-badge-rose   { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
+
+.itr-card-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.itr-card-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px 0;
+  font-size: 11.8px;
+  color: var(--text);
+}
+
+.itr-card-bullets li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.itr-card-bullets li i {
+  font-size: 11px;
+}
+
+.itr-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.itr-select-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.itr-format-card.selected .itr-select-indicator {
+  color: var(--primary-light);
+  font-weight: 700;
+}
+
+.itr-select-radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: transparent;
+  transition: var(--transition);
+}
+
+.itr-format-card.selected .itr-select-radio {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+
+.active-itr-banner {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="light"] .active-itr-banner {
+  background: rgba(99, 102, 241, 0.05);
+  border-color: rgba(99, 102, 241, 0.22);
+}
+
+.active-itr-banner-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+}
+
 /* ── 14. FORMS ───────────────────────────────────────────────── */
 .form-label {
   font-size: 12.5px;

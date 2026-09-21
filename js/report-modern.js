@@ -226,7 +226,7 @@ const ReportModern = (() => {
   <div style="text-align:center;position:relative;z-index:1;">
     <div class="mrpt-cover-chip">📋 Income Tax Computation</div>&nbsp;
     <div class="mrpt-cover-chip">🗓 AY ${client.ay || ''} &nbsp;|&nbsp; FY ${fy}</div>&nbsp;
-    <div class="mrpt-cover-chip">🏛 ${cfg.regime || 'New'} Tax Regime &nbsp;|&nbsp; Section ${client.presumptiveSection || '44AD'}</div>
+    <div class="mrpt-cover-chip">🏛 ${cfg.regime || 'New'} Tax Regime &nbsp;|&nbsp; ${(c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0 ? 'Form ITR-1 (Sahaj)' : ('Section ' + (client.presumptiveSection || '44AD'))}</div>
   </div>
   <div class="mrpt-cover-mid" style="position:relative;z-index:1;">
     <div class="mrpt-avatar">${initials}</div>
@@ -260,8 +260,8 @@ const ReportModern = (() => {
     <div class="mrpt-stat-lbl">Total Income</div>
   </div>
   <div class="mrpt-stat" style="--sc:#0891b2">
-    <div class="mrpt-stat-val">₹ ${fmtNum(turnover)}</div>
-    <div class="mrpt-stat-lbl">Gross Turnover (${client.presumptiveSection || '44AD'})</div>
+    <div class="mrpt-stat-val">₹ ${fmtNum((c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0 ? c.salaryGross : turnover)}</div>
+    <div class="mrpt-stat-lbl">${(c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0 ? 'Gross Salary (Form 16)' : ('Gross Turnover (' + (client.presumptiveSection || '44AD') + ')')}</div>
   </div>
   <div class="mrpt-stat" style="--sc:#7c3aed">
     <div class="mrpt-stat-val">₹ ${fmtNum(c.totalTaxPayable)}</div>
@@ -285,7 +285,9 @@ const ReportModern = (() => {
     ${_infoCell('Date of Birth',    _formatDate(client.dob))}
     ${_infoCell('Mobile',           client.mobile||'—')}
     ${_infoCell('Email',            client.email||'—')}
-    ${_infoCell('Nature of Biz',    `${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()} [${client.bcode||'0204'}]`)}
+    ${(c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0
+      ? _infoCell('Employer / Sector', `${(client.employerName || 'EMPLOYER (PRIVATE SECTOR)').toUpperCase()}${client.employerCategory ? ' [' + client.employerCategory + ']' : ''}`)
+      : _infoCell('Nature of Biz',    `${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()} [${client.bcode||'0204'}]`)}
     ${_infoCell('Assessment Year',  client.ay||'')}
     ${_infoCell('Ward / Circle',    client.ward||'Ward-1(1)')}
     ${_infoCell('Filed u/s',        client.filing||'139(1)')}
@@ -296,6 +298,7 @@ const ReportModern = (() => {
   <!-- INCOME SUMMARY -->
   <div class="mrpt-section-header"><span class="icon">💰</span> Income Summary</div>
   <div class="mrpt-inc-grid mrpt-keep">
+    ${(c.businessIncome || 0) > 0 ? `
     <div class="mrpt-inc-card ic-biz">
       <div class="mrpt-inc-icon">🏢</div>
       <div>
@@ -303,15 +306,7 @@ const ReportModern = (() => {
         <div class="mrpt-inc-amt">₹ ${fmtNum(c.businessIncome)}</div>
         <div class="mrpt-inc-sub">Turnover ₹${fmtNum(turnover)} @ ${profitPct}%</div>
       </div>
-    </div>
-    <div class="mrpt-inc-card ic-int">
-      <div class="mrpt-inc-icon">🏦</div>
-      <div>
-        <div class="mrpt-inc-lbl">Savings Bank Interest (Other Sources)</div>
-        <div class="mrpt-inc-amt">₹ ${fmtNum(c.savingsInterest)}</div>
-        <div class="mrpt-inc-sub">From ${(banks||[]).length} bank account(s)</div>
-      </div>
-    </div>
+    </div>` : ''}
     ${(c.salaryGross || 0) > 0 ? `
     <div class="mrpt-inc-card" style="background:#f0fdf4;border-left:4px solid #16a34a;">
       <div class="mrpt-inc-icon">💼</div>
@@ -319,6 +314,15 @@ const ReportModern = (() => {
         <div class="mrpt-inc-lbl">Salary Income (ITR-1)</div>
         <div class="mrpt-inc-amt">₹ ${fmtNum(c.netSalary)}</div>
         <div class="mrpt-inc-sub">Gross ₹${fmtNum(c.salaryGross)} – Std Ded ₹${fmtNum(c.salaryStdDeduction)}</div>
+      </div>
+    </div>` : ''}
+    ${(c.savingsInterest || 0) > 0 ? `
+    <div class="mrpt-inc-card ic-int">
+      <div class="mrpt-inc-icon">🏦</div>
+      <div>
+        <div class="mrpt-inc-lbl">Savings Bank Interest (Other Sources)</div>
+        <div class="mrpt-inc-amt">₹ ${fmtNum(c.savingsInterest)}</div>
+        <div class="mrpt-inc-sub">From ${(banks||[]).length} bank account(s)</div>
       </div>
     </div>` : ''}
     ${hasSTCG ? `
@@ -431,6 +435,7 @@ const ReportModern = (() => {
     </div>
   </div>
 
+  ${(c.businessIncome || 0) > 0 ? `
   <!-- PROFIT & LOSS STATEMENT -->
   <div class="mrpt-section-header mrpt-keep"><span class="icon">📊</span> Profit &amp; Loss Statement (Estimated u/s ${client.presumptiveSection || '44AD'})</div>
   <div class="mrpt-keep">
@@ -493,6 +498,7 @@ const ReportModern = (() => {
   </table>
   </div>`;
   })()}
+  ` : ''}
 
   <!-- TDS TABLE -->
   <div class="mrpt-section-header"><span class="icon">📋</span> TDS Deducted at Source — Form 26AS</div>
@@ -617,6 +623,7 @@ const ReportModern = (() => {
 
   function _sectionName(s) {
     const m = {
+      '192':  'Salary / Employment (Form 16)',
       '194C': 'Contractor / Courier',
       '194H': 'Commission / Brokerage',
       '194J': 'Professional / Technical Services',

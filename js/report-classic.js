@@ -37,6 +37,7 @@ const ReportClassic = (() => {
     const hasSTCG     = c.stcg > 0;
     const hasPL       = c.pl   > 0;
     const tds194J     = tds.tds194J || 0;
+    const isSalaried  = !!(client.isSalaried || client.formNumber === 'ITR-1' || ((c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0));
 
     // ─── Section head helper ──────────────────────────────────
     const secTitle = (t) => `<div class="rpt-section"><div class="rpt-section-title">${t}</div></div>`;
@@ -139,9 +140,9 @@ const ReportClassic = (() => {
     <td>${client.mobile || ''}</td>
   </tr>
   <tr>
-    <td class="lbl">Nature of Business</td>
+    <td class="lbl">${(c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0 ? 'Employer / Sector' : 'Nature of Business'}</td>
     <td>:</td>
-    <td>${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()} [Code: ${client.bcode || '0204'}]</td>
+    <td>${(c.salaryGross || 0) > 0 && (c.businessIncome || 0) <= 0 ? ((client.employerName || 'EMPLOYER (PRIVATE SECTOR)').toUpperCase() + (client.employerCategory ? ' [' + client.employerCategory + ']' : '')) : (((client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : '') + ((client.nature || 'Retail Trade').toUpperCase()) + ' [Code: ' + (client.bcode || '0204') + ']')}</td>
     <td class="lbl">Email</td>
     <td>:</td>
     <td>${client.email || ''}</td>
@@ -166,7 +167,7 @@ ${secTitle('CHAPTER IV-A &nbsp; SALARIES')}
 </div>
 ` : ''}
 
-${(c.businessIncome || 0) > 0 || !((c.salaryGross || 0) > 0) ? `
+${(c.businessIncome || 0) > 0 ? `
 ${secTitle('CHAPTER IV-D &nbsp; PROFITS &amp; GAINS OF BUSINESS / PROFESSION [SECTION ' + (client.presumptiveSection || '44AD') + ']')}
 <div style="padding:2px 0 4px 8px;">
   ${line(`Net Profit from ${(client.bname || '').toUpperCase() ? (client.bname || '').toUpperCase() + ' - ' : ''}${(client.nature || 'Retail Trade').toUpperCase()} [Code: ${client.bcode || '0204'}]`, fmtNum(c.businessIncome))}
@@ -227,6 +228,7 @@ ${secTitle('COMPUTATION OF TAX LIABILITY')}
   </div>
 </div>
 
+${(c.businessIncome || 0) > 0 ? `
 <!-- ANNEXURE: PROFIT & LOSS STATEMENT -->
 <div style="margin-top:12px;">
 ${secTitle('PROFIT &amp; LOSS STATEMENT (Estimated u/s ' + (client.presumptiveSection || '44AD') + ')')}
@@ -298,11 +300,13 @@ ${(() => {
 </table>`;
 })()}
 </div>
+` : ''}
 
 <!-- ════════════════ PAGE 2 ════════════════ -->
 ${pb()}
 <div style="text-align:center; font-weight:700; font-size:12px; text-decoration:underline; margin-bottom:8px;">SCHEDULES &amp; ANNEXURES</div>
 
+${(c.businessIncome || 0) > 0 ? `
 <!-- ANNEXURE A: Presumptive Statement -->
 ${secTitle('ANNEXURE A &nbsp; STATEMENT UNDER SECTION ' + (client.presumptiveSection || '44AD') + ' – TURNOVER &amp; PROFIT')}
 <table class="rpt-table">
@@ -332,6 +336,7 @@ ${secTitle('ANNEXURE A &nbsp; STATEMENT UNDER SECTION ' + (client.presumptiveSec
     </tr>
   </tbody>
 </table>
+` : ''}
 
 <!-- ANNEXURE B: Bank Account Details -->
 <div style="margin-top:8px;">
@@ -430,6 +435,7 @@ ${secTitle('ANNEXURE E &nbsp; HEAD-WISE TDS SECTION SUMMARY')}
     <tr><th>TDS Section</th><th>Nature of Payment</th><th style="text-align:right">No. of Entries</th><th style="text-align:right">TDS Amount (₹)</th></tr>
   </thead>
   <tbody>
+    ${(isSalaried || (c.salaryGross || 0) > 0 || (tds.tds192 || 0) > 0) ? `<tr><td>192</td><td>Salary / Employment (Form 16)</td><td class="num">${(tds.entries||[]).filter(e=>e.section==='192').length || 1}</td><td class="num">${fmtNum(tds.tds192 || 0)}</td></tr>` : ''}
     ${tds.tds194H > 0 ? `<tr><td>194H</td><td>Commission or Brokerage</td><td class="num">${(tds.entries||[]).filter(e=>e.section==='194H').length}</td><td class="num">${fmtNum(tds.tds194H)}</td></tr>` : ''}
     ${tds.tds194C > 0 ? `<tr><td>194C</td><td>Payment to Contractor / Courier</td><td class="num">${(tds.entries||[]).filter(e=>e.section==='194C').length}</td><td class="num">${fmtNum(tds.tds194C)}</td></tr>` : ''}
     ${tds194J > 0     ? `<tr><td>194J</td><td>Professional / Technical Services</td><td class="num">${(tds.entries||[]).filter(e=>e.section==='194J').length}</td><td class="num">${fmtNum(tds194J)}</td></tr>` : ''}

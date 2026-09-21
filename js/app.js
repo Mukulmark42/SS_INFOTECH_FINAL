@@ -10,7 +10,7 @@ const App = (() => {
 
   // ── State ──────────────────────────────────────────────────
   let currentStep   = 1;
-  const TOTAL_STEPS = 5;
+  const TOTAL_STEPS = 6;
   let banks         = [];
   let selectedIncome = { savings: true, salary: false, stcg: false, ltcg: false, pl: false, bs: true, deductions: false };
   let currentClientTab = 'active';
@@ -683,8 +683,68 @@ const App = (() => {
     _renderBanks();
     _renderIncomeInputs();
     _renderBalanceSheet();
-    _goToStep(1);
     _clearForm();
+    const fn = document.getElementById('f-form-no');
+    if (fn) fn.value = 'ITR-4';
+    _syncItrCards('ITR-4');
+    onFormNumberChange();
+    _goToStep(1);
+  }
+
+  function selectItrFormat(code, autoProceed = false) {
+    if (!code) return;
+    const fn = document.getElementById('f-form-no');
+    if (fn) fn.value = code;
+    onFormNumberChange();
+    _syncItrCards(code);
+    if (autoProceed) {
+      nextStep();
+    }
+  }
+
+  function _syncItrCards(activeCode) {
+    const code = activeCode || _v('f-form-no') || 'ITR-4';
+    const cards = document.querySelectorAll('.itr-format-card');
+    cards.forEach(card => {
+      const c = card.dataset.itr;
+      const isSelected = (c === code);
+      card.classList.toggle('selected', isSelected);
+      const textEl = card.querySelector('.itr-select-text');
+      const btnEl = card.querySelector('.itr-card-footer .btn');
+      if (textEl) {
+        textEl.textContent = isSelected ? 'Selected (Active)' : `Select ${c}`;
+      }
+      if (btnEl) {
+        if (isSelected) {
+          btnEl.className = 'btn btn-sm btn-primary';
+          btnEl.innerHTML = 'Fill Details &rarr;';
+        } else {
+          btnEl.className = 'btn btn-sm btn-outline-primary';
+          btnEl.innerHTML = 'Select &amp; Fill Details &rarr;';
+        }
+      }
+    });
+
+    // Update active banner in Step 2 (Customer Details)
+    const codeEl = document.getElementById('active-itr-banner-code');
+    const titleEl = document.getElementById('active-itr-banner-title');
+    const subEl = document.getElementById('active-itr-banner-sub');
+    const iconEl = document.getElementById('active-itr-banner-icon');
+
+    const meta = {
+      'ITR-1': { title: 'SAHAJ (Salaried & Pension Income)', sub: 'For resident individuals with salary, single property, and other sources (Form 16).', icon: 'bi-person-badge-fill' },
+      'ITR-4': { title: 'SUGAM (Presumptive Business / Profession)', sub: 'Applicable for Section 44AD / 44ADA / 44AE presumptive taxpayers.', icon: 'bi-briefcase-fill' },
+      'ITR-2': { title: 'ITR-2 (Capital Gains & Multiple Properties)', sub: 'For capital gains, multiple house properties, and foreign assets without business.', icon: 'bi-graph-up-arrow' },
+      'ITR-3': { title: 'ITR-3 (Proprietary Business & Audit)', sub: 'For proprietary business with books of accounts, P&L, balance sheet, or Tax Audit.', icon: 'bi-calculator-fill' },
+      'ITR-5': { title: 'ITR-5 (LLP & Partnership Firm)', sub: 'For Partnership Firms, Limited Liability Partnerships (LLPs), AOPs, and BOIs.', icon: 'bi-people-fill' },
+      'ITR-6': { title: 'ITR-6 (Companies)', sub: 'For Private Limited and Public Limited Companies registered under Companies Act.', icon: 'bi-building-fill' },
+      'ITR-7': { title: 'ITR-7 (Trusts & Institutions)', sub: 'For Charitable / Religious Trusts, Political Parties, Colleges, and NGOs.', icon: 'bi-bank2' }
+    }[code] || { title: code, sub: 'Selected Income Tax Return Format', icon: 'bi-file-earmark-check-fill' };
+
+    if (codeEl) codeEl.textContent = code;
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subEl) subEl.textContent = meta.sub;
+    if (iconEl) iconEl.className = `bi ${meta.icon}`;
   }
 
   function nextStep() {
@@ -703,6 +763,14 @@ const App = (() => {
   }
 
   function _goToStep(step) {
+    if (step > currentStep) {
+      // Validate intermediate steps before jumping forward
+      for (let s = currentStep; s < step; s++) {
+        if (!_validateStep(s)) return;
+      }
+    }
+    currentStep = step;
+
     document.querySelectorAll('.wizard-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.step').forEach(s => {
       const n = parseInt(s.dataset.step);
@@ -713,23 +781,38 @@ const App = (() => {
     const panel = document.getElementById(`step-panel-${step}`);
     if (panel) panel.classList.add('active');
 
-    document.getElementById('btnPrev').style.display = step > 1 ? 'inline-flex' : 'none';
+    const btnPrev = document.getElementById('btnPrev');
+    if (btnPrev) btnPrev.style.display = step > 1 ? 'inline-flex' : 'none';
+
     const btnNext = document.getElementById('btnNext');
-    btnNext.textContent = step === TOTAL_STEPS ? '' : 'Next ›';
-    if (step === TOTAL_STEPS) {
-      btnNext.innerHTML = '';
-      btnNext.style.display = 'none';
-      _buildPreview();
-    } else {
-      btnNext.style.display = 'inline-flex';
+    if (btnNext) {
+      if (step === 1) {
+        btnNext.innerHTML = 'Proceed to Customer Details <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>';
+        btnNext.style.display = 'inline-flex';
+      } else if (step === TOTAL_STEPS) {
+        btnNext.innerHTML = '';
+        btnNext.style.display = 'none';
+        _buildPreview();
+      } else {
+        btnNext.innerHTML = 'Next <i class="bi bi-chevron-right ms-1" aria-hidden="true"></i>';
+        btnNext.style.display = 'inline-flex';
+      }
     }
 
-    if (step === 4) recalcIncome();
+    if (step === 5) recalcIncome();
   }
 
   function _validateStep(step) {
     const errs = [];
     if (step === 1) {
+      const formNo = _v('f-form-no');
+      if (!formNo) {
+        alert('Please select an ITR Return Format to proceed.');
+        return false;
+      }
+      return true;
+    }
+    if (step === 2) {
       if (!_v('f-name'))   errs.push('Full Name');
       if (!_v('f-pan'))    errs.push('PAN');
       if (!_v('f-mobile')) errs.push('Mobile Number');
@@ -738,10 +821,18 @@ const App = (() => {
       const pan = _v('f-pan');
       if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(pan)) { alert('Invalid PAN format! Example: ABCDE1234F'); return false; }
     }
-    if (step === 2) {
-      if (!_v('f-nature')) { alert('Please select Nature of Business'); return false; }
-    }
     if (step === 3) {
+      const isSalaried = _v('f-form-no') === 'ITR-1';
+      if (isSalaried) {
+        if (!_v('f-emp-name')) {
+          const el = document.getElementById('f-emp-name');
+          if (el) el.value = 'EMPLOYER (PRIVATE SECTOR)';
+        }
+      } else {
+        if (!_v('f-nature')) { alert('Please select Nature of Business'); return false; }
+      }
+    }
+    if (step === 4) {
       _syncBanks(); // Read DOM input values into banks array before validating
       const missing = banks.map((b, i) => {
         const errs = [];
@@ -755,7 +846,8 @@ const App = (() => {
         return false;
       }
     }
-    if (step === 4) {
+    if (step === 5) {
+      const isSalaried  = _v('f-form-no') === 'ITR-1';
       const salaryGross = parseFloat(_v('f-sal-gross')) || parseFloat(_v('f-salary-gross')) || 0;
       const total       = parseFloat(_v('f-income')) || 0;
       const stcg        = parseFloat(_v('f-stcg')) || 0;
@@ -765,7 +857,9 @@ const App = (() => {
         alert('Please enter desired total annual income or salary details');
         return false;
       }
-      if (total <= 0 && salaryGross > 0) {
+      if (isSalaried && salaryGross > 0 && total <= 0) {
+        _setVal('f-income', salaryGross);
+      } else if (total <= 0 && salaryGross > 0) {
         _setVal('f-income', salaryGross);
       }
     }
@@ -774,11 +868,11 @@ const App = (() => {
 
   function _v(id) {
     const el = document.getElementById(id);
-    return el ? el.value.trim() : '';
+    return el ? String(el.value !== undefined && el.value !== null ? el.value : '').trim() : '';
   }
 
   function _clearForm() {
-    ['f-name','f-father','f-pan','f-dob','f-mobile','f-email','f-address','f-ward','f-income','f-bname'].forEach(id => {
+    ['f-name','f-father','f-pan','f-dob','f-mobile','f-email','f-address','f-ward','f-income','f-sal-monthly','f-bname','f-emp-name','f-emp-tan','f-sal-gross','f-sal-ptax','f-sal-hra','f-sal-tds','f-sal-tds-sub'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -788,6 +882,7 @@ const App = (() => {
     const f = document.getElementById('f-filing'); if (f) f.value = '139(1)';
     const n = document.getElementById('f-nature'); if (n) n.value = '';
     const bc= document.getElementById('f-bcode'); if (bc) bc.value = '';
+    const ec= document.getElementById('f-emp-cat'); if (ec) ec.value = 'Private';
   }
 
   // ── AIS / TIS / 26AS JSON Import ──────────────────────────
@@ -883,7 +978,18 @@ const App = (() => {
         if (chk) chk.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
       }
       _renderIncomeInputs();
+      _setVal('f-sal-gross', salary);
       _setVal('f-salary-gross', salary);
+      if (_v('f-form-no') === 'ITR-1') {
+        const ay = _v('f-ay') || '2026-27';
+        const regime = _v('f-regime') || 'New';
+        const isOld = regime.toLowerCase() === 'old';
+        const cfg = (typeof TaxEngine !== 'undefined') ? TaxEngine.getConfig(ay, { regime }) : {};
+        const stdDed = Math.min(salary, cfg.stdDeduction || (isOld ? 50000 : 75000));
+        const netSal = Math.max(0, Math.round(salary - stdDed));
+        _setVal('f-income', netSal);
+        _setVal('f-sal-monthly', Math.round(netSal / 12));
+      }
     }
 
     // 9. Savings Bank Interest
@@ -952,9 +1058,145 @@ const App = (() => {
   // ── Nature of Business ─────────────────────────────────────
   function onNatureChange() {
     const sel = document.getElementById('f-nature');
+    if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
-    const code = opt.dataset.code || '';
-    document.getElementById('f-bcode').value = code;
+    const code = opt ? (opt.dataset.code || '') : '';
+    const bcodeEl = document.getElementById('f-bcode');
+    if (bcodeEl) bcodeEl.value = code;
+  }
+
+  // ── Form Number / Persona Change ───────────────────────────
+  function onFormNumberChange() {
+    const formNo = _v('f-form-no') || 'ITR-4';
+    const isSalaried = formNo === 'ITR-1';
+
+    // Step 3 indicator label in wizard header
+    const stepLbl3 = document.getElementById('step-lbl-3') || document.getElementById('step-lbl-2');
+    if (stepLbl3) stepLbl3.textContent = isSalaried ? 'Employment' : 'Business';
+
+    // Step 3 panel header & fields
+    const titleText = document.getElementById('step-2-title-text');
+    const titleIcon = document.getElementById('step-2-icon');
+    const secSub    = document.getElementById('panel-sec-sub');
+    const salFields = document.getElementById('step-2-salary-fields');
+    const bizFields = document.getElementById('step-2-business-fields');
+
+    if (isSalaried) {
+      if (titleText) titleText.textContent = 'Employer & Employment Details';
+      if (titleIcon) titleIcon.className = 'bi bi-buildings-fill me-2';
+      if (secSub) secSub.textContent = '(Form 16 / Salary Income)';
+      if (salFields) salFields.style.display = 'block';
+      if (bizFields) bizFields.style.display = 'none';
+
+      // Step 5 panels & labels for Salaried
+      const step4BizTds  = document.getElementById('step-4-business-tds');
+      const step4SalTds  = document.getElementById('step-4-salary-tds');
+      const salMoGroup   = document.getElementById('sal-monthly-group');
+      const lblIncome    = document.getElementById('lbl-f-income');
+      const helpIncome   = document.getElementById('help-f-income');
+      const badgeSavings = document.getElementById('badge-savings');
+
+      if (step4BizTds)  step4BizTds.style.display = 'none';
+      if (step4SalTds)  step4SalTds.style.display = 'block';
+      if (salMoGroup)   salMoGroup.style.display = 'block';
+      if (lblIncome)    lblIncome.innerHTML = '<i class="bi bi-wallet2 me-1 text-primary"></i> Annual Net Taxable Salary (₹ / Year) <span class="required-mark">*</span>';
+      if (helpIncome)   helpIncome.textContent = 'Auto-calculated as Monthly Net Salary × 12. Standard deduction & tax slabs apply on this annual figure.';
+      const incInputSal = document.getElementById('f-income');
+      if (incInputSal) incInputSal.placeholder = 'e.g. 720000 (Annual Net)';
+
+      // Sync monthly <-> annual if one exists
+      const rawAnn = parseFloat(_v('f-income')) || 0;
+      const rawMo = parseFloat(_v('f-sal-monthly')) || 0;
+      if (rawMo > 0 && rawAnn <= 0) {
+        _setVal('f-income', Math.round(rawMo * 12));
+      } else if (rawAnn > 0 && rawMo <= 0) {
+        _setVal('f-sal-monthly', Math.round(rawAnn / 12));
+      }
+
+      if (badgeSavings) {
+        badgeSavings.textContent = 'Optional';
+        badgeSavings.className = 'itc-badge optional';
+      }
+
+      // Auto-configure income toggles for ITR-1
+      selectedIncome.salary = true;
+      selectedIncome.bs = false; // Balance sheet not applicable in ITR-1
+
+      const salCard = document.getElementById('toggle-salary');
+      if (salCard) {
+        salCard.classList.add('selected');
+        const chk = salCard.querySelector('.itc-check');
+        if (chk) chk.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+      }
+
+      const badgeSalary = document.getElementById('badge-salary');
+      if (badgeSalary) {
+        badgeSalary.textContent = 'Mandatory';
+        badgeSalary.className = 'itc-badge';
+      }
+
+      const bsCard = document.getElementById('toggle-bs');
+      if (bsCard) {
+        bsCard.classList.remove('selected');
+        const chk = bsCard.querySelector('.itc-check');
+        if (chk) chk.innerHTML = '<i class="bi bi-circle"></i>';
+        const badge = document.getElementById('badge-bs');
+        if (badge) {
+          badge.textContent = 'Optional';
+          badge.className = 'itc-badge optional';
+        }
+      }
+    } else {
+      if (titleText) titleText.textContent = 'Business / Profession Details';
+      if (titleIcon) titleIcon.className = 'bi bi-briefcase-fill me-2';
+      if (secSub) secSub.textContent = '(Section 44AD / 44ADA)';
+      if (salFields) salFields.style.display = 'none';
+      if (bizFields) bizFields.style.display = 'block';
+
+      // Step 5 panels & labels for Business
+      const step4BizTds  = document.getElementById('step-4-business-tds');
+      const step4SalTds  = document.getElementById('step-4-salary-tds');
+      const salMoGroup   = document.getElementById('sal-monthly-group');
+      const lblIncome    = document.getElementById('lbl-f-income');
+      const helpIncome   = document.getElementById('help-f-income');
+      const badgeSavings = document.getElementById('badge-savings');
+      const badgeSalary = document.getElementById('badge-salary');
+
+      if (step4BizTds)  step4BizTds.style.display = 'block';
+      if (step4SalTds)  step4SalTds.style.display = 'none';
+      if (salMoGroup)   salMoGroup.style.display = 'none';
+      if (lblIncome)    lblIncome.innerHTML = 'Desired Total Annual Income (₹) <span class="required-mark">*</span>';
+      if (helpIncome)   helpIncome.textContent = 'This is the income that will appear on the final computation.';
+      const incInputBiz = document.getElementById('f-income');
+      if (incInputBiz) incInputBiz.placeholder = 'e.g. 850000';
+      if (badgeSavings) {
+        badgeSavings.textContent = 'Mandatory';
+        badgeSavings.className = 'itc-badge';
+      }
+      if (badgeSalary) {
+        badgeSalary.textContent = 'Optional';
+        badgeSalary.className = 'itc-badge optional';
+      }
+
+      // Reset balance sheet to mandatory for ITR-4
+      selectedIncome.bs = true;
+      const bsCard = document.getElementById('toggle-bs');
+      if (bsCard) {
+        bsCard.classList.add('selected');
+        const chk = bsCard.querySelector('.itc-check');
+        if (chk) chk.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+        const badge = document.getElementById('badge-bs');
+        if (badge) {
+          badge.textContent = 'Mandatory';
+          badge.className = 'itc-badge';
+        }
+      }
+    }
+
+    _renderIncomeInputs();
+    _renderBalanceSheet();
+    recalcIncome();
+    _syncItrCards(formNo);
   }
 
   // ── Deductors ──────────────────────────────────────────────
@@ -1083,8 +1325,10 @@ const App = (() => {
 
   // ── Income ─────────────────────────────────────────────────
   function toggleIncome(type) {
-    if (type === 'savings') return; // Mandatory, cannot toggle
-    if (type === 'bs') return; // Mandatory, cannot toggle
+    const isSalaried = _v('f-form-no') === 'ITR-1';
+    if (type === 'savings' && !isSalaried) return; // Mandatory for business, can toggle for salary
+    if (type === 'bs' && !isSalaried) return; // Mandatory for business, can toggle for salary
+    if (type === 'salary' && isSalaried) return; // Salary is mandatory for ITR-1, cannot toggle off
     selectedIncome[type] = !selectedIncome[type];
     const card = document.getElementById(`toggle-${type}`);
     if (card) {
@@ -1105,9 +1349,13 @@ const App = (() => {
     const container = document.getElementById('income-inputs');
     if (!container) return;
 
-    // Always mark savings as selected
+    const isSal = _v('f-form-no') === 'ITR-1';
     const savCard = document.getElementById('toggle-savings');
-    if (savCard) savCard.classList.add('selected');
+    if (savCard) {
+      savCard.classList.toggle('selected', !!selectedIncome.savings);
+      const chk = savCard.querySelector('.itc-check');
+      if (chk) chk.innerHTML = selectedIncome.savings ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-circle"></i>';
+    }
 
     let html = '';
     if (selectedIncome.savings) {
@@ -1117,9 +1365,9 @@ const App = (() => {
             <label class="form-label">Savings Bank Interest (₹)</label>
             <div class="input-group">
               <span class="input-group-text">₹</span>
-              <input type="number" class="form-control" id="f-savings" placeholder="Leave blank to auto-generate" oninput="App.recalcIncome()" />
+              <input type="number" class="form-control" id="f-savings" placeholder="Leave blank for auto / nil" oninput="App.recalcIncome()" />
             </div>
-            <div class="form-text">Auto-generated if left blank based on total income</div>
+            <div class="form-text">Auto-generated for business; enter actual or leave blank for salaried</div>
           </div>
         </div>
       `;
@@ -1127,31 +1375,76 @@ const App = (() => {
     if (selectedIncome.salary) {
       html += `
         <div class="p-3 mb-3 border rounded bg-surface-subtle">
-          <h6 class="fw-bold mb-2 text-primary"><i class="bi bi-briefcase-fill me-1"></i> Salary Income Details (ITR-1 Sahaj Mode)</h6>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-briefcase-fill me-1"></i> Salary Income Details (ITR-1 Sahaj Mode)</h6>
+            <span class="badge bg-success-subtle text-success">Form 16 Part B</span>
+          </div>
           <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">Gross Salary (₹)</label>
+            <div class="col-md-3">
+              <label class="form-label fw-bold">Gross Salary u/s 17(1) (₹)</label>
               <div class="input-group">
                 <span class="input-group-text">₹</span>
-                <input type="number" class="form-control" id="f-sal-gross" placeholder="e.g. 750000" oninput="App.recalcIncome()" />
+                <input type="number" class="form-control" id="f-sal-gross" placeholder="e.g. 775000" oninput="App.onSalaryGrossInput()" />
               </div>
+              <div class="form-text text-muted" style="font-size:0.75rem;">Auto = Net + Std Ded (₹75k/₹50k) + P-Tax. Edit directly if using Form 16.</div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <label class="form-label">Professional Tax (₹)</label>
               <div class="input-group">
                 <span class="input-group-text">₹</span>
                 <input type="number" class="form-control" id="f-sal-ptax" placeholder="e.g. 2400" oninput="App.recalcIncome()" />
               </div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">HRA Exemption (Old Regime) (₹)</label>
+            <div class="col-md-3">
+              <label class="form-label">HRA Received (₹)</label>
               <div class="input-group">
                 <span class="input-group-text">₹</span>
                 <input type="number" class="form-control" id="f-sal-hra" placeholder="e.g. 60000" oninput="App.recalcIncome()" />
               </div>
             </div>
+            <div class="col-md-3">
+              <label class="form-label">TDS on Salary (u/s 192) (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-sal-tds-sub" placeholder="e.g. 25000" oninput="App.onSalaryTdsSubInput()" />
+              </div>
+            </div>
           </div>
-          <div class="form-text mt-1 text-muted">Standard Deduction of ₹75,000 (New Regime AY 25-26/26-27) or ₹50,000 (Old Regime) is automatically subtracted.</div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-3">
+              <label class="form-label">Work Location (for HRA)</label>
+              <select class="form-select" id="f-sal-hra-metro" onchange="App.recalcIncome()">
+                <option value="metro">Metro City (50%)</option>
+                <option value="non-metro" selected>Non-Metro (40%)</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Rent Paid Annually (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-sal-rent" placeholder="e.g. 180000" oninput="App.recalcIncome()" />
+              </div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Employer NPS (80CCD-2) (₹)</label>
+              <div class="input-group">
+                <span class="input-group-text">₹</span>
+                <input type="number" class="form-control" id="f-sal-80ccd2" placeholder="e.g. 50000" oninput="App.recalcIncome()" />
+              </div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Employer Category</label>
+              <select class="form-select" id="f-sal-emp-cat" onchange="App.recalcIncome()">
+                <option value="Private" selected>Private / Corporate</option>
+                <option value="Central Govt">Central Government</option>
+                <option value="State Govt">State Government</option>
+                <option value="PSU">PSU</option>
+                <option value="Pensioners">Pensioners</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-text mt-1 text-muted">Standard Deduction of ₹75,000 (New Regime AY 25-26/26-27) or ₹50,000 (Old Regime) is auto-applied. HRA exemption (Old Regime): Min of Actual HRA, 50%/40% of Salary, Rent - 10% Salary. 80CCD(2) (New Regime): Up to 10% of Salary (14% for Central Govt).</div>
         </div>
       `;
     }
@@ -1237,11 +1530,151 @@ const App = (() => {
       `;
     }
     container.innerHTML = html;
+
+    // Restore or sync current values into dynamically created inputs
+    if (selectedIncome.salary) {
+      const isSalaried = _v('f-form-no') === 'ITR-1';
+      const topInc = parseFloat(_v('f-income')) || 0;
+      const elGross = document.getElementById('f-sal-gross');
+      if (elGross && !elGross.value && topInc > 0) {
+        if (isSalaried) {
+          const ay = _v('f-ay') || '2026-27';
+          const regime = _v('f-regime') || 'New';
+          const isOld = regime.toLowerCase() === 'old';
+          const cfg = (typeof TaxEngine !== 'undefined') ? TaxEngine.getConfig(ay, { regime }) : {};
+          const stdDed = cfg.stdDeduction || (isOld ? 50000 : 75000);
+          const salaryPtax = parseFloat(_v('f-sal-ptax')) || 0;
+          const salaryHra = isOld ? (parseFloat(_v('f-sal-hra')) || 0) : 0;
+          elGross.value = Math.round(topInc + stdDed + salaryPtax + salaryHra);
+        } else {
+          elGross.value = topInc;
+        }
+      }
+
+      const topTds = _v('f-sal-tds');
+      const elTdsSub = document.getElementById('f-sal-tds-sub');
+      if (elTdsSub && topTds && !elTdsSub.value) elTdsSub.value = topTds;
+    }
+  }
+
+  function onMonthlySalaryInput() {
+    const isSalaried = _v('f-form-no') === 'ITR-1';
+    if (isSalaried) {
+      const rawMonthly = document.getElementById('f-sal-monthly')?.value;
+      const elIncome = document.getElementById('f-income');
+      const elGross = document.getElementById('f-sal-gross');
+      if (rawMonthly !== undefined && rawMonthly !== '' && !isNaN(rawMonthly)) {
+        const monthlyVal = parseFloat(rawMonthly) || 0;
+        const annualNet = monthlyVal > 0 ? Math.round(monthlyVal * 12) : 0;
+        if (elIncome && elIncome.value !== String(annualNet)) elIncome.value = annualNet ? annualNet : '';
+
+        const ay = _v('f-ay') || '2026-27';
+        const taxRegime = _v('f-regime') || 'New';
+        const isOld = taxRegime.toLowerCase() === 'old';
+        const cfg = (typeof TaxEngine !== 'undefined') ? TaxEngine.getConfig(ay, { regime: taxRegime }) : {};
+        const stdDed = cfg.stdDeduction || (isOld ? 50000 : 75000);
+        const salaryPtax = parseFloat(_v('f-sal-ptax')) || 0;
+        const salaryHra = isOld ? (parseFloat(_v('f-sal-hra')) || 0) : 0;
+        const grossVal = annualNet > 0 ? Math.round(annualNet + stdDed + salaryPtax + salaryHra) : '';
+        if (elGross && elGross.value !== String(grossVal)) elGross.value = grossVal;
+      } else {
+        if (elIncome) elIncome.value = '';
+        if (elGross) elGross.value = '';
+      }
+    }
+    recalcIncome();
+  }
+
+  function onMainIncomeInput() {
+    const isSalaried = _v('f-form-no') === 'ITR-1';
+    if (isSalaried) {
+      const rawNet = document.getElementById('f-income')?.value;
+      const elSal = document.getElementById('f-sal-gross');
+      const elMonthly = document.getElementById('f-sal-monthly');
+      if (rawNet !== undefined && rawNet !== '' && !isNaN(rawNet)) {
+        const netVal = parseFloat(rawNet) || 0;
+        if (elMonthly) {
+          const monthlyVal = netVal > 0 ? Math.round(netVal / 12) : '';
+          if (elMonthly.value !== String(monthlyVal)) elMonthly.value = monthlyVal;
+        }
+        if (elSal) {
+          const ay = _v('f-ay') || '2026-27';
+          const taxRegime = _v('f-regime') || 'New';
+          const isOld = taxRegime.toLowerCase() === 'old';
+          const cfg = (typeof TaxEngine !== 'undefined') ? TaxEngine.getConfig(ay, { regime: taxRegime }) : {};
+          const stdDed = cfg.stdDeduction || (isOld ? 50000 : 75000);
+          const salaryPtax = parseFloat(_v('f-sal-ptax')) || 0;
+          const salaryHra = isOld ? (parseFloat(_v('f-sal-hra')) || 0) : 0;
+          const grossVal = netVal > 0 ? Math.round(netVal + stdDed + salaryPtax + salaryHra) : '';
+          if (elSal.value !== String(grossVal)) elSal.value = grossVal;
+        }
+      } else {
+        if (elMonthly) elMonthly.value = '';
+        if (elSal) elSal.value = '';
+      }
+    }
+    recalcIncome();
+  }
+
+  function onSalaryGrossInput() {
+    const isSalaried = _v('f-form-no') === 'ITR-1';
+    if (isSalaried) {
+      const rawGross = document.getElementById('f-sal-gross')?.value;
+      const elInc = document.getElementById('f-income');
+      const elMonthly = document.getElementById('f-sal-monthly');
+      if (rawGross !== undefined && rawGross !== '' && !isNaN(rawGross)) {
+        const grossVal = parseFloat(rawGross) || 0;
+        const ay = _v('f-ay') || '2026-27';
+        const taxRegime = _v('f-regime') || 'New';
+        const isOld = taxRegime.toLowerCase() === 'old';
+        const cfg = (typeof TaxEngine !== 'undefined') ? TaxEngine.getConfig(ay, { regime: taxRegime }) : {};
+        const stdDed = Math.min(grossVal, cfg.stdDeduction || (isOld ? 50000 : 75000));
+        const salaryPtax = parseFloat(_v('f-sal-ptax')) || 0;
+        const salaryHra = isOld ? (parseFloat(_v('f-sal-hra')) || 0) : 0;
+        const netVal = Math.max(0, Math.round(grossVal - stdDed - salaryPtax - salaryHra));
+        if (elInc && elInc.value !== String(netVal)) elInc.value = netVal;
+        if (elMonthly) {
+          const monthlyVal = (grossVal > 0 && netVal > 0) ? Math.round(netVal / 12) : '';
+          if (elMonthly.value !== String(monthlyVal)) elMonthly.value = monthlyVal;
+        }
+      } else {
+        if (elInc) elInc.value = '';
+        if (elMonthly) elMonthly.value = '';
+      }
+    }
+    recalcIncome();
+  }
+
+  function onSalaryTdsInput() {
+    const v = document.getElementById('f-sal-tds')?.value || '';
+    const elSub = document.getElementById('f-sal-tds-sub');
+    if (elSub && elSub.value !== v) elSub.value = v;
+    recalcIncome();
+  }
+
+  function onSalaryTdsSubInput() {
+    const v = document.getElementById('f-sal-tds-sub')?.value || '';
+    const elTop = document.getElementById('f-sal-tds');
+    if (elTop && elTop.value !== v) elTop.value = v;
+    recalcIncome();
+  }
+
+  function autoMatchSalaryTDS() {
+    const data = _buildComputationData();
+    const tax = data.computation?.totalTaxPayable || 0;
+    _setVal('f-sal-tds', tax);
+    const elSub = document.getElementById('f-sal-tds-sub');
+    if (elSub) elSub.value = tax;
+    recalcIncome();
+    if (typeof showCloudToast === 'function') {
+      showCloudToast(`TDS set to match tax liability: ₹ ${tax.toLocaleString('en-IN')}`, 'success', 'TDS Matched');
+    }
   }
 
   function recalcIncome() {
-    const total      = parseFloat(_v('f-income'))     || 0;
-    const salaryGross= parseFloat(_v('f-sal-gross'))  || 0;
+    const isSalaried = (_v('f-form-no') === 'ITR-1');
+    let total        = parseFloat(_v('f-income'))     || 0;
+    let salaryGross  = parseFloat(_v('f-sal-gross'))  || 0;
     const salaryPtax = parseFloat(_v('f-sal-ptax'))   || 0;
     const salaryHra  = parseFloat(_v('f-sal-hra'))    || 0;
     const stcg       = parseFloat(_v('f-stcg'))       || 0;
@@ -1256,19 +1689,44 @@ const App = (() => {
     const taxRegime  = _v('f-regime') || 'New';
     const isOld      = taxRegime.toLowerCase() === 'old';
     const admin      = DB.getAdmin();
-    let savings      = parseFloat(_v('f-savings')) || 0;
+    let savings      = 0;
 
-    // Auto-generate savings if not specified
-    if (!savings || savings <= 0) {
-      savings = InterestEngine.autoGenerate(total, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
+    // Salary Standard Deduction - Use centralized logic from TaxEngine
+    const cfg = TaxEngine.getConfig(ay, { regime: taxRegime });
+    const stdDedBase = cfg.stdDeduction || (isOld ? 50000 : 75000);
+
+    // For ITR-1: sync desired income & gross salary
+    if (isSalaried) {
+      if (salaryGross <= 0 && total > 0) {
+        salaryGross = Math.round(total + stdDedBase + salaryPtax + (isOld ? salaryHra : 0));
+        const elSal = document.getElementById('f-sal-gross');
+        if (elSal && elSal.value !== String(salaryGross)) elSal.value = salaryGross;
+      } else if (salaryGross > 0 && total <= 0) {
+        const stdDedAmtCur = Math.min(salaryGross, stdDedBase);
+        total = Math.max(0, Math.round(salaryGross - stdDedAmtCur - salaryPtax - (isOld ? salaryHra : 0)));
+        const elInc = document.getElementById('f-income');
+        if (elInc && elInc.value !== String(total)) elInc.value = total;
+      }
+      // If user provided savings, use it. If not selected or left blank, default to 0 for salaried
+      if (selectedIncome.savings) {
+        const rawSavings = _v('f-savings');
+        savings = rawSavings !== '' ? (parseFloat(rawSavings) || 0) : 0;
+      } else {
+        savings = 0;
+      }
+    } else {
+      const rawSavings = _v('f-savings');
+      savings = parseFloat(rawSavings) || 0;
+      if (!savings || savings <= 0) {
+        savings = InterestEngine.autoGenerate(total, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
+      }
     }
 
-    // Salary Standard Deduction
-    const stdDedAmt = Math.min(salaryGross, (isOld || ay === '2023-24' || ay === '2024-25') ? 50000 : 75000);
+    const stdDedAmt = Math.min(salaryGross, cfg.stdDeduction || (isOld ? 50000 : 75000));
     const netSalary = Math.max(0, salaryGross - stdDedAmt - salaryPtax - (isOld ? salaryHra : 0));
 
-    // Business Income from 44AD / 44ADA
-    const business = Math.max(0, total - savings - stcg - ltcg - pl - netSalary);
+    // Business Income from 44AD / 44ADA (Strictly 0 for Salaried ITR-1)
+    const business = isSalaried ? 0 : Math.max(0, total - savings - stcg - ltcg - pl - netSalary);
 
     // Live Old vs New Regime Comparator
     if (typeof TaxEngine !== 'undefined' && TaxEngine.compareRegimes) {
@@ -1320,15 +1778,51 @@ const App = (() => {
     }
 
     // Update Live Breakdown
-    const brkSalary = document.getElementById('brk-salary');
-    const brkSalaryRow = document.getElementById('brk-salary-row');
+    const brkSalMoRow    = document.getElementById('brk-sal-monthly-row');
+    const brkSalMo       = document.getElementById('brk-sal-monthly');
+    const monthlyNet     = parseFloat(_v('f-sal-monthly')) || (netSalary > 0 ? Math.round(netSalary / 12) : 0);
+    if (brkSalMoRow && brkSalMo) {
+      brkSalMoRow.style.display = (isSalaried && (monthlyNet > 0 || salaryGross > 0 || total > 0)) ? 'flex' : 'none';
+      brkSalMo.textContent = '₹ ' + Math.round(monthlyNet).toLocaleString('en-IN') + ' / mo';
+    }
+
+    const brkSalGrossRow = document.getElementById('brk-sal-gross-row');
+    const brkSalGross    = document.getElementById('brk-sal-gross');
+    const brkSalStdRow   = document.getElementById('brk-sal-std-row');
+    const brkSalStd      = document.getElementById('brk-sal-std');
+    const brkSalary      = document.getElementById('brk-salary');
+    const brkSalaryRow   = document.getElementById('brk-salary-row');
+
+    if (brkSalGrossRow && brkSalGross) {
+      brkSalGrossRow.style.display = (salaryGross > 0 || isSalaried) ? 'flex' : 'none';
+      brkSalGross.textContent = '₹ ' + Math.round(salaryGross).toLocaleString('en-IN');
+    }
+    if (brkSalStdRow && brkSalStd) {
+      brkSalStdRow.style.display = (salaryGross > 0 || isSalaried) ? 'flex' : 'none';
+      brkSalStd.textContent = '- ₹ ' + Math.round(stdDedAmt).toLocaleString('en-IN');
+    }
     if (brkSalaryRow && brkSalary) {
-      brkSalaryRow.style.display = salaryGross > 0 ? 'flex' : 'none';
+      brkSalaryRow.style.display = (salaryGross > 0 || isSalaried) ? 'flex' : 'none';
       brkSalary.textContent = '₹ ' + Math.round(netSalary).toLocaleString('en-IN');
     }
 
-    document.getElementById('brk-business').textContent = '₹ ' + Math.round(business).toLocaleString('en-IN');
-    document.getElementById('brk-savings').textContent  = '₹ ' + Math.round(savings).toLocaleString('en-IN');
+    const brkBizRow = document.getElementById('brk-business-row');
+    const brkBiz = document.getElementById('brk-business');
+    if (brkBiz) {
+      brkBiz.textContent = '₹ ' + Math.round(business).toLocaleString('en-IN');
+      if (brkBizRow) {
+        brkBizRow.style.display = isSalaried ? 'none' : 'flex';
+      }
+    }
+
+    const brkSavRow = document.getElementById('brk-savings-row');
+    const brkSavings = document.getElementById('brk-savings');
+    if (brkSavings) {
+      brkSavings.textContent = '₹ ' + Math.round(savings).toLocaleString('en-IN');
+      if (brkSavRow) {
+        brkSavRow.style.display = (savings > 0 || !isSalaried) ? 'flex' : 'none';
+      }
+    }
 
     const stcgRow = document.getElementById('brk-stcg-row');
     const ltcgRow = document.getElementById('brk-ltcg-row');
@@ -1368,6 +1862,21 @@ const App = (() => {
   function applyTaxRegime(regime) {
     const el = document.getElementById('f-regime');
     if (el) el.value = regime;
+    const isSalaried = (_v('f-form-no') === 'ITR-1');
+    if (isSalaried) {
+      const total = parseFloat(_v('f-income')) || 0;
+      if (total > 0) {
+        const ay = _v('f-ay') || '2026-27';
+        const isOld = regime.toLowerCase() === 'old';
+        const cfg = (typeof TaxEngine !== 'undefined') ? TaxEngine.getConfig(ay, { regime }) : {};
+        const stdDed = cfg.stdDeduction || (isOld ? 50000 : 75000);
+        const salaryPtax = parseFloat(_v('f-sal-ptax')) || 0;
+        const salaryHra = isOld ? (parseFloat(_v('f-sal-hra')) || 0) : 0;
+        const grossVal = Math.round(total + stdDed + salaryPtax + salaryHra);
+        const elSal = document.getElementById('f-sal-gross');
+        if (elSal) elSal.value = grossVal;
+      }
+    }
     recalcIncome();
     showCloudToast(`Switched to ${regime} Tax Regime`, 'info');
   }
@@ -1785,52 +2294,113 @@ Tax & Financial Consultancy Services`);
   // ── Compute all data ────────────────────────────────────────
   function _buildComputationData() {
     _syncBanks();
-    const admin    = DB.getAdmin();
-    const ay       = _v('f-ay') || '2025-26';
-    const total    = parseFloat(_v('f-income')) || 0;
-    const stcg     = parseFloat(_v('f-stcg'))   || 0;
-    const pl       = parseFloat(_v('f-pl'))      || 0;
-    let savings    = parseFloat(_v('f-savings')) || 0;
+    const admin       = DB.getAdmin();
+    const ay          = _v('f-ay') || '2026-27';
+    const formNo      = _v('f-form-no') || 'ITR-4';
+    const isSalaried  = formNo === 'ITR-1';
+    const total       = parseFloat(_v('f-income')) || 0;
+    const stcg        = parseFloat(_v('f-stcg'))   || 0;
+    const pl          = parseFloat(_v('f-pl'))      || 0;
+    let savings       = 0;
+    if (isSalaried) {
+      if (selectedIncome.savings) {
+        const rawSavings = _v('f-savings');
+        savings = rawSavings !== '' ? (parseFloat(rawSavings) || 0) : 0;
+      } else {
+        savings = 0;
+      }
+    } else {
+      const rawSavings = _v('f-savings');
+      savings = parseFloat(rawSavings) || 0;
+      if (!savings || savings <= 0) {
+        savings = InterestEngine.autoGenerate(total > 0 ? total : 500000, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
+      }
+    }
 
-    const salaryGross = parseFloat(_v('f-sal-gross')) || parseFloat(_v('f-salary-gross')) || 0;
+    const taxRegime   = _v('f-regime') || 'New';
+    const isOld       = taxRegime.toLowerCase() === 'old';
+    const cfg         = TaxEngine.getConfig(ay, { regime: taxRegime });
+    const stdDedBase  = cfg.stdDeduction || (isOld ? 50000 : 75000);
+
     const salaryPtax  = parseFloat(_v('f-sal-ptax'))  || 0;
     const salaryHra   = parseFloat(_v('f-sal-hra'))   || 0;
+    let salaryGross   = parseFloat(_v('f-sal-gross')) || parseFloat(_v('f-salary-gross')) || 0;
+    if (isSalaried && salaryGross <= 0 && total > 0) {
+      salaryGross = Math.round(total + stdDedBase + salaryPtax + (isOld ? salaryHra : 0));
+    }
+    const salaryHraMetro = _v('f-sal-hra-metro') === 'metro';
+    const salaryRentPaid = parseFloat(_v('f-sal-rent')) || 0;
+    const salary80CCD2 = parseFloat(_v('f-sal-80ccd2')) || 0;
+    const salaryEmpCat = _v('f-sal-emp-cat') || 'Private';
     const ltcg        = parseFloat(_v('f-ltcg'))       || 0;
     const ded80c      = parseFloat(_v('f-ded-80c'))    || 0;
     const ded80d      = parseFloat(_v('f-ded-80d'))    || 0;
     const ded80ccd    = parseFloat(_v('f-ded-80ccd'))  || 0;
     const ded80g      = parseFloat(_v('f-ded-80g'))    || 0;
 
-    const taxRegime   = _v('f-regime') || 'New';
-    const isOld       = taxRegime.toLowerCase() === 'old';
-    const stdDedAmt   = Math.min(salaryGross, (isOld || ay === '2023-24' || ay === '2024-25') ? 50000 : 75000);
+    const rawSalTds   = _v('f-sal-tds') !== '' ? _v('f-sal-tds') : _v('f-sal-tds-sub');
+    const salTds      = rawSalTds !== '' ? parseFloat(rawSalTds) : null;
+
+    const stdDedAmt   = Math.min(salaryGross, cfg.stdDeduction || (isOld ? 50000 : 75000));
     const netSalary   = Math.max(0, salaryGross - stdDedAmt - salaryPtax - (isOld ? salaryHra : 0));
 
     const declaredTotal = total > 0 ? total : (netSalary + savings + stcg + ltcg + pl);
 
-    if (!savings || savings <= 0) {
-      savings = InterestEngine.autoGenerate(declaredTotal, { minInterest: admin.intMin || 1200, maxInterest: admin.intMax || 8000 });
-    }
-
-    const businessIncome = Math.max(0, declaredTotal - savings - stcg - ltcg - pl - netSalary);
-    const presumptiveSection = _v('f-presumptive-section') || '44AD';
+    const businessIncome = isSalaried ? 0 : Math.max(0, declaredTotal - savings - stcg - ltcg - pl - netSalary);
+    const presumptiveSection = isSalaried ? 'none' : (_v('f-presumptive-section') || '44AD');
     const is44ADA            = presumptiveSection === '44ADA';
     const profitPct          = is44ADA ? 50 : (admin.profitPct || 20);
     const profitDec          = profitPct / 100;
-    const turnover           = profitDec > 0 ? Math.round(businessIncome / profitDec) : 0;
-    const natureOfBiz        = _v('f-nature');
+    const turnover           = (!isSalaried && profitDec > 0) ? Math.round(businessIncome / profitDec) : 0;
+    const natureOfBiz        = isSalaried ? '' : _v('f-nature');
+
+    // Employer details for Salaried
+    const employerName       = _v('f-emp-name') || (isSalaried ? 'EMPLOYER (PRIVATE SECTOR)' : '');
+    const employerCat        = _v('f-emp-cat') || (isSalaried ? 'Private' : '');
+    const employerTan        = (_v('f-emp-tan') || '').toUpperCase();
 
     // Parse Deductors
     const selectedDeductors = _getSelectedDeductors();
 
-    // TDS – pass business nature, AY, and presumptive section for type-aware & FY-compliant generation
+    // Pre-calculate tax without TDS to compute salary TDS credit if applicable
+    const preComp = TaxEngine.compute({
+      ay,
+      businessIncome,
+      savingsInterest: savings,
+      salaryGross,
+      salaryPtax,
+      salaryHra,
+      salaryHraMetro,
+      salaryRentPaid,
+      salary80CCD2,
+      salaryEmployerCategory: salaryEmpCat,
+      stcg,
+      ltcg,
+      pl,
+      deduction80C: ded80c,
+      deduction80D: ded80d,
+      deduction80CCD1B: ded80ccd,
+      deduction80G: ded80g,
+      tds: 0,
+      presumptiveSection,
+      adminOverrides: { regime: taxRegime },
+    });
+
+    // TDS Generation
     const tdsData = TDSEngine.generate(turnover, natureOfBiz, {
       rate194H:  admin.rate194H,
       rate194C:  admin.rate194C,
       selectedDeductors: selectedDeductors
-    }, banks, ay, presumptiveSection);
+    }, banks, ay, presumptiveSection, {
+      isSalaried,
+      salaryGross,
+      employerName,
+      employerTan,
+      salaryTds: salTds,
+      taxPayable: preComp.totalTaxPayable,
+    });
 
-    // Compute tax with regime & 44AD/44ADA support
+    // Compute final tax with regime & credits
     const computation = TaxEngine.compute({
       ay,
       businessIncome,
@@ -1838,6 +2408,10 @@ Tax & Financial Consultancy Services`);
       salaryGross,
       salaryPtax,
       salaryHra,
+      salaryHraMetro,
+      salaryRentPaid,
+      salary80CCD2,
+      salaryEmployerCategory: salaryEmpCat,
       stcg,
       ltcg,
       pl,
@@ -1856,8 +2430,6 @@ Tax & Financial Consultancy Services`);
     // STCG Details (generate realistic entries)
     const stcgDetails = stcg > 0 ? _generateSTCGDetails(stcg) : [];
 
-    const formNo = _v('f-form-no') || (natureOfBiz ? 'ITR-4' : 'ITR-1');
-
     const client = {
       name:        _v('f-name'),
       father:      _v('f-father'),
@@ -1874,6 +2446,10 @@ Tax & Financial Consultancy Services`);
       nature:      natureOfBiz,
       bcode:       _v('f-bcode'),
       bname:       _v('f-bname'),
+      employerName,
+      employerCategory: employerCat,
+      employerTan,
+      isSalaried,
       presumptiveSection,
       regime:      taxRegime,
       formNumber:  formNo,
@@ -1882,8 +2458,14 @@ Tax & Financial Consultancy Services`);
       evcMode:     _v('f-evc-mode') || 'Aadhaar OTP',
       selectedDeductors: selectedDeductors,
       salaryGross,
+      salaryMonthly: parseFloat(_v('f-sal-monthly')) || (netSalary > 0 ? Math.round(netSalary / 12) : 0),
       salaryPtax,
       salaryHra,
+      salaryHraMetro,
+      salaryRentPaid,
+      salary80CCD2,
+      salaryEmployerCategory: salaryEmpCat,
+      salaryTds: (salTds !== null ? salTds : (tdsData.tds192 || 0)),
       ltcg,
       deduction80C: ded80c,
       deduction80D: ded80d,
@@ -1895,7 +2477,7 @@ Tax & Financial Consultancy Services`);
       client, computation, tds: tdsData, bankInterest,
       banks: [...banks], stcgDetails, turnover,
       profitPct, adminConfig: admin,
-      balanceSheet: _getBalanceSheet(),
+      balanceSheet: isSalaried ? (selectedIncome.bs ? _getBalanceSheet() : {}) : _getBalanceSheet(),
     };
   }
 
@@ -1921,9 +2503,12 @@ Tax & Financial Consultancy Services`);
         ${pr('Date of Birth', data.client.dob ? new Date(data.client.dob).toLocaleDateString('en-IN') : '—')}
         ${pr('Assessment Year', `<strong>${data.client.ay}</strong>`)}
         ${pr('Tax Regime', `<strong>${data.client.regime || 'New'} Regime</strong>`)}
-        ${data.client.bname ? pr('Business Name', data.client.bname) : ''}
-        ${data.client.nature ? pr('Nature of Business', data.client.nature) : ''}
-        ${data.client.bcode ? pr('Business Code', data.client.bcode) : ''}
+        ${data.client.isSalaried && data.client.employerName ? pr('Employer Name', data.client.employerName) : ''}
+        ${data.client.isSalaried && data.client.employerCategory ? pr('Employer Category', data.client.employerCategory) : ''}
+        ${data.client.isSalaried && data.client.employerTan ? pr('Employer TAN', `<code>${data.client.employerTan}</code>`) : ''}
+        ${!data.client.isSalaried && data.client.bname ? pr('Business Name', data.client.bname) : ''}
+        ${!data.client.isSalaried && data.client.nature ? pr('Nature of Business', data.client.nature) : ''}
+        ${!data.client.isSalaried && data.client.bcode ? pr('Business Code', data.client.bcode) : ''}
         ${pr('Filed u/s', data.client.filing || '—')}
         ${data.client.ackNo ? pr('e-Filing Ack No', `<code>${data.client.ackNo}</code>`) : ''}
         <hr style="margin:6px 0; border-color:var(--border)" />
@@ -1947,6 +2532,7 @@ Tax & Financial Consultancy Services`);
         ${data.banks.map(b => pr(b.name, `A/C ...${(b.accountNo||'').slice(-4)} ${b.primary?'<span style="color:#059669">●Primary</span>':''}`)).join('')}
         <hr style="margin:6px 0; border-color:var(--border)" />
         <div class="preview-row" style="font-size:.75rem; font-weight:700; color:var(--text-muted); margin-bottom:4px;">TDS DEDUCTED</div>
+        ${(data.tds.tds192 || 0) > 0 ? pr('192 Salary (Form 16)', `₹ ${fmtNum(data.tds.tds192)}`) : ''}
         ${(data.tds.tds194H || 0) > 0 ? pr('194H Commission', `₹ ${fmtNum(data.tds.tds194H)}`) : ''}
         ${(data.tds.tds194C || 0) > 0 ? pr('194C Contractor', `₹ ${fmtNum(data.tds.tds194C)}`) : ''}
         ${(data.tds.tds194J || 0) > 0 ? pr('194J Professional', `₹ ${fmtNum(data.tds.tds194J)}`) : ''}
@@ -2148,7 +2734,16 @@ Tax & Financial Consultancy Services`);
       bankInterest:       data.bankInterest || [],
       incomeInputs: {
         desiredIncome: parseFloat(_v('f-income')) || 0,
+        salaryMonthly: parseFloat(_v('f-sal-monthly')) || Math.round((parseFloat(_v('f-income')) || 0) / 12),
         savings:       parseFloat(_v('f-savings')) || 0,
+        salaryGross:   data.client.salaryGross || parseFloat(_v('f-sal-gross')) || 0,
+        salaryPtax:    data.client.salaryPtax || parseFloat(_v('f-sal-ptax')) || 0,
+        salaryHra:     data.client.salaryHra || parseFloat(_v('f-sal-hra')) || 0,
+        salaryTds:     data.client.salaryTds !== undefined ? data.client.salaryTds : (parseFloat(_v('f-sal-tds')) || parseFloat(_v('f-sal-tds-sub')) || 0),
+        employerName:  data.client.employerName || _v('f-emp-name') || '',
+        employerCategory: data.client.employerCategory || _v('f-emp-cat') || '',
+        employerTan:   data.client.employerTan || _v('f-emp-tan') || '',
+        isSalaried:    !!data.client.isSalaried,
         stcg:          parseFloat(_v('f-stcg'))   || 0,
         pl:            parseFloat(_v('f-pl'))      || 0,
         balanceSheet:  data.balanceSheet || null,
@@ -2478,22 +3073,77 @@ Tax & Financial Consultancy Services`);
       _setVal('f-bcode',   c.bcode);
       _setVal('f-bname',   c.bname);
       _setSelect('f-form-no', c.formNumber || (c.nature ? 'ITR-4' : 'ITR-1'));
+      onFormNumberChange();
+
+      const isSal = (c.formNumber === 'ITR-1' || c.isSalaried || (c.salaryGross || (c.incomeInputs && c.incomeInputs.salaryGross) > 0));
+      if (isSal) {
+        _setVal('f-emp-name', c.employerName || (c.incomeInputs && c.incomeInputs.employerName) || '');
+        _setSelect('f-emp-cat', c.employerCategory || (c.incomeInputs && c.incomeInputs.employerCategory) || 'Private');
+        _setVal('f-emp-tan', c.employerTan || (c.incomeInputs && c.incomeInputs.employerTan) || '');
+      }
+
       _setVal('f-ack-no',     c.ackNo || '');
       _setVal('f-filing-date', c.filingDate || '');
       _setSelect('f-evc-mode', c.evcMode || 'Aadhaar OTP');
 
       if (c.banks) { banks = c.banks; _renderBanks(); }
+
+      const salGross = c.salaryGross || (c.incomeInputs && c.incomeInputs.salaryGross) || 0;
+      if (isSal || salGross > 0) {
+        selectedIncome.salary = true;
+        const salCard = document.getElementById('toggle-salary');
+        if (salCard) {
+          salCard.classList.add('selected');
+          const chk = salCard.querySelector('.itc-check');
+          if (chk) chk.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+        }
+      }
+
+      const hasDeds = (c.deduction80C > 0 || c.deduction80D > 0 || c.deduction80CCD1B > 0 || c.deduction80G > 0);
+      if (hasDeds) {
+        selectedIncome.deductions = true;
+        const dedCard = document.getElementById('toggle-deductions');
+        if (dedCard) {
+          dedCard.classList.add('selected');
+          const chk = dedCard.querySelector('.itc-check');
+          if (chk) chk.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+        }
+      }
+
       if (c.incomeInputs) {
         _setVal('f-income',  c.incomeInputs.desiredIncome);
+        if (c.incomeInputs.salaryMonthly) {
+          _setVal('f-sal-monthly', c.incomeInputs.salaryMonthly);
+        } else if (c.incomeInputs.desiredIncome) {
+          _setVal('f-sal-monthly', Math.round(c.incomeInputs.desiredIncome / 12));
+        }
         _setVal('f-savings', c.incomeInputs.savings);
         _setVal('f-stcg',    c.incomeInputs.stcg);
         _setVal('f-pl',      c.incomeInputs.pl);
         if (c.incomeInputs.stcg > 0) { selectedIncome.stcg = true; }
         if (c.incomeInputs.pl   > 0) { selectedIncome.pl   = true; }
         _renderIncomeInputs();
+
+        if (salGross > 0) _setVal('f-sal-gross', salGross);
+        const salPtax = c.salaryPtax || (c.incomeInputs && c.incomeInputs.salaryPtax) || 0;
+        if (salPtax > 0) _setVal('f-sal-ptax', salPtax);
+        const salHra = c.salaryHra || (c.incomeInputs && c.incomeInputs.salaryHra) || 0;
+        if (salHra > 0) _setVal('f-sal-hra', salHra);
+        const salTds = c.salaryTds !== undefined ? c.salaryTds : ((c.incomeInputs && c.incomeInputs.salaryTds) || (c.tds && c.tds.tds192) || 0);
+        if (salTds > 0) {
+          _setVal('f-sal-tds', salTds);
+          const elSub = document.getElementById('f-sal-tds-sub');
+          if (elSub) elSub.value = salTds;
+        }
+
+        if (c.deduction80C) _setVal('f-ded-80c', c.deduction80C);
+        if (c.deduction80D) _setVal('f-ded-80d', c.deduction80D);
+        if (c.deduction80CCD1B) _setVal('f-ded-80ccd', c.deduction80CCD1B);
+        if (c.deduction80G) _setVal('f-ded-80g', c.deduction80G);
+
         recalcIncome();
 
-        if (c.incomeInputs.balanceSheet) {
+        if (c.incomeInputs.balanceSheet && !isSal) {
           selectedIncome.bs = true;
           const bsCard = document.getElementById('toggle-bs');
           if (bsCard) {
@@ -2514,6 +3164,25 @@ Tax & Financial Consultancy Services`);
           el('bal-loan', bs.liabilities?.loan);
           el('bal-netprofit', bs.liabilities?.netprofit);
           recalcBS();
+        } else if (isSal) {
+          if (c.incomeInputs.balanceSheet && Object.keys(c.incomeInputs.balanceSheet).length > 0) {
+            selectedIncome.bs = true;
+            const bsCard = document.getElementById('toggle-bs');
+            if (bsCard) {
+              bsCard.classList.add('selected');
+              bsCard.querySelector('.itc-check').innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+            }
+            _renderBalanceSheet();
+          } else {
+            selectedIncome.bs = false;
+            const bsCard = document.getElementById('toggle-bs');
+            if (bsCard) {
+              bsCard.classList.remove('selected');
+              const chk = bsCard.querySelector('.itc-check');
+              if (chk) chk.innerHTML = '<i class="bi bi-circle"></i>';
+            }
+            _renderBalanceSheet();
+          }
         }
       }
 
@@ -2538,6 +3207,10 @@ Tax & Financial Consultancy Services`);
           });
         }
       }
+
+      currentStep = 2;
+      _goToStep(2);
+      _syncItrCards(c.formNumber || (c.nature ? 'ITR-4' : 'ITR-1'));
     }, 100);
   }
 
@@ -2665,7 +3338,7 @@ Tax & Financial Consultancy Services`);
 
   function _renderAYChart(byAY) {
     const canvas = document.getElementById('chartAY');
-    if (!canvas) return;
+    if (!canvas || typeof Chart === 'undefined') return;
 
     let labels = Object.keys(byAY || {});
     let values = Object.values(byAY || {});
@@ -7308,10 +7981,11 @@ Tax & Financial Consultancy Services`);
   // ── Public API ──────────────────────────────────────────────
   const appInstance = {
     init, navTo,
-    nextStep, prevStep,
+    nextStep, prevStep, goToStep: _goToStep, selectItrFormat,
     addBank, removeBank, setPrimary, syncBanks: _syncBanks,
-    onNatureChange, onPresumptiveSectionChange, onDeductorChange,
+    onNatureChange, onPresumptiveSectionChange, onDeductorChange, onFormNumberChange,
     toggleIncome, recalcIncome, applyTaxRegime,
+    onMonthlySalaryInput, onMainIncomeInput, onSalaryGrossInput, onSalaryTdsInput, onSalaryTdsSubInput, autoMatchSalaryTDS,
     selectReport, generateReport, generateAck, generateAckNoField, triggerPrint,
     downloadReportPdf, shareWhatsApp, shareEmail,
     handleAisJsonUpload,

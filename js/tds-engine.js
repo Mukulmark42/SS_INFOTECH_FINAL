@@ -52,9 +52,60 @@ const TDSEngine = (() => {
    * @param {Array}  banks               Bank accounts (for deductor names)
    * @param {string} ay                  Assessment Year (e.g. '2026-27')
    * @param {string} presumptiveSection  '44AD' | '44ADA' | 'none'
-   * @returns {Object}                   { tds194H, tds194C, tds194N, tds194J, totalTDS, entries }
+   * @param {string} presumptiveSection  '44AD' | '44ADA' | 'none'
+   * @param {Object} salaryInfo          Optional salary details { isSalaried, salaryGross, employerName, employerTan, tdsAmount, taxPayable }
+   * @returns {Object}                   { tds194H, tds194C, tds194N, tds194J, tds192, totalTDS, entries }
    */
-  function generate(turnover, natureOfBiz, adminConfig = {}, banks = [], ay = '2026-27', presumptiveSection = '44AD') {
+  function generate(turnover, natureOfBiz, adminConfig = {}, banks = [], ay = '2026-27', presumptiveSection = '44AD', salaryInfo = null) {
+    const sal = salaryInfo || adminConfig.salaryInfo || null;
+    const isSalaried = sal && (sal.isSalaried || (sal.salaryGross > 0 && (!turnover || turnover <= 0)));
+
+    let tds194H = 0, tds194C = 0, tds194N = 0, tds194J = 0, tds192 = 0;
+    let entries = [];
+
+    // ── SALARIED MODE (Form 16 / Section 192) ────────────────
+    if (isSalaried) {
+      const grossSal = Math.round(sal.salaryGross || 0);
+      const empName  = (sal.employerName || 'EMPLOYER / PRIVATE SECTOR').toUpperCase();
+      const empTan   = (sal.employerTan || _fakeTAN('P')).toUpperCase();
+
+      // Determine TDS amount:
+      // 1. If user entered specific TDS (including 0), use that
+      // 2. If left blank, default to matching calculated tax liability
+      let taxDed = 0;
+      const userTds = sal.salaryTds ?? sal.tdsAmount ?? sal.tds;
+      if (userTds !== undefined && userTds !== null && !isNaN(userTds) && userTds !== '') {
+        taxDed = Math.max(0, Math.round(Number(userTds)));
+      } else {
+        taxDed = Math.round(sal.taxPayable || 0);
+      }
+
+      tds192 = taxDed;
+
+      // Always include the Section 192 entry from Employer so Form 26AS is complete
+      if (grossSal > 0 || taxDed > 0 || isSalaried) {
+        entries.push({
+          section:      '192',
+          deductorName: empName,
+          deductorTAN:  empTan,
+          dateOfCredit: _fakeDate(ay),
+          amountPaid:   grossSal,
+          tdsClaimed:   taxDed,
+          tdsDeposited: taxDed,
+        });
+      }
+
+      return {
+        tds194H: 0,
+        tds194C: 0,
+        tds194N: 0,
+        tds194J: 0,
+        tds192,
+        totalTDS: tds192,
+        entries,
+      };
+    }
+
     // Sanitise turnover – must be a valid non-negative number
     turnover = Math.max(0, parseFloat(turnover) || 0);
 
@@ -72,9 +123,6 @@ const TDSEngine = (() => {
       ? (adminConfig.rate194C / 100)
       : DEFAULTS.retail194C_rate;
     const r194J = DEFAULTS.service194J_rate;
-
-    let tds194H = 0, tds194C = 0, tds194N = 0, tds194J = 0;
-    let entries = [];
 
     // ── MANUAL DEDUCTOR MODE: When specific deductor(s) are selected by user ──
     if (selectedDeductors && selectedDeductors.length > 0) {
@@ -137,7 +185,7 @@ const TDSEngine = (() => {
       tds194J = Math.max(0, tds194J || 0);
       const totalTDS = tds194H + tds194C + tds194N + tds194J;
 
-      return { tds194H, tds194C, tds194N, tds194J, totalTDS, entries };
+      return { tds194H, tds194C, tds194N, tds194J, tds192: 0, totalTDS, entries };
     }
 
     // ── AUTO DEDUCTOR MODE: Dynamic Simulation ──
@@ -181,7 +229,7 @@ const TDSEngine = (() => {
       selectedDeductors: [],
     });
 
-    return { tds194H, tds194C, tds194N, tds194J, totalTDS, entries };
+    return { tds194H, tds194C, tds194N, tds194J, tds192: 0, totalTDS, entries };
   }
 
   /**

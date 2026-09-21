@@ -202,12 +202,38 @@ const TaxEngine = (() => {
     let salaryPtax = 0;
     let salaryHraExemption = 0;
     let netSalary = 0;
+    let deduction80CCD2 = 0;
 
     if (salaryGross > 0) {
       salaryStdDeduction = Math.min(salaryGross, cfg.stdDeduction || 50000);
       salaryPtax = Math.min(salaryGross - salaryStdDeduction, Math.round(input.salaryPtax || 0));
-      salaryHraExemption = isOld ? Math.min(salaryGross - salaryStdDeduction - salaryPtax, Math.round(input.salaryHra || 0)) : 0;
-      netSalary = Math.max(0, salaryGross - salaryStdDeduction - salaryPtax - salaryHraExemption);
+
+      // HRA Exemption u/s 10(13A) - Correct calculation
+      // Minimum of: (1) Actual HRA received, (2) 50% of salary (metro) / 40% (non-metro), (3) Rent paid - 10% of salary
+      if (isOld && (input.salaryHra || 0) > 0) {
+        const hraReceived = Math.round(input.salaryHra || 0);
+        const isMetro = input.salaryHraMetro === true;
+        const rentPaid = Math.round(input.salaryRentPaid || 0);
+        const basicSalary = salaryGross; // For HRA calculation, "salary" = basic + DA (if part of retirement benefits)
+
+        const metroLimit = isMetro ? 0.50 : 0.40;
+        const limit2 = Math.round(basicSalary * metroLimit);
+        const limit3 = rentPaid > 0 ? Math.max(0, rentPaid - Math.round(basicSalary * 0.10)) : 0;
+
+        salaryHraExemption = Math.min(hraReceived, limit2, limit3);
+      } else {
+        salaryHraExemption = 0;
+      }
+
+      // Section 80CCD(2) - Employer NPS contribution (New Regime only)
+      // Deduction up to 10% of salary (14% for Central Govt employees)
+      if (!isOld && (input.salary80CCD2 || 0) > 0) {
+        const isCentralGovt = input.salaryEmployerCategory === 'Central Govt';
+        const limit80CCD2 = Math.round(salaryGross * (isCentralGovt ? 0.14 : 0.10));
+        deduction80CCD2 = Math.min(Math.round(input.salary80CCD2), limit80CCD2);
+      }
+
+      netSalary = Math.max(0, salaryGross - salaryStdDeduction - salaryPtax - salaryHraExemption - deduction80CCD2);
     }
 
     // ── Gross Total Income ───────────────────────────────────
@@ -297,6 +323,7 @@ const TaxEngine = (() => {
       // Income heads
       businessIncome, savingsInterest, stcg, ltcg, pl,
       salaryGross, salaryStdDeduction, salaryPtax, salaryHraExemption, netSalary,
+      deduction80CCD2,
       presumptiveSection,
       // Deductions
       deduction80C, deduction80D, deduction80CCD1B, deduction80G, deduction80TTA,
