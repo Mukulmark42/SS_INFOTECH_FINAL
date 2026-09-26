@@ -3451,7 +3451,7 @@ Tax & Financial Consultancy Services`);
       const dedsCount = (admin.deductors || []).length;
       const tradesList = typeof _getNatureCodes === 'function' ? _getNatureCodes() : (admin.natureCodes || []);
       const tradesCount = tradesList.length;
-      const cloudStatus = (typeof SupabaseSync !== 'undefined' && SupabaseSync.isConfigured()) ? 'Cloud' : 'Local';
+      const cloudStatus = (typeof SupabaseSync !== 'undefined' && (typeof SupabaseSync.isConfigured === 'function' ? SupabaseSync.isConfigured() : !!SupabaseSync.getConfig()?.url)) ? 'Cloud' : 'Local';
 
       _setText('admin-stat-banks', banksCount);
       _setText('admin-stat-companies', compsCount);
@@ -6707,19 +6707,12 @@ Tax & Financial Consultancy Services`);
       const pEl = document.getElementById('bs-pan'); if (pEl) pEl.value = 'CYMPR5097Q';
       const nEl = document.getElementById('bs-nominee'); if (nEl) nEl.value = 'NAFICHA RAHAMAN';
       const aEl = document.getElementById('bs-holderaddress'); if (aEl) aEl.value = 'CHOWRASHI, DEGANGA, CHAURASHI, NORTH 24 PARGANAS, 743424, WEST BENGAL, INDIA';
-      const obEl = document.getElementById('bs-openbal'); if (obEl) obEl.value = '85420.00';
-      const obtEl = document.getElementById('bs-openbal-type'); if (obtEl) obtEl.value = 'CR';
+      const obEl = document.getElementById('bs-opening'); if (obEl) obEl.value = '85420.00';
 
-      _statementTransactions = [
-        { date: '01/04/2026', chqNo: '', desc: 'NEFT/INW/N091230492/GLOBAL TECH SOLUTIONS', chqVal: '-', wdl: 0, dep: 125000, bal: 210420, remarks: '-' },
-        { date: '04/04/2026', chqNo: '450912', desc: 'CHQ WDL - OFFICE LEASE RENT PAYMENT', chqVal: '450912', wdl: 35000, dep: 0, bal: 175420, remarks: '-' },
-        { date: '08/04/2026', chqNo: '', desc: 'UPI/610293849102/CLOUD SERVER HOSTING', chqVal: '-', wdl: 4899, dep: 0, bal: 170521, remarks: '-' },
-        { date: '15/04/2026', chqNo: '', desc: 'RTGS/INW/R019284729/TAX CONSULTING FEE', chqVal: '-', wdl: 0, dep: 98500, bal: 269021, remarks: '-' },
-        { date: '22/04/2026', chqNo: '450913', desc: 'VENDOR PAY - HARDWARE UPGRADE & NETWORKING', chqVal: '450913', wdl: 42000, dep: 0, bal: 227021, remarks: '-' },
-        { date: '30/04/2026', chqNo: '', desc: 'INT CR - QUARTERLY SAVINGS/CURRENT INTEREST', chqVal: '-', wdl: 0, dep: 1845, bal: 228866, remarks: '-' }
-      ];
-      _renderStatementTx();
-      _calcStatementTotals();
+      const container = document.getElementById('stmt-tx-list');
+      if (container) container.innerHTML = '';
+      autoGenStatementTxs();
+      recalcStatement();
     } else {
       const hEl = document.getElementById('bss-holder'); if (hEl) hEl.value = 'MUKUL RAHAMAN';
       const acEl = document.getElementById('bss-acno'); if (acEl) acEl.value = '091405003332';
@@ -6729,19 +6722,12 @@ Tax & Financial Consultancy Services`);
       const pEl = document.getElementById('bss-pan'); if (pEl) pEl.value = 'CYMPR5097Q';
       const nEl = document.getElementById('bss-nominee'); if (nEl) nEl.value = 'NAFICHA RAHAMAN';
       const aEl = document.getElementById('bss-holderaddress'); if (aEl) aEl.value = 'FLAT 4B, GREENWOOD APARTMENTS, KOLKATA 700028, WEST BENGAL';
-      const obEl = document.getElementById('bss-openbal'); if (obEl) obEl.value = '42150.00';
-      const obtEl = document.getElementById('bss-openbal-type'); if (obtEl) obtEl.value = 'CR';
+      const obEl = document.getElementById('bss-opening'); if (obEl) obEl.value = '42150.00';
 
-      _salaryStatementTransactions = [
-        { date: '01/04/2026', chqNo: '', desc: 'CMS/SALARY CREDITED FOR MARCH 2026/SS INFOTECH', chqVal: '-', wdl: 0, dep: 78500, bal: 120650, remarks: '-' },
-        { date: '03/04/2026', chqNo: '', desc: 'UPI/610293849102/MONTHLY GROCERIES STORE', chqVal: '-', wdl: 8450, dep: 0, bal: 112200, remarks: '-' },
-        { date: '05/04/2026', chqNo: '', desc: 'ECS/HDFC HOME LOAN EMI DEDUCTION', chqVal: '-', wdl: 26400, dep: 0, bal: 85800, remarks: '-' },
-        { date: '12/04/2026', chqNo: '', desc: 'ATM WDL - CASH WITHDRAWAL ICICI ATM BASIRHAT', chqVal: '-', wdl: 10000, dep: 0, bal: 75800, remarks: '-' },
-        { date: '20/04/2026', chqNo: '', desc: 'UPI/582910394812/ELECTRICITY BILL WBSEDCL', chqVal: '-', wdl: 2340, dep: 0, bal: 73460, remarks: '-' },
-        { date: '30/04/2026', chqNo: '', desc: 'CMS/SALARY CREDITED FOR APRIL 2026/SS INFOTECH', chqVal: '-', wdl: 0, dep: 78500, bal: 151960, remarks: '-' }
-      ];
-      _renderSalaryStatementTx();
-      _calcSalaryStatementTotals();
+      const container = document.getElementById('stmt-salary-tx-list');
+      if (container) container.innerHTML = '';
+      autoGenSalaryStatementTxs();
+      recalcSalaryStatement();
     }
 
     showCloudToast('Populated authentic demo data for testing!', 'success');
@@ -7981,7 +7967,7 @@ Tax & Financial Consultancy Services`);
   // ── Public API ──────────────────────────────────────────────
   const appInstance = {
     init, navTo,
-    nextStep, prevStep, goToStep: _goToStep, selectItrFormat,
+    nextStep, prevStep, goToStep: _goToStep, goStep: _goToStep, selectItrFormat,
     addBank, removeBank, setPrimary, syncBanks: _syncBanks,
     onNatureChange, onPresumptiveSectionChange, onDeductorChange, onFormNumberChange,
     toggleIncome, recalcIncome, applyTaxRegime,

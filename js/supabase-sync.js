@@ -585,10 +585,16 @@ WITH CHECK (true);
 `;
   }
 
+  function isConfigured() {
+    const cfg = getConfig();
+    return !!(cfg && cfg.url && cfg.anonKey);
+  }
+
   return {
     getConfig,
     saveConfig,
     getClient,
+    isConfigured,
     testConnection,
     pushBackup,
     triggerAutoBackup,

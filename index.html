@@ -15,10 +15,10 @@
     })();
   </script>
 
-  <!-- Google Fonts & DejaVu Sans -->
+  <!-- Google Fonts: Inter, Plus Jakarta Sans, DM Sans & Manrope -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;family=DM+Sans:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet" />
   <link href="https://fonts.cdnfonts.com/css/dejavu-sans" rel="stylesheet" />
 
   <!-- Bootstrap + Icons -->
@@ -2989,10 +2989,13 @@
 
 <!-- Mobile overlay dismiss -->
 <script>
-  document.getElementById('sidebarOverlay').addEventListener('click', () => {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('sidebarOverlay').classList.remove('active');
-  });
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      document.getElementById('sidebar')?.classList.remove('open');
+      sidebarOverlay.classList.remove('active');
+    });
+  }
 </script>
 
 </body>
