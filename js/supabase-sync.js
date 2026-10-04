@@ -9,10 +9,12 @@ const SupabaseSync = (() => {
   const CONFIG_KEY = 'ssinfotech_supabase_config';
   const DEFAULT_TABLE = 'ssinfotech_backups';
 
-  // Default credentials provided by user
+  // Credentials are NOT shipped in source. Configure your own Supabase
+  // project via the Admin Panel (Cloud Sync settings) — the app stores
+  // them in localStorage and stays in Local-only mode until then.
   const DEFAULT_CONFIG = {
-    url: 'https://qwdaeegtzpqlcxzcxkgv.supabase.co',
-    anonKey: 'sb_publishable_2sp-6p5Pn-4h-PU7ixRkWw_YJbINBms',
+    url: '',
+    anonKey: '',
     tableName: DEFAULT_TABLE,
     autoSync: true,
     lastSyncAt: null,
@@ -33,7 +35,10 @@ const SupabaseSync = (() => {
   }
 
   function isAutoSyncEnabled() {
-    return !!getConfig().autoSync;
+    const cfg = getConfig();
+    // Auto-sync only makes sense when credentials are configured;
+    // otherwise every mutation would queue a doomed push attempt.
+    return !!(cfg.autoSync && cfg.url && cfg.anonKey);
   }
 
   /**
@@ -554,6 +559,11 @@ const SupabaseSync = (() => {
 -- SS INFOTECH - SUPABASE CLOUD BACKUP & SYNC TABLE SETUP
 -- Run this in your Supabase SQL Editor (1-Click Setup)
 -- ═══════════════════════════════════════════════════════════
+-- SECURITY NOTE: The app authenticates with the public
+-- publishable (anon) key, so the policy below permits
+-- read/write to anyone who obtains that key. Use a DEDICATED
+-- Supabase project that contains ONLY these backup snapshots
+-- (no other tables), and rotate the key if it leaks.
 
 -- 1. Create the master backup table
 CREATE TABLE IF NOT EXISTS public.${tbl} (

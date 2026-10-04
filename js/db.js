@@ -180,7 +180,8 @@ const DB = (() => {
     const src = findById(id);
     if (!src) return null;
     const copy = { ...src, id: _uid(), name: src.name + ' (Copy)', createdAt: Date.now(), updatedAt: Date.now() };
-    const clients = all();
+    // Use _rawAll() so soft-deleted (Recycle Bin) records survive the write.
+    const clients = _rawAll();
     clients.unshift(copy);
     _persist(clients);
     return copy;

@@ -1,4 +1,10 @@
-# Scratch and temporary testing files
+# Ad-hoc scratch and temporary testing files
 scratch/
 .DS_Store
 Thumbs.db
+
+# Kilo workspace state (worktrees, local config)
+.kilo/
+
+# Dependencies (project is zero-dependency by design)
+node_modules/

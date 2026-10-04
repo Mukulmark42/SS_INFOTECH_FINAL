@@ -4,7 +4,7 @@
 **Repository:** `Mukulmark42/SS_INFOTECH_FINAL`  
 **Current Assessment Year:** AY 2026-27 (FY 2025-26)  
 **System Status:** Production Ready  
-**Last Updated:** September 2026  
+**Last Updated:** October 2026  
 
 ---
 
@@ -66,11 +66,12 @@ The system operates **entirely client-side** using standard web technologies. Al
   $$\text{If } \text{Tax Before Rebate} > \text{Margin} \implies \text{Rebate} = \text{Tax Before Rebate} - \text{Margin}$$
 
 #### 3.2 Finance Act 2024 Capital Gains Amendments
-- Applies to **AY 2025-26 and AY 2026-27**:
+- Applies to **AY 2025-26 and AY 2026-27** in **both regimes**:
   - **STCG u/s 111A:** Rate increased from 15% to **20%**.
   - **LTCG u/s 112A:** Rate increased from 10% to **12.5%**.
   - **LTCG Exemption Limit:** Exemption threshold raised from ₹1,00,000 to **₹1,25,000**.
   - Capital gains subject to special tax rates are excluded from regular slab calculations and are ineligible for Chapter VI-A deductions.
+- **Old Regime AY-wise CG rates:** The Old Regime does NOT have a single uniform CG rate. `js/tax-engine.js` keeps `OLD_REGIME_CG_BY_AY` (AY 2023-24/2024-25 → 15%/10%/₹1L; AY 2025-26/2026-27 → 20%/12.5%/₹1.25L) and merges it in `getConfig()`. Regression coverage lives in `scratch/test-tax-engine.js`.
 
 #### 3.3 Standard Deduction Rules
 - **New Regime:**
@@ -102,7 +103,7 @@ d:\Antigravity_workFile\SS INFOTECH_GITHUB_WORK FILE\
 │
 ├── js/
 │   ├── app.js                       # Main application controller, MVC state, event listeners, AIS import
-│   ├── tax-engine.js                # Tax computation engine: multi-year slabs, 87A, 44AD/ADA, regime comparator
+│   ├── tax-engine.js                # Tax computation engine: multi-year slabs, 87A, 44AD/44ADA, regime comparator
 │   ├── tds-engine.js                # Business-aware realistic TDS generator (194H, 194C, 194J, 194N)
 │   ├── interest-engine.js           # Savings bank interest distribution across accounts
 │   ├── db.js                        # LocalStorage abstraction, Recycle Bin, CSV export, storage telemetry
@@ -112,13 +113,22 @@ d:\Antigravity_workFile\SS INFOTECH_GITHUB_WORK FILE\
 │   ├── report-ack.js                # 1:1 official Income Tax Department ITR-V acknowledgement replica
 │   ├── salary-slip-engine.js        # Corporate payslip engine with number-to-words and batch printing
 │   ├── bank-statement-engine.js     # High-fidelity multi-bank ledger and transaction simulator
-│   └── bank-logos.js                # Bank logo resolver with Brandfetch API and Favicon fallback
+│   └── bank-logos.js                # Bank logo resolver (local SVG → Brandfetch → Favicon); data URLs generated lazily
 │
 ├── assets/
 │   ├── it-dept-watermark.jpg        # Official Income Tax Department watermark image
 │   ├── it-dept-watermark.b64        # Base64 encoded watermark string for embedded offline PDF rendering
 │   └── bank-logos/                  # Directory containing local vector and raster bank logos
 │
+├── test/                          # Tracked Node.js regression suites (run: npm test)
+│   ├── test-salaried-calc.js      # Salaried ITR-1 computation & report tests (35 assertions)
+│   ├── test_salaried_itr1.js      # Salaried edge-case tests (9 suites)
+│   ├── test-tax-engine.js         # Statutory regression tests: AY-wise CG rates, 87A, §288A/288B
+│   └── test-db.js                 # DB layer tests: Recycle Bin preservation, CRUD, CSV, telemetry
+│
+├── scratch/                       # Ad-hoc scripts (gitignored)
+│
+├── package.json                   # npm test runner for the regression suites
 ├── prd.md                           # Product Requirements Document
 ├── architecture.md                  # System Architecture & Technical Specification
 ├── design.md                        # UI/UX Design System & Style Guide
@@ -163,9 +173,10 @@ To introduce a future Assessment Year (e.g., AY 2027-28):
 4. Add the bank to the bank selector dropdown in `index.html`.
 
 #### 5.3 Modifying Supabase Sync Configuration
-1. Credentials and table configurations are managed via `js/supabase-sync.js` under `DEFAULT_CONFIG`.
-2. If the backup schema needs extension, update `collectAllData()` and `_mergePayloadIntoLocalStorage()` to serialize and restore the new keys.
-3. Update `getSqlSchema()` to reflect any new database columns or indexes.
+1. Supabase credentials are NOT stored in source. Users configure their own Project URL and anon key via the Admin Panel (Cloud Sync settings); until then the app runs in Local-only mode (`SupabaseSync.isConfigured()` returns false and auto-sync stays dormant).
+2. Table name and sync behavior defaults live in `js/supabase-sync.js` under `DEFAULT_CONFIG`.
+3. If the backup schema needs extension, update `collectAllData()` and `_mergePayloadIntoLocalStorage()` to serialize and restore the new keys.
+4. Update `getSqlSchema()` to reflect any new database columns or indexes.
 
 ---
 
@@ -173,8 +184,9 @@ To introduce a future Assessment Year (e.g., AY 2027-28):
 
 When validating any updates or fixes to this codebase:
 - [ ] **Tax Slab Verification:** Verify that calculations for AY 2023-24, AY 2024-25, AY 2025-26, and AY 2026-27 yield exact statutory results for both New and Old regimes.
+- [ ] **Old Regime CG Rates:** Verify Old Regime LTCG is 10%/₹1L exemption for AY 2023-24 & 2024-25, and 12.5%/₹1.25L for AY 2025-26 & 2026-27 (`npm run test:tax`).
 - [ ] **Rebate 87A Marginal Relief:** Verify that an income of ₹7,05,000 (AY 24-25) or ₹12,10,000 (AY 26-27) correctly applies marginal relief rather than levying full tax.
 - [ ] **Rounding Compliance:** Check that Taxable Income rounds to the nearest ₹10 (Section 288A) and Tax Due/Refund rounds to the nearest ₹10 (Section 288B).
 - [ ] **A4 Print Alignment:** Verify that `ReportClassic` cleanly paginates across multi-page schedules, and `ReportAck` strictly remains confined to a single A4 sheet without spilling onto page 2.
 - [ ] **LocalStorage Quota Protection:** Ensure adding and soft-deleting clients updates storage telemetry in the Admin panel without throwing unhandled exceptions.
-- [ ] **Cloud Sync Safeguard:** Confirm that auto-sync does not trigger when opening the application in a clean profile with 0 local records.
+- [ ] **Cloud Sync Safeguard:** Confirm that auto-sync does not trigger when opening the application in a clean profile with 0 local records, and that sync stays dormant until Supabase credentials are configured in the Admin Panel.

@@ -1,0 +1,16 @@
+{
+  "name": "ss-infotech-tax-computation-pro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline-first Indian income tax computation, reporting and office automation SPA for CAs and tax practitioners.",
+  "scripts": {
+    "test": "node test/test-salaried-calc.js && node test/test_salaried_itr1.js && node test/test-tax-engine.js && node test/test-db.js",
+    "test:calc": "node test/test-salaried-calc.js",
+    "test:itr1": "node test/test_salaried_itr1.js",
+    "test:tax": "node test/test-tax-engine.js",
+    "test:db": "node test/test-db.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -108,6 +108,10 @@ const TaxEngine = (() => {
   };
 
   // ── Default Old Regime Configuration ──────────────────────
+  // Slabs, 87A rebate and Standard Deduction are uniform across all
+  // Assessment Years under the Old Regime. Capital-gains rates are
+  // AY-dependent (Finance Act 2024 amended u/s 111A/112A from
+  // AY 2025-26) and are merged in getConfig() via OLD_REGIME_CG_BY_AY.
   const OLD_REGIME_CONFIG = {
     regime:         'Old',
     slabs: [
@@ -123,10 +127,19 @@ const TaxEngine = (() => {
     stdDeduction:   50000,
     tttaLimit:      10000,
     allow80TTA:     true,
-    stcgRate:       0.15,
-    ltcgRate:       0.125,
-    ltcgExemption:  125000,
     marginalRelief87A: false,
+  };
+
+  // Old Regime capital-gains rates by Assessment Year.
+  // AY 2023-24 & 2024-25: STCG u/s 111A @ 15%, LTCG u/s 112A @ 10%
+  //                         with ₹1,00,000 exemption.
+  // AY 2025-26 & 2026-27: STCG @ 20%, LTCG @ 12.5% with ₹1,25,000
+  //                         exemption (Finance Act 2024).
+  const OLD_REGIME_CG_BY_AY = {
+    '2023-24': { stcgRate: 0.15,  ltcgRate: 0.10,  ltcgExemption: 100000 },
+    '2024-25': { stcgRate: 0.15,  ltcgRate: 0.10,  ltcgExemption: 100000 },
+    '2025-26': { stcgRate: 0.20,  ltcgRate: 0.125, ltcgExemption: 125000 },
+    '2026-27': { stcgRate: 0.20,  ltcgRate: 0.125, ltcgExemption: 125000 },
   };
 
   /**
@@ -135,9 +148,18 @@ const TaxEngine = (() => {
   function getConfig(ay, adminOverrides = {}) {
     const isOld = (adminOverrides.regime || '').toLowerCase() === 'old';
     const baseNew = DEFAULT_NEW_AY_CONFIG[ay] || DEFAULT_NEW_AY_CONFIG['2026-27'];
-    const base = isOld
-      ? { ...baseNew, ...OLD_REGIME_CONFIG, label: `${baseNew.label.split('(')[0].trim()} (Old Regime)` }
-      : baseNew;
+    let base;
+    if (isOld) {
+      const cg = OLD_REGIME_CG_BY_AY[ay] || OLD_REGIME_CG_BY_AY['2026-27'];
+      base = {
+        ...baseNew,
+        ...OLD_REGIME_CONFIG,
+        ...cg,
+        label: `${baseNew.label.split('(')[0].trim()} (Old Regime)`,
+      };
+    } else {
+      base = baseNew;
+    }
 
     return { ...base, ...adminOverrides };
   }

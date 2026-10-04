@@ -52,7 +52,6 @@ const TDSEngine = (() => {
    * @param {Array}  banks               Bank accounts (for deductor names)
    * @param {string} ay                  Assessment Year (e.g. '2026-27')
    * @param {string} presumptiveSection  '44AD' | '44ADA' | 'none'
-   * @param {string} presumptiveSection  '44AD' | '44ADA' | 'none'
    * @param {Object} salaryInfo          Optional salary details { isSalaried, salaryGross, employerName, employerTan, tdsAmount, taxPayable }
    * @returns {Object}                   { tds194H, tds194C, tds194N, tds194J, tds192, totalTDS, entries }
    */

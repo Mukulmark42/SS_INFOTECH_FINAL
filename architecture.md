@@ -362,6 +362,11 @@ ON public.ssinfotech_backups(created_at DESC);
 
 ALTER TABLE public.ssinfotech_backups ENABLE ROW LEVEL SECURITY;
 
+-- SECURITY: The app authenticates with the public publishable
+-- (anon) key, so this policy permits read/write to anyone who
+-- obtains that key. Use a DEDICATED Supabase project containing
+-- ONLY this backup table (no other data), and rotate the key
+-- if it ever leaks.
 CREATE POLICY "Allow anon all on ssinfotech_backups" 
 ON public.ssinfotech_backups 
 FOR ALL 
@@ -375,7 +380,7 @@ WITH CHECK (true);
 ### 5. Security, Privacy & Integrity Model
 
 1. **Client-Side Isolation:** Sensitive financial data (PAN, bank accounts, income streams) is strictly stored in the user's browser `localStorage` by default. No background telemetry or analytics scripts are loaded.
-2. **Supabase Row Level Security (RLS):** Supabase integration operates using public anonymous keys (`anonKey`) restricted strictly to the configured backup table.
+2. **Supabase Row Level Security (RLS):** Supabase integration operates using public anonymous keys (`anonKey`) restricted strictly to the configured backup table. Because publishable keys are embedded in client code, the backup table is readable/writable by anyone holding the key — always use a dedicated Supabase project that contains only backup snapshots, never co-locate sensitive data, and rotate the key on leak. Credentials are configured per-installation in the Admin Panel and are never hardcoded in source.
 3. **Storage Quota & Data Corruption Safeguards:** Local writes are wrapped with quota handlers. When approaching the 5MB browser quota, the system warns the user, provides a single-click JSON download, and blocks unhandled exceptions.
 4. **Input Sanitization:** All report engines use HTML escaping helpers (`_esc`) to neutralize XSS vulnerabilities when rendering dynamic client inputs into the print DOM.
 
