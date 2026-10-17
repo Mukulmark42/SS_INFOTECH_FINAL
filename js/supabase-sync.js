@@ -17,6 +17,7 @@ const SupabaseSync = (() => {
     anonKey: '',
     tableName: DEFAULT_TABLE,
     autoSync: true,
+    realtimeSync: true,
     lastSyncAt: null,
     deviceId: _getOrCreateDeviceId(),
   };
@@ -24,6 +25,9 @@ const SupabaseSync = (() => {
   let _client = null;
   let _autoSyncTimer = null;
   let _isSyncing = false;
+  let _realtimeChannel = null;
+  let _realtimeStatus = 'idle'; // 'idle' | 'connecting' | 'connected' | 'error' | 'closed'
+  let _incomingSyncTimer = null;
 
   function _getOrCreateDeviceId() {
     let id = localStorage.getItem('ssinfotech_device_id');
@@ -39,6 +43,135 @@ const SupabaseSync = (() => {
     // Auto-sync only makes sense when credentials are configured;
     // otherwise every mutation would queue a doomed push attempt.
     return !!(cfg.autoSync && cfg.url && cfg.anonKey);
+  }
+
+  function isRealtimeEnabled() {
+    const cfg = getConfig();
+    return !!(cfg.realtimeSync !== false && cfg.url && cfg.anonKey);
+  }
+
+  function getRealtimeStatus() {
+    return _realtimeStatus;
+  }
+
+  /**
+   * Start Supabase Realtime subscription for instant multi-device synchronization
+   */
+  function startRealtimeSync() {
+    if (!isRealtimeEnabled()) {
+      stopRealtimeSync();
+      return;
+    }
+
+    const client = getClient();
+    if (!client || typeof client.channel !== 'function') {
+      console.warn('⚡ Realtime sync cannot start: Supabase client library or channel API unavailable.');
+      return;
+    }
+
+    const cfg = getConfig();
+    const table = cfg.tableName || DEFAULT_TABLE;
+    const channelName = `realtime_${table}`;
+
+    // Avoid duplicate subscriptions to the exact same channel
+    if (_realtimeChannel && _realtimeStatus === 'connected') {
+      return;
+    }
+
+    stopRealtimeSync();
+
+    _realtimeStatus = 'connecting';
+    _dispatchRealtimeStatus('connecting');
+
+    try {
+      _realtimeChannel = client
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: table,
+          },
+          (payload) => {
+            _handleIncomingRealtimeRecord(payload.new);
+          }
+        )
+        .subscribe((status, err) => {
+          console.log(`⚡ Supabase Realtime [${table}]:`, status, err || '');
+          if (status === 'SUBSCRIBED') {
+            _realtimeStatus = 'connected';
+            _dispatchRealtimeStatus('connected');
+          } else if (status === 'CLOSED') {
+            _realtimeStatus = 'closed';
+            _dispatchRealtimeStatus('closed');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            _realtimeStatus = 'error';
+            _dispatchRealtimeStatus('error', err);
+          }
+        });
+    } catch (err) {
+      console.error('Failed to subscribe to Realtime channel:', err);
+      _realtimeStatus = 'error';
+      _dispatchRealtimeStatus('error', err);
+    }
+  }
+
+  /**
+   * Stop Realtime subscription and clean up active channels
+   */
+  function stopRealtimeSync() {
+    if (_realtimeChannel && _client && typeof _client.removeChannel === 'function') {
+      try {
+        _client.removeChannel(_realtimeChannel);
+      } catch (e) {
+        console.warn('Error removing Realtime channel:', e);
+      }
+    }
+    _realtimeChannel = null;
+    _realtimeStatus = 'idle';
+    _dispatchRealtimeStatus('idle');
+  }
+
+  function _dispatchRealtimeStatus(status, error = null) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('supabase:realtime-status', {
+        detail: { status, error }
+      }));
+    }
+  }
+
+  /**
+   * Handle incoming Realtime record broadcast from peer workstation
+   */
+  function _handleIncomingRealtimeRecord(record) {
+    if (!record || !record.id) return;
+    const cfg = getConfig();
+
+    // Ignore self-published snapshots from this exact device to avoid echo
+    if (record.device_id && record.device_id === cfg.deviceId) {
+      return;
+    }
+
+    // Debounce incoming remote snapshot merge by 600ms to coalesce bursts
+    if (_incomingSyncTimer) clearTimeout(_incomingSyncTimer);
+
+    _incomingSyncTimer = setTimeout(async () => {
+      try {
+        console.log(`⚡ Realtime Live Sync: Received snapshot "${record.label || 'Snapshot'}" from device ${record.device_id}`);
+        const restoreRes = await restoreBackup(record.id, { merge: true });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('supabase:realtime-merged', {
+            detail: {
+              backup: restoreRes,
+              record: record
+            }
+          }));
+        }
+      } catch (err) {
+        console.warn('⚡ Realtime peer merge failed:', err);
+      }
+    }, 600);
   }
 
   /**
@@ -85,7 +218,11 @@ const SupabaseSync = (() => {
     const current = getConfig();
     const updated = { ...current, ...cfg };
     localStorage.setItem(CONFIG_KEY, JSON.stringify(updated));
+    stopRealtimeSync();
     _client = null; // Reset client on config change
+    if (updated.realtimeSync !== false && updated.url && updated.anonKey) {
+      setTimeout(() => startRealtimeSync(), 300);
+    }
     return updated;
   }
 
@@ -376,8 +513,14 @@ const SupabaseSync = (() => {
       localStmts.forEach(s => stmtMap.set(s.id || s.accountNo, s));
       payload.ssinfotech_statement_records.forEach(s => {
         const k = s.id || s.accountNo;
-        if (!k || !stmtMap.has(k)) {
-          stmtMap.set(k || Math.random().toString(), s);
+        if (!k) return;
+        if (!stmtMap.has(k)) {
+          stmtMap.set(k, s);
+        } else {
+          const existing = stmtMap.get(k);
+          if ((s.updatedAt || 0) > (existing.updatedAt || 0)) {
+            stmtMap.set(k, { ...existing, ...s });
+          }
         }
       });
       localStorage.setItem('ssinfotech_statement_records', JSON.stringify(Array.from(stmtMap.values())));
@@ -390,8 +533,14 @@ const SupabaseSync = (() => {
       localSlips.forEach(s => slipMap.set(s.id || `${s.employeeId}_${s.month}_${s.year}`, s));
       payload.ssinfotech_slip_records.forEach(s => {
         const k = s.id || `${s.employeeId}_${s.month}_${s.year}`;
-        if (!k || !slipMap.has(k)) {
-          slipMap.set(k || Math.random().toString(), s);
+        if (!k) return;
+        if (!slipMap.has(k)) {
+          slipMap.set(k, s);
+        } else {
+          const existing = slipMap.get(k);
+          if ((s.updatedAt || 0) > (existing.updatedAt || 0)) {
+            slipMap.set(k, { ...existing, ...s });
+          }
         }
       });
       localStorage.setItem('ssinfotech_slip_records', JSON.stringify(Array.from(slipMap.values())));
@@ -404,8 +553,14 @@ const SupabaseSync = (() => {
       localComps.forEach(c => compMap.set(c.id || c.name, c));
       payload.ssinfotech_slip_companies.forEach(c => {
         const k = c.id || c.name;
-        if (!k || !compMap.has(k)) {
+        if (!k) return;
+        if (!compMap.has(k)) {
           compMap.set(k, c);
+        } else {
+          const existing = compMap.get(k);
+          if ((c.updatedAt || 0) > (existing.updatedAt || 0)) {
+            compMap.set(k, { ...existing, ...c });
+          }
         }
       });
       localStorage.setItem('ssinfotech_slip_companies', JSON.stringify(Array.from(compMap.values())));
@@ -519,12 +674,15 @@ const SupabaseSync = (() => {
       const cloudTime = new Date(latestValid.created_at).getTime();
 
       if (cloudTime > (lastSyncAt + 60000) && latestValid.device_id !== cfg.deviceId && totalCloudRecords > 0) {
+        // Startup sync found update; also ensure Realtime is listening
+        if (isRealtimeEnabled()) startRealtimeSync();
         return {
           status: 'cloud_update_available',
           backup: latestValid,
         };
       }
 
+      if (isRealtimeEnabled()) startRealtimeSync();
       return { status: 'synced', backup: latestValid };
     } catch (e) {
       console.warn('Startup cloud check error:', e);
@@ -592,6 +750,18 @@ FOR ALL
 TO anon 
 USING (true) 
 WITH CHECK (true);
+
+-- 5. Enable Realtime Replication for instant multi-device live sync
+ALTER TABLE public.${tbl} REPLICA IDENTITY FULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = '${tbl}'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.${tbl};
+  END IF;
+END $$;
 `;
   }
 
@@ -609,6 +779,10 @@ WITH CHECK (true);
     pushBackup,
     triggerAutoBackup,
     isAutoSyncEnabled,
+    isRealtimeEnabled,
+    startRealtimeSync,
+    stopRealtimeSync,
+    getRealtimeStatus,
     listBackups,
     getLatestValidBackup,
     restoreBackup,

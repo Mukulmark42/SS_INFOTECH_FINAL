@@ -38,7 +38,8 @@ The system operates **entirely client-side** using standard web technologies. Al
   1. **Debounced Auto-Sync:** A 2-second debounce timer triggers silent cloud backups following any data mutation without stalling the UI.
   2. **Empty-Workspace Overwrite Guard:** If a user opens the application in a clean browser or private window with empty local storage, the auto-sync engine is blocked from pushing an empty backup, protecting existing cloud snapshots.
   3. **Auto-Restore on First Boot:** Automatically detects an empty local store on startup and prompts or restores the latest valid cloud snapshot.
-  4. **Smart Merge Conflict Resolution:** When merging cloud snapshots with local data, the engine compares individual records by identifier (`id` or `PAN + AY`) and retains the record with the most recent `updatedAt` timestamp.
+  4. **Smart Merge Conflict Resolution:** When merging cloud snapshots with local data, the engine compares individual records across all entities (computations, statements, salary slips, companies) and retains records with the most recent `updatedAt` timestamp.
+  5. **Supabase Realtime Live Sync:** Subscribes to Supabase Postgres Realtime channels (`INSERT` events on the backup table). When a peer workstation pushes updates, peer devices automatically detect the change, debounced-merge the incoming snapshot, refresh active views/dashboards, and show non-intrusive live toast alerts without requiring page reloads.
 
 #### ADR 4: Tri-Format Report Rendering Strategy
 - **Decision:** Provide three distinct reporting engines for different stakeholder needs:

@@ -3619,6 +3619,10 @@ Tax & Financial Consultancy Services`);
     if (status === 'synced') {
       iconEl.innerHTML = '<i class="bi bi-cloud-check-fill"></i>';
       iconEl.style.color = 'var(--green)';
+    } else if (status === 'realtime') {
+      iconEl.classList.add('realtime-pulse');
+      iconEl.innerHTML = '<i class="bi bi-broadcast-pin"></i>';
+      iconEl.style.color = '#38bdf8';
     } else if (status === 'syncing' || status === 'checking') {
       iconEl.classList.add('syncing');
       iconEl.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
@@ -3698,8 +3702,14 @@ Tax & Financial Consultancy Services`);
         });
       } else if (res.status === 'synced') {
         _updateTopbarCloudState('synced', 'Cloud Synced');
+        if (typeof SupabaseSync !== 'undefined' && SupabaseSync.isRealtimeEnabled()) {
+          SupabaseSync.startRealtimeSync();
+        }
       } else if (res.status === 'no_backups') {
         _updateTopbarCloudState('synced', 'Cloud Ready');
+        if (typeof SupabaseSync !== 'undefined' && SupabaseSync.isRealtimeEnabled()) {
+          SupabaseSync.startRealtimeSync();
+        }
       } else {
         _updateTopbarCloudState('offline', 'Cloud Offline');
       }
@@ -3762,8 +3772,10 @@ Tax & Financial Consultancy Services`);
     _setVal('supabase-table', cfg.tableName || 'ssinfotech_backups');
     const autoSyncEl = document.getElementById('supabase-autosync');
     if (autoSyncEl) autoSyncEl.checked = cfg.autoSync !== false;
+    const realtimeSyncEl = document.getElementById('supabase-realtimesync');
+    if (realtimeSyncEl) realtimeSyncEl.checked = cfg.realtimeSync !== false;
 
-    // Listen for background auto-sync events
+    // Listen for background auto-sync & realtime sync events
     if (!_supabaseEventBound && typeof window !== 'undefined') {
       window.addEventListener('supabase:synced', (e) => {
         const lastSyncEl = document.getElementById('cloud-last-sync-text');
@@ -3773,6 +3785,38 @@ Tax & Financial Consultancy Services`);
         }
         _updateTopbarCloudState('synced', 'Cloud Synced');
       });
+
+      // Realtime live update from peer workstation
+      window.addEventListener('supabase:realtime-merged', (e) => {
+        const record = e.detail?.record || {};
+        const label = record.label || 'Snapshot';
+        const cCount = record.client_count ?? (e.detail?.backup?.stats?.clients || 0);
+
+        _updateTopbarCloudState('realtime', 'Live Synced');
+        setTimeout(() => {
+          _updateTopbarCloudState('synced', 'Cloud Synced');
+        }, 3500);
+
+        _refreshDashboard();
+        _renderClientTable();
+        if (document.getElementById('page-admin')?.classList.contains('active')) {
+          _initAdminPanel();
+        }
+
+        _showCloudToast({
+          title: '⚡ Live Realtime Sync',
+          message: `Auto-merged updates from peer workstation: <strong>${label}</strong> (${cCount} Computations).`,
+          type: 'info',
+          delay: 6000
+        });
+      });
+
+      // Realtime channel connection status changes
+      window.addEventListener('supabase:realtime-status', (e) => {
+        const status = e.detail?.status;
+        _updateRealtimeBadge(status);
+      });
+
       _supabaseEventBound = true;
     }
 
@@ -3787,18 +3831,43 @@ Tax & Financial Consultancy Services`);
     }
 
     _updateSupabaseBadge({ status: 'checking', message: 'Checking Cloud Status...' });
+    if (typeof SupabaseSync !== 'undefined' && typeof SupabaseSync.getRealtimeStatus === 'function') {
+      _updateRealtimeBadge(SupabaseSync.getRealtimeStatus());
+    }
 
     // Test connection asynchronously
     const res = await SupabaseSync.testConnection();
     if (res.success) {
       _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
       _updateTopbarCloudState('synced', 'Cloud Synced');
+      if (SupabaseSync.isRealtimeEnabled()) {
+        SupabaseSync.startRealtimeSync();
+      }
     } else if (res.tableMissing) {
       _updateSupabaseBadge({ status: 'setup', message: '🟡 Table Setup Required (Click SQL Setup)' });
       _updateTopbarCloudState('offline', 'Setup Required');
     } else {
       _updateSupabaseBadge({ status: 'disconnected', message: '⚪ Cloud Offline / Disconnected' });
       _updateTopbarCloudState('offline', 'Cloud Offline');
+    }
+  }
+
+  function _updateRealtimeBadge(status) {
+    const badge = document.getElementById('realtime-status-badge');
+    if (!badge) return;
+    badge.className = 'badge rounded-pill py-1 px-2 ms-2';
+    if (status === 'connected') {
+      badge.classList.add('bg-success-subtle', 'text-success', 'border', 'border-success-subtle');
+      badge.innerHTML = '<i class="bi bi-broadcast me-1"></i>Realtime: Live Connected';
+    } else if (status === 'connecting') {
+      badge.classList.add('bg-warning-subtle', 'text-warning', 'border', 'border-warning-subtle');
+      badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:10px;height:10px"></span>Realtime: Connecting...';
+    } else if (status === 'error') {
+      badge.classList.add('bg-danger-subtle', 'text-danger', 'border', 'border-danger-subtle');
+      badge.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>Realtime: Error / Offline';
+    } else {
+      badge.classList.add('bg-secondary-subtle', 'text-secondary', 'border', 'border-secondary-subtle');
+      badge.innerHTML = '<i class="bi bi-broadcast me-1"></i>Realtime: Idle';
     }
   }
 
@@ -3825,13 +3894,14 @@ Tax & Financial Consultancy Services`);
     const anonKey = document.getElementById('supabase-key')?.value.trim();
     const tableName = document.getElementById('supabase-table')?.value.trim() || 'ssinfotech_backups';
     const autoSync = document.getElementById('supabase-autosync')?.checked ?? true;
+    const realtimeSync = document.getElementById('supabase-realtimesync')?.checked ?? true;
 
     if (!url || !anonKey) {
       alert('⚠️ Please enter both Supabase Project URL and Anon Public Key.');
       return;
     }
 
-    SupabaseSync.saveConfig({ url, anonKey, tableName, autoSync });
+    SupabaseSync.saveConfig({ url, anonKey, tableName, autoSync, realtimeSync });
     alert('✅ Supabase settings saved. Testing connection...');
     await testSupabaseConnection();
   }
@@ -3843,7 +3913,10 @@ Tax & Financial Consultancy Services`);
     if (res.success) {
       _updateSupabaseBadge({ status: 'connected', message: '🟢 Supabase Cloud Connected' });
       _updateTopbarCloudState('synced', 'Cloud Synced');
-      alert('🎉 Connection Successful!\n\nYour Supabase database is connected and ready for cloud backup and sync.');
+      if (typeof SupabaseSync !== 'undefined' && SupabaseSync.isRealtimeEnabled()) {
+        SupabaseSync.startRealtimeSync();
+      }
+      alert('🎉 Connection Successful!\n\nYour Supabase database is connected and Realtime live sync is active.');
     } else if (res.tableMissing) {
       _updateSupabaseBadge({ status: 'setup', message: '🟡 Table Setup Required' });
       _updateTopbarCloudState('offline', 'Setup Required');

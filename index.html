@@ -1739,11 +1739,17 @@
                       <input type="text" id="supabase-table" class="form-control form-control-sm font-monospace text-primary" value="ssinfotech_backups" />
                     </div>
                   </div>
-                  <div class="col-md-6 d-flex align-items-center pt-3">
-                    <div class="form-check form-switch">
+                  <div class="col-md-6 d-flex flex-wrap align-items-center gap-3 pt-2">
+                    <div class="form-check form-switch mb-1">
                       <input class="form-check-input" type="checkbox" id="supabase-autosync" checked>
                       <label class="form-check-label small fw-semibold ms-1" for="supabase-autosync">
-                        ⚡ Real-Time Auto-Backup on Every Change
+                        ⚡ Auto-Backup on Change
+                      </label>
+                    </div>
+                    <div class="form-check form-switch mb-1">
+                      <input class="form-check-input" type="checkbox" id="supabase-realtimesync" checked>
+                      <label class="form-check-label small fw-semibold ms-1" for="supabase-realtimesync">
+                        🔄 Realtime Live Sync (Multi-PC)
                       </label>
                     </div>
                   </div>
@@ -1751,9 +1757,12 @@
 
                 <!-- Sync Status Box -->
                 <div class="p-2.5 px-3 rounded-3 border d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 bg-surface-subtle" style="font-size:12.5px;">
-                  <div class="d-flex align-items-center gap-2">
+                  <div class="d-flex align-items-center flex-wrap gap-2">
                     <span class="text-emerald-400 text-success"><i class="bi bi-check-circle-fill"></i></span>
                     <span><strong class="text-muted">Cloud Status:</strong> <span id="cloud-last-sync-text">Checking...</span></span>
+                    <span id="realtime-status-badge" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill py-1 px-2 ms-2" style="font-size:11px;">
+                      <i class="bi bi-broadcast me-1"></i>Realtime: Idle
+                    </span>
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <button type="button" class="btn btn-outline-secondary btn-sm px-2.5 py-1" onclick="App.testSupabaseConnection()">
