@@ -53,6 +53,15 @@ The system operates **entirely client-side** using standard web technologies. Al
   1. Preserves backwards compatibility for existing saved records and user workflows that rely on the established ICICI layout.
   2. Provides dedicated pixel-perfect PDF replicas (such as Axis Bank's 7-column Times New Roman statement) when users explicitly require authentic bank-specific branch statement layouts.
 
+#### ADR 6: Salary Slip Customer Database & Name-Wise Directory
+- **Decision:** Payslip records saved from the Salary Slip Generator are aggregated into a persistent "Salary Slip Customer Database" cataloged name-wise (`empName___companyId`), accessible both inside the Salary Slip section (Tab 7) and as a dedicated sub-view inside the main Client Database (`#page-clients`).
+- **Rationale:**
+  1. **Name-Wise Aggregation:** Practitioners frequently generate 6, 12, or 24 months of payslips for loan and visa underwriting. Grouping slips by employee name presents a single consolidated profile per client rather than a fragmented chronological list.
+  2. **1-Click Batch Printing:** Allows printing or exporting all generated monthly payslips for an employee in one combined PDF (`SalarySlipEngine.generateMulti`).
+  3. **New Slip Pre-population:** Clicking "+ New Slip" on any customer profile instantly populates their master details (Company, Designation, Bank, PAN, UAN, ESIC, Earnings, Deductions) into Tab 1, requiring only the Month/Year to be adjusted.
+  4. **Integrated Client Database:** The main Client Database (`#page-clients`) features a "Salary Slip Customers" tab with active live counters, global search, and instant drawer management.
+
+
 ---
 
 ### 3. Critical Edge Cases & Statutory Nuances

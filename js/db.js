@@ -404,9 +404,127 @@ const DB = (() => {
     _safeSetItem(SLIP_REC_KEY, JSON.stringify(list));
   }
 
+  const MONTH_ORDER = {
+    January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
+    July: 7, August: 8, September: 9, October: 10, November: 11, December: 12
+  };
+
+  /**
+   * Get Salary Slip Customers grouped name-wise
+   * Each customer object aggregates employee profile info and all their generated payslips
+   */
+  function getSlipCustomers(search = '', companyFilter = '') {
+    const records = getSlipRecords();
+    const customerMap = new Map();
+
+    records.forEach(r => {
+      const name = (r.empName || 'Unnamed Employee').trim().toUpperCase();
+      const compId = r.companyId || (r.companyName || '').trim().toUpperCase();
+      const key = `${name}___${compId}`;
+
+      if (!customerMap.has(key)) {
+        customerMap.set(key, {
+          customerKey: key,
+          empName: name,
+          empCode: r.empCode || '',
+          companyId: r.companyId || '',
+          companyName: r.companyName || '',
+          companyAddress: r.companyAddress || '',
+          companyLogo: r.companyLogo || null,
+          companyLogoText: r.companyLogoText || '',
+          companyPhone: r.companyPhone || '',
+          companyEmail: r.companyEmail || '',
+          location: r.location || '',
+          division: r.division || '',
+          designation: r.designation || '',
+          doj: r.doj || '',
+          uan: r.uan || '',
+          esic: r.esic || '',
+          pan: r.pan || '',
+          bankName: r.bankName || '',
+          acNo: r.acNo || '',
+          ifsc: r.ifsc || '',
+          totalDays: r.totalDays || '30',
+          daysPaid: r.daysPaid || '30',
+          lop: r.lop || '0',
+          earnings: r.earnings || [],
+          deductions: r.deductions || [],
+          slips: [],
+          totalSlips: 0,
+          totalGross: 0,
+          totalNet: 0,
+          lastUpdated: r.updatedAt || r.createdAt || 0,
+        });
+      }
+
+      const cust = customerMap.get(key);
+      cust.slips.push(r);
+      cust.totalSlips++;
+      cust.totalGross += parseFloat(r.totalEarning || 0);
+      cust.totalNet += parseFloat(r.netPay || 0);
+
+      const recTime = r.updatedAt || r.createdAt || 0;
+      if (recTime >= cust.lastUpdated) {
+        cust.lastUpdated = recTime;
+        if (r.empCode) cust.empCode = r.empCode;
+        if (r.designation) cust.designation = r.designation;
+        if (r.division) cust.division = r.division;
+        if (r.location) cust.location = r.location;
+        if (r.pan) cust.pan = r.pan;
+        if (r.uan) cust.uan = r.uan;
+        if (r.esic) cust.esic = r.esic;
+        if (r.bankName) cust.bankName = r.bankName;
+        if (r.acNo) cust.acNo = r.acNo;
+        if (r.ifsc) cust.ifsc = r.ifsc;
+        if (r.earnings && r.earnings.length) cust.earnings = r.earnings;
+        if (r.deductions && r.deductions.length) cust.deductions = r.deductions;
+      }
+    });
+
+    let customers = Array.from(customerMap.values());
+
+    customers.forEach(cust => {
+      cust.slips.sort((a, b) => {
+        const yDiff = (parseInt(b.year, 10) || 0) - (parseInt(a.year, 10) || 0);
+        if (yDiff !== 0) return yDiff;
+        return (MONTH_ORDER[b.month] || 0) - (MONTH_ORDER[a.month] || 0);
+      });
+    });
+
+    if (companyFilter) {
+      customers = customers.filter(c => c.companyId === companyFilter || c.companyName === companyFilter);
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      customers = customers.filter(c =>
+        (c.empName || '').toLowerCase().includes(q) ||
+        (c.empCode || '').toLowerCase().includes(q) ||
+        (c.companyName || '').toLowerCase().includes(q) ||
+        (c.pan || '').toLowerCase().includes(q) ||
+        (c.designation || '').toLowerCase().includes(q)
+      );
+    }
+
+    customers.sort((a, b) => (a.empName || '').localeCompare(b.empName || ''));
+
+    return customers;
+  }
+
+  function deleteSlipCustomer(customerKey) {
+    const list = getSlipRecords().filter(r => {
+      const name = (r.empName || 'Unnamed Employee').trim().toUpperCase();
+      const compId = r.companyId || (r.companyName || '').trim().toUpperCase();
+      const key = `${name}___${compId}`;
+      return key !== customerKey;
+    });
+    _safeSetItem(SLIP_REC_KEY, JSON.stringify(list));
+    return true;
+  }
+
   function generateEmpCode(companyName) {
     const records = getSlipRecords();
-    const prefix = companyName.replace(/[^A-Z]/gi, '').toUpperCase().slice(0, 3);
+    const prefix = (companyName || 'EMP').replace(/[^A-Z]/gi, '').toUpperCase().slice(0, 3) || 'EMP';
     let max = 0;
     records.forEach(r => {
       if (r.empCode && r.empCode.startsWith(prefix)) {
@@ -449,6 +567,7 @@ const DB = (() => {
            getSlipCompanies, saveSlipCompany, removeSlipCompany,
            getSlipRecords, getSlipRecordsByEmployee, getSlipRecordsByCompany,
            saveSlipRecord, removeSlipRecord, generateEmpCode,
+           getSlipCustomers, deleteSlipCustomer,
            getStatementRecords, saveStatementRecord, removeStatementRecord };
 })();
 

@@ -2779,8 +2779,12 @@ Tax & Financial Consultancy Services`);
 
     const badgeActive = document.getElementById('badge-active-count');
     const badgeTrash  = document.getElementById('badge-trash-count');
+    const badgeSalary = document.getElementById('badge-salary-slip-count');
     if (badgeActive) badgeActive.textContent = allActive.length;
     if (badgeTrash)  badgeTrash.textContent  = allTrash.length;
+    if (badgeSalary && typeof DB !== 'undefined' && typeof DB.getSlipCustomers === 'function') {
+      badgeSalary.textContent = DB.getSlipCustomers().length;
+    }
 
     const restoreSelectedBtn = document.getElementById('btn-restore-selected');
     if (restoreSelectedBtn) {
@@ -2913,14 +2917,33 @@ Tax & Financial Consultancy Services`);
     selectedClientIds.clear();
 
     const activeBtn = document.getElementById('tab-clients-active');
+    const salaryBtn = document.getElementById('tab-clients-salary');
     const trashBtn  = document.getElementById('tab-clients-trash');
     const trashBar  = document.getElementById('trash-actions-bar');
+    const bulkBar   = document.getElementById('client-bulk-bar');
+    const clientGrid = document.getElementById('clientGrid');
+    const noClients = document.getElementById('no-clients');
+    const salaryContainer = document.getElementById('salarySlipClientsContainer');
 
     if (activeBtn) activeBtn.classList.toggle('active', tab === 'active');
+    if (salaryBtn) salaryBtn.classList.toggle('active', tab === 'salary-slip');
     if (trashBtn)  trashBtn.classList.toggle('active', tab === 'trash');
     if (trashBar)  trashBar.style.display = tab === 'trash' ? 'flex' : 'none';
 
-    _renderClientTable();
+    if (tab === 'salary-slip') {
+      if (bulkBar) bulkBar.style.display = 'none';
+      if (clientGrid) clientGrid.style.display = 'none';
+      if (noClients) noClients.style.display = 'none';
+      if (salaryContainer) {
+        salaryContainer.style.display = 'block';
+        _renderSalarySlipClientsInMainView();
+      }
+    } else {
+      if (salaryContainer) salaryContainer.style.display = 'none';
+      if (bulkBar) bulkBar.style.display = 'flex';
+      if (clientGrid) clientGrid.style.display = 'grid';
+      _renderClientTable();
+    }
   }
 
   function restoreClient(id) {
@@ -3043,6 +3066,10 @@ Tax & Financial Consultancy Services`);
   }
 
   function searchClients() {
+    if (currentClientTab === 'salary-slip') {
+      _renderSalarySlipClientsInMainView();
+      return;
+    }
     const q = document.getElementById('clientSearch')?.value || '';
     _renderClientTable(DB.search(q));
   }
@@ -6089,56 +6116,512 @@ Tax & Financial Consultancy Services`);
     if (cur) sel.value = cur;
   }
 
+  // ── Salary Slip Customer Database (Name-Wise Directory) ────
+  let _slipViewMode = 'namewise'; // 'namewise' | 'flat'
+  let _openCustomerDrawers = new Set();
+
+  function setSlipViewMode(mode) {
+    _slipViewMode = mode;
+    const btnName = document.getElementById('btn-view-namewise');
+    const btnFlat = document.getElementById('btn-view-flat');
+    if (btnName) btnName.classList.toggle('active', mode === 'namewise');
+    if (btnFlat) btnFlat.classList.toggle('active', mode === 'flat');
+    renderSavedSlips();
+  }
+
+  function toggleCustomerDrawer(encodedKey) {
+    const customerKey = decodeURIComponent(encodedKey);
+    if (_openCustomerDrawers.has(customerKey)) {
+      _openCustomerDrawers.delete(customerKey);
+    } else {
+      _openCustomerDrawers.add(customerKey);
+    }
+    renderSavedSlips();
+  }
+
   function renderSavedSlips() {
     const container = document.getElementById('ss-saved-list');
     if (!container) return;
+
+    _populateSlipCompanyFilter();
     const filterComp = document.getElementById('ss-filter-comp')?.value || '';
-    const filterSearch = (document.getElementById('ss-filter-search')?.value || '').toLowerCase();
+    const filterSearch = (document.getElementById('ss-filter-search')?.value || '').trim();
 
-    let records = DB.getSlipRecords();
-    if (filterComp) records = records.filter(r => r.companyId === filterComp);
-    if (filterSearch) {
-      records = records.filter(r =>
-        (r.empName || '').toLowerCase().includes(filterSearch) ||
-        (r.empCode || '').toLowerCase().includes(filterSearch) ||
-        (r.companyName || '').toLowerCase().includes(filterSearch)
-      );
-    }
+    const allCustomers = DB.getSlipCustomers();
+    const allRecords = DB.getSlipRecords();
+    const totalComps = new Set(allRecords.map(r => r.companyId || r.companyName)).size;
+    const totalNetAll = allRecords.reduce((sum, r) => sum + (parseFloat(r.netPay) || 0), 0);
 
-    if (!records.length) {
-      container.innerHTML = '<div class="text-center text-muted py-4" style="font-size:12px">No saved salary slips yet.</div>';
+    // Update KPI strip
+    const elKpiCust = document.getElementById('kpi-slip-cust-count');
+    const elKpiSlips = document.getElementById('kpi-slip-total-slips');
+    const elKpiNet = document.getElementById('kpi-slip-total-net');
+    const elKpiComps = document.getElementById('kpi-slip-total-comps');
+    const elSummary = document.getElementById('ss-customer-stats-summary');
+
+    if (elKpiCust) elKpiCust.textContent = allCustomers.length;
+    if (elKpiSlips) elKpiSlips.textContent = allRecords.length;
+    if (elKpiNet) elKpiNet.textContent = '₹ ' + totalNetAll.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    if (elKpiComps) elKpiComps.textContent = totalComps;
+    if (elSummary) elSummary.textContent = `${allCustomers.length} Customers | ${allRecords.length} Slips`;
+
+    // 1. FLAT TIMELINE VIEW
+    if (_slipViewMode === 'flat') {
+      let records = allRecords;
+      if (filterComp) records = records.filter(r => r.companyId === filterComp);
+      if (filterSearch) {
+        const q = filterSearch.toLowerCase();
+        records = records.filter(r =>
+          (r.empName || '').toLowerCase().includes(q) ||
+          (r.empCode || '').toLowerCase().includes(q) ||
+          (r.companyName || '').toLowerCase().includes(q) ||
+          (r.pan || '').toLowerCase().includes(q)
+        );
+      }
+
+      if (!records.length) {
+        container.innerHTML = '<div class="text-center text-muted py-5" style="font-size:13px"><i class="bi bi-inbox me-2"></i>No saved salary slips found matching criteria.</div>';
+        return;
+      }
+
+      container.innerHTML = records.map(r => {
+        const initials = (r.empName || 'E').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+        const slipMonth = r.month || '';
+        const slipYear = r.year || '';
+        const netPay = parseFloat(r.netPay) || 0;
+        const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+        return `
+        <div class="ss-saved-card">
+          <div class="ss-saved-avatar">${initials}</div>
+          <div class="ss-saved-info">
+            <div class="ss-saved-name">${_esc(r.empName || 'Unknown')}</div>
+            <div class="ss-saved-meta">
+              <code>${_esc(r.empCode || '--')}</code> &nbsp;|&nbsp;
+              ${_esc(r.companyName || '')} &nbsp;|&nbsp;
+              ${slipMonth} ${slipYear} &nbsp;|&nbsp;
+              ${date}
+            </div>
+          </div>
+          <div class="ss-saved-amount">₹ ${(netPay).toLocaleString('en-IN', {minimumFractionDigits:2})}</div>
+          <div class="ss-saved-actions">
+            <button class="btn btn-sm btn-outline-primary" onclick="App.editSlipRecord('${r.id}')" title="Edit"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-sm btn-outline-success" onclick="App.reprintSlipRecord('${r.id}')" title="Reprint"><i class="bi bi-printer"></i></button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="App.downloadSlipRecord('${r.id}')" title="Download JSON"><i class="bi bi-download"></i></button>
+            <button class="btn btn-sm btn-outline-danger" onclick="App.deleteSlipRecord('${r.id}')" title="Delete"><i class="bi bi-trash"></i></button>
+          </div>
+        </div>`;
+      }).join('');
+      updateProjectStorageStats();
       return;
     }
 
-    container.innerHTML = records.map(r => {
-      const initials = (r.empName || 'E').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      const slipMonth = r.month || '';
-      const slipYear = r.year || '';
-      const netPay = parseFloat(r.netPay) || 0;
-      const statusClass = netPay > 0 ? 'nil' : 'nil';
-      const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    // 2. NAME-WISE CUSTOMER DIRECTORY VIEW (DEFAULT)
+    const customers = DB.getSlipCustomers(filterSearch, filterComp);
+
+    if (!customers.length) {
+      container.innerHTML = `
+        <div class="text-center py-5">
+          <div class="empty-icon text-muted mb-2" style="font-size:38px;"><i class="bi bi-person-x"></i></div>
+          <div class="fw-bold fs-6 mb-1">No Salary Slip Customers Found</div>
+          <p class="text-muted small mb-3">Create your first salary slip in Tab 1 and the customer will be automatically cataloged name-wise here.</p>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(1)">
+            <i class="bi bi-plus-lg me-1"></i>Create New Payslip
+          </button>
+        </div>`;
+      updateProjectStorageStats();
+      return;
+    }
+
+    container.innerHTML = customers.map(cust => {
+      const initials = (cust.empName || 'E').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+      const isDrawerOpen = _openCustomerDrawers.has(cust.customerKey) || customers.length === 1;
+      const encodedKey = encodeURIComponent(cust.customerKey);
+      const safeId = cust.customerKey.replace(/[^a-zA-Z0-9]/g, '_');
+
       return `
-      <div class="ss-saved-card">
-        <div class="ss-saved-avatar">${initials}</div>
-        <div class="ss-saved-info">
-          <div class="ss-saved-name">${_esc(r.empName || 'Unknown')}</div>
-          <div class="ss-saved-meta">
-            <code>${_esc(r.empCode || '--')}</code> &nbsp;|&nbsp;
-            ${_esc(r.companyName || '')} &nbsp;|&nbsp;
-            ${slipMonth} ${slipYear} &nbsp;|&nbsp;
-            ${date}
+      <div class="ss-cust-card" id="cust-card-${safeId}">
+        <div class="ss-cust-header">
+          <div class="ss-cust-main-info">
+            <div class="ss-cust-avatar">${initials}</div>
+            <div style="min-width:0">
+              <div class="ss-cust-name">
+                <span>${_esc(cust.empName)}</span>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill py-0.5 px-2" style="font-size:11px;">
+                  ${cust.totalSlips} ${cust.totalSlips === 1 ? 'Month Slip' : 'Months Slips'}
+                </span>
+              </div>
+              <div class="ss-cust-badges">
+                ${cust.companyName ? `<span class="ss-cust-badge company"><i class="bi bi-building me-1"></i>${_esc(cust.companyName)}</span>` : ''}
+                ${cust.empCode ? `<span class="ss-cust-badge code"><i class="bi bi-person-badge me-1"></i>${_esc(cust.empCode)}</span>` : ''}
+                ${cust.designation ? `<span class="ss-cust-badge"><i class="bi bi-briefcase me-1"></i>${_esc(cust.designation)}</span>` : ''}
+                ${cust.pan ? `<span class="ss-cust-badge"><i class="bi bi-credit-card me-1"></i>PAN: ${_esc(cust.pan)}</span>` : ''}
+                ${cust.bankName ? `<span class="ss-cust-badge"><i class="bi bi-bank me-1"></i>${_esc(cust.bankName)}${cust.acNo ? ' (' + cust.acNo.slice(-4) + ')' : ''}</span>` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center gap-3">
+            <div class="ss-cust-payout d-none d-md-block">
+              <div class="ss-cust-payout-amount">₹ ${(cust.totalNet).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+              <div class="ss-cust-payout-label">Total Net Disbursed</div>
+            </div>
+
+            <div class="ss-cust-actions">
+              <button class="btn btn-sm btn-primary" onclick="App.newSlipForCustomer('${encodedKey}')" title="Generate New Payslip for this customer">
+                <i class="bi bi-plus-lg me-1"></i>New Slip
+              </button>
+              <button class="btn btn-sm btn-outline-success" onclick="App.printAllCustomerSlips('${encodedKey}')" title="Print All Generated Slips for this Customer">
+                <i class="bi bi-printer me-1"></i>Print All (${cust.totalSlips})
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="App.toggleCustomerDrawer('${encodedKey}')" title="Toggle Month Slips">
+                <i class="bi bi-${isDrawerOpen ? 'chevron-up' : 'chevron-down'} me-1"></i>${isDrawerOpen ? 'Hide' : `Slips (${cust.totalSlips})`}
+              </button>
+              <button class="btn btn-sm btn-outline-danger" onclick="App.deleteCustomerProfile('${encodedKey}')" title="Delete Customer & All Associated Slips">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
           </div>
         </div>
-        <div class="ss-saved-amount">₹ ${(netPay).toLocaleString('en-IN', {minimumFractionDigits:2})}</div>
-        <div class="ss-saved-actions">
-          <button class="btn btn-sm btn-outline-primary" onclick="App.editSlipRecord('${r.id}')" title="Edit"><i class="bi bi-pencil"></i></button>
-          <button class="btn btn-sm btn-outline-success" onclick="App.reprintSlipRecord('${r.id}')" title="Reprint"><i class="bi bi-printer"></i></button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="App.downloadSlipRecord('${r.id}')" title="Download JSON"><i class="bi bi-download"></i></button>
-          <button class="btn btn-sm btn-outline-danger" onclick="App.deleteSlipRecord('${r.id}')" title="Delete"><i class="bi bi-trash"></i></button>
+
+        <!-- Monthly Slips Drawer (Name-Wise Generated Slips) -->
+        <div class="ss-cust-drawer" id="cust-drawer-${safeId}" style="display:${isDrawerOpen ? 'block' : 'none'};">
+          <div class="ss-cust-drawer-title">
+            <span><i class="bi bi-calendar3 me-1 text-primary"></i> Generated Monthly Payslips (${cust.totalSlips} Months)</span>
+            <span class="text-muted font-monospace" style="font-size:11px;">Customer: ${_esc(cust.empName)}</span>
+          </div>
+
+          <div class="ss-cust-slips-list">
+            ${cust.slips.map(s => {
+              const net = parseFloat(s.netPay) || 0;
+              const gross = parseFloat(s.totalEarning) || 0;
+              const ded = parseFloat(s.totalDeduction) || 0;
+              const genDate = s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+              return `
+              <div class="ss-slip-subrow">
+                <div class="d-flex align-items-center gap-2" style="min-width:180px;">
+                  <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace py-1 px-2">
+                    <i class="bi bi-calendar-event me-1"></i>${_esc(s.month)} ${_esc(s.year)}
+                  </span>
+                  <span class="text-muted small">${_esc(s.daysPaid || '30')}/${_esc(s.totalDays || '30')} Days</span>
+                </div>
+
+                <div class="d-flex align-items-center gap-3 small text-muted">
+                  <span>Gross: <strong class="text-body">₹ ${gross.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                  <span>Ded: <strong class="text-danger">₹ ${ded.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                  <span>Net Pay: <strong class="text-success fs-6">₹ ${net.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                  ${genDate ? `<span class="d-none d-lg-inline text-subtle" style="font-size:11px;">(${genDate})</span>` : ''}
+                </div>
+
+                <div class="d-flex align-items-center gap-1">
+                  <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="App.reprintSlipRecord('${s.id}')" title="Print this Payslip">
+                    <i class="bi bi-printer me-1"></i>Print
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="App.editSlipRecord('${s.id}')" title="Edit this Payslip">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-1.5" onclick="App.downloadSlipRecord('${s.id}')" title="Download JSON">
+                    <i class="bi bi-download"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger py-0 px-1.5" onclick="App.deleteSlipRecord('${s.id}')" title="Delete this month's slip">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
         </div>
       </div>`;
     }).join('');
+
     updateProjectStorageStats();
+  }
+
+  function newSlipForCustomer(encodedKey) {
+    const customerKey = decodeURIComponent(encodedKey);
+    const customers = DB.getSlipCustomers();
+    const cust = customers.find(c => c.customerKey === customerKey);
+    if (!cust) return;
+
+    // 1. Set Company
+    const compSel = document.getElementById('ss-company');
+    if (compSel) {
+      if (cust.companyId) {
+        compSel.value = cust.companyId;
+      } else if (cust.companyName) {
+        const opt = Array.from(compSel.options).find(o => o.text.trim().toUpperCase() === cust.companyName.trim().toUpperCase());
+        if (opt) compSel.value = opt.value;
+      }
+    }
+
+    // 2. Set Employee Details
+    _setVal('ss-emp-id', cust.empCode);
+    _setVal('ss-emp-name', cust.empName);
+    _setVal('ss-emp-location', cust.location);
+    _setVal('ss-emp-division', cust.division);
+    _setVal('ss-emp-designation', cust.designation);
+    _setVal('ss-emp-doj', cust.doj);
+    _setVal('ss-emp-uan', cust.uan);
+    _setVal('ss-emp-esic', cust.esic);
+    _setVal('ss-emp-pan', cust.pan);
+    _setVal('ss-emp-bank', cust.bankName);
+    _setVal('ss-emp-acno', cust.acNo);
+    _setVal('ss-emp-ifsc', cust.ifsc);
+
+    // 3. Attendance
+    _setVal('ss-total-days', cust.totalDays || '30');
+    _setVal('ss-days-paid', cust.daysPaid || '30');
+    _setVal('ss-lop', cust.lop || '0');
+
+    // 4. Earnings
+    if (cust.earnings && cust.earnings.length) {
+      const container = document.getElementById('ss-earnings-list');
+      if (container) {
+        container.innerHTML = cust.earnings.map(er => `
+          <div class="ss-earn-row">
+            <input type="text" class="form-control form-control-sm" value="${_esc(er.name)}" readonly />
+            <input type="number" class="form-control form-control-sm ss-earning-actual" value="${er.actual || 0}" min="0" oninput="App.calcSlipNet()" placeholder="Actual" />
+            <input type="number" class="form-control form-control-sm ss-earning-salary" value="${er.salary || 0}" min="0" oninput="App.calcSlipNet()" placeholder="Salary" />
+            <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.ss-earn-row').remove();App.calcSlipNet()"><i class="bi bi-trash"></i></button>
+          </div>`).join('');
+      }
+    }
+
+    // 5. Deductions
+    if (cust.deductions && cust.deductions.length) {
+      const container = document.getElementById('ss-deductions-list');
+      if (container) {
+        container.innerHTML = cust.deductions.map(dr => `
+          <div class="ss-ded-row">
+            <input type="text" class="form-control form-control-sm" value="${_esc(dr.name)}" readonly />
+            <input type="number" class="form-control form-control-sm ss-deduction-amt" value="${dr.amount || 0}" min="0" oninput="App.calcSlipNet()" placeholder="Deducted" />
+            <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.ss-ded-row').remove();App.calcSlipNet()"><i class="bi bi-trash"></i></button>
+          </div>`).join('');
+      }
+    }
+
+    setSlipMode('manual');
+    calcSlipNet();
+
+    navTo('salary-slip');
+    switchSlipTab(1);
+
+    showCloudToast({
+      title: '👤 Customer Profile Loaded',
+      message: `Profile loaded for <strong>${cust.empName}</strong>. Select next month &amp; click Generate!`,
+      type: 'info',
+      delay: 5000
+    });
+  }
+
+  function printAllCustomerSlips(encodedKey) {
+    const customerKey = decodeURIComponent(encodedKey);
+    const customers = DB.getSlipCustomers();
+    const cust = customers.find(c => c.customerKey === customerKey);
+    if (!cust || !cust.slips || !cust.slips.length) {
+      alert('No saved payslips found for this customer.');
+      return;
+    }
+
+    const dataList = cust.slips.map(r => ({
+      company: {
+        name: r.companyName,
+        address: r.companyAddress,
+        logoData: r.companyLogo,
+        logoText: r.companyLogoText,
+        phone: r.companyPhone,
+        email: r.companyEmail
+      },
+      month: r.month,
+      year: r.year,
+      employee: {
+        id: r.empCode,
+        name: r.empName,
+        location: r.location,
+        division: r.division,
+        designation: r.designation,
+        doj: r.doj,
+        uan: r.uan,
+        esic: r.esic,
+        pan: r.pan,
+        bankName: r.bankName,
+        acNo: r.acNo,
+        ifsc: r.ifsc
+      },
+      attendance: {
+        totalDays: r.totalDays,
+        daysPaid: r.daysPaid,
+        lop: r.lop
+      },
+      earnings: r.earnings || [],
+      deductions: { items: r.deductions || [], total: r.totalDeduction || 0 }
+    }));
+
+    const html = SalarySlipEngine.generateMulti(dataList);
+    const title = `${cust.empName}_All_Payslips_${cust.slips.length}M`;
+    const win = window.open('', '_blank', 'width=920,height=750');
+    if (win) {
+      win.document.title = title;
+      win.document.write(html);
+      win.document.close();
+    } else {
+      alert('Please allow popups to print salary slips.');
+    }
+  }
+
+  function deleteCustomerProfile(encodedKey) {
+    const customerKey = decodeURIComponent(encodedKey);
+    const customers = DB.getSlipCustomers();
+    const cust = customers.find(c => c.customerKey === customerKey);
+    if (!cust) return;
+
+    if (!confirm(`Delete customer "${cust.empName}" and all ${cust.totalSlips} generated salary slip(s)?\n\nThis cannot be undone.`)) {
+      return;
+    }
+
+    DB.deleteSlipCustomer(customerKey);
+    showCloudToast({
+      title: '🗑️ Customer Deleted',
+      message: `Removed ${cust.empName} and ${cust.totalSlips} salary slip records.`,
+      type: 'warning'
+    });
+    renderSavedSlips();
+    if (currentClientTab === 'salary-slip') {
+      _renderSalarySlipClientsInMainView();
+    }
+    _renderClientTable();
+  }
+
+  function _renderSalarySlipClientsInMainView() {
+    const container = document.getElementById('salarySlipClientsContainer');
+    if (!container) return;
+    const filterSearch = (document.getElementById('clientSearch')?.value || '').toLowerCase();
+    const customers = DB.getSlipCustomers(filterSearch);
+
+    if (!customers.length) {
+      container.innerHTML = `
+        <div class="empty-state text-center py-5" style="display:block;">
+          <div class="empty-icon text-muted mb-3" style="font-size:42px;"><i class="bi bi-file-earmark-person"></i></div>
+          <div class="empty-title fs-5 fw-bold mb-1">No Salary Slip Customers Yet</div>
+          <div class="empty-sub text-muted mb-3" style="font-size:13px;">Generate salary slips in the Salary Slip Generator and they will appear categorized name-wise here.</div>
+          <button class="btn btn-primary" onclick="App.navTo('salary-slip')">
+            <i class="bi bi-plus-lg me-1"></i>Go to Salary Slip Generator
+          </button>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+          <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-info me-2"></i>Salary Slip Customer Directory</h6>
+          <span class="text-muted small">${customers.length} Customers | ${DB.getSlipRecords().length} Generated Payslips</span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="App.navTo('salary-slip'); App.switchSlipTab(1);">
+          <i class="bi bi-plus-lg me-1"></i>Generate New Payslip
+        </button>
+      </div>
+      <div id="salary-slip-main-db-list"></div>
+    `;
+
+    const listEl = document.getElementById('salary-slip-main-db-list');
+    if (listEl) {
+      listEl.innerHTML = customers.map(cust => {
+        const initials = (cust.empName || 'E').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+        const isDrawerOpen = _openCustomerDrawers.has(cust.customerKey) || customers.length === 1;
+        const encodedKey = encodeURIComponent(cust.customerKey);
+        return `
+        <div class="ss-cust-card">
+          <div class="ss-cust-header">
+            <div class="ss-cust-main-info">
+              <div class="ss-cust-avatar">${initials}</div>
+              <div style="min-width:0">
+                <div class="ss-cust-name">
+                  <span>${_esc(cust.empName)}</span>
+                  <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill py-0.5 px-2" style="font-size:11px;">
+                    ${cust.totalSlips} ${cust.totalSlips === 1 ? 'Month Slip' : 'Months Slips'}
+                  </span>
+                </div>
+                <div class="ss-cust-badges">
+                  ${cust.companyName ? `<span class="ss-cust-badge company"><i class="bi bi-building me-1"></i>${_esc(cust.companyName)}</span>` : ''}
+                  ${cust.empCode ? `<span class="ss-cust-badge code"><i class="bi bi-person-badge me-1"></i>${_esc(cust.empCode)}</span>` : ''}
+                  ${cust.designation ? `<span class="ss-cust-badge"><i class="bi bi-briefcase me-1"></i>${_esc(cust.designation)}</span>` : ''}
+                  ${cust.pan ? `<span class="ss-cust-badge"><i class="bi bi-credit-card me-1"></i>PAN: ${_esc(cust.pan)}</span>` : ''}
+                  ${cust.bankName ? `<span class="ss-cust-badge"><i class="bi bi-bank me-1"></i>${_esc(cust.bankName)}${cust.acNo ? ' (' + cust.acNo.slice(-4) + ')' : ''}</span>` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+              <div class="ss-cust-payout d-none d-md-block">
+                <div class="ss-cust-payout-amount">₹ ${(cust.totalNet).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                <div class="ss-cust-payout-label">Total Net Disbursed</div>
+              </div>
+
+              <div class="ss-cust-actions">
+                <button class="btn btn-sm btn-primary" onclick="App.newSlipForCustomer('${encodedKey}')" title="Create New Payslip">
+                  <i class="bi bi-plus-lg me-1"></i>New Slip
+                </button>
+                <button class="btn btn-sm btn-outline-success" onclick="App.printAllCustomerSlips('${encodedKey}')" title="Print All Slips">
+                  <i class="bi bi-printer me-1"></i>Print All
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="App.toggleCustomerDrawer('${encodedKey}')" title="View Monthly Slips">
+                  <i class="bi bi-${isDrawerOpen ? 'chevron-up' : 'chevron-down'} me-1"></i>${isDrawerOpen ? 'Hide' : `Slips (${cust.totalSlips})`}
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="App.deleteCustomerProfile('${encodedKey}')" title="Delete Customer">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ss-cust-drawer" style="display:${isDrawerOpen ? 'block' : 'none'};">
+            <div class="ss-cust-drawer-title">
+              <span><i class="bi bi-calendar3 me-1 text-primary"></i> Generated Payslips (${cust.totalSlips} Months)</span>
+              <span class="text-muted font-monospace" style="font-size:11px;">Customer: ${_esc(cust.empName)}</span>
+            </div>
+            <div class="ss-cust-slips-list">
+              ${cust.slips.map(s => {
+                const net = parseFloat(s.netPay) || 0;
+                const gross = parseFloat(s.totalEarning) || 0;
+                const ded = parseFloat(s.totalDeduction) || 0;
+                const genDate = s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+                return `
+                <div class="ss-slip-subrow">
+                  <div class="d-flex align-items-center gap-2" style="min-width:180px;">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace py-1 px-2">
+                      <i class="bi bi-calendar-event me-1"></i>${_esc(s.month)} ${_esc(s.year)}
+                    </span>
+                    <span class="text-muted small">${_esc(s.daysPaid || '30')}/${_esc(s.totalDays || '30')} Days</span>
+                  </div>
+
+                  <div class="d-flex align-items-center gap-3 small text-muted">
+                    <span>Gross: <strong class="text-body">₹ ${gross.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                    <span>Ded: <strong class="text-danger">₹ ${ded.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                    <span>Net Pay: <strong class="text-success fs-6">₹ ${net.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                    ${genDate ? `<span class="d-none d-lg-inline text-subtle" style="font-size:11px;">(${genDate})</span>` : ''}
+                  </div>
+
+                  <div class="d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="App.reprintSlipRecord('${s.id}')" title="Print this Payslip">
+                      <i class="bi bi-printer me-1"></i>Print
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="App.editSlipRecord('${s.id}')" title="Edit this Payslip">
+                      <i class="bi bi-pencil me-1"></i>Edit
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-1.5" onclick="App.downloadSlipRecord('${s.id}')" title="Download JSON">
+                      <i class="bi bi-download"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-1.5" onclick="App.deleteSlipRecord('${s.id}')" title="Delete this month's slip">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
   }
 
   function editSlipRecord(id) {
@@ -6438,7 +6921,7 @@ Tax & Financial Consultancy Services`);
       DB.saveSlipRecord(record);
     });
 
-    alert(`✅ Successfully saved ${selectedMonths.length} payslip record(s) for ${selectedMonths.join(', ')}!`);
+    alert(`✅ Successfully saved ${selectedMonths.length} payslip record(s) for ${selectedMonths.join(', ')} under customer "${baseData.employee.name}"!`);
     renderSavedSlips();
     updateProjectStorageStats();
     switchSlipTab(7);
@@ -6527,6 +7010,12 @@ Tax & Financial Consultancy Services`);
 
     renderSavedSlips();
     updateProjectStorageStats();
+    showCloudToast({
+      title: '✅ Salary Slip Generated & Saved',
+      message: `Saved ${dataList.length} payslip(s) for customer <strong>${_esc(baseData.employee.name)}</strong> under Customer Database.`,
+      type: 'success',
+      delay: 5000
+    });
   }
 
   // ── Bank Statement Page ──────────────────────────────────────
@@ -8070,7 +8559,8 @@ Tax & Financial Consultancy Services`);
     switchSlipTab, nextSlipTab, prevSlipTab,
     toggleSlipMonth, selectSlipMonthsPreset, getSelectedSlipMonths,
     calcSlipNet, addSlipEarning, addSlipDeduction, resetSlipForm, saveSlipEmployee, generateSalarySlip,
-    renderSavedSlips, editSlipRecord, reprintSlipRecord, deleteSlipRecord,
+    renderSavedSlips, setSlipViewMode, newSlipForCustomer, printAllCustomerSlips, toggleCustomerDrawer, deleteCustomerProfile,
+    editSlipRecord, reprintSlipRecord, deleteSlipRecord,
     autoGenStatementTxs, addStatementTxnRow, clearStatementTxns, recalcStatement,
     autoGenSalaryStatementTxs, addSalaryStatementTxnRow, clearSalaryStatementTxns, recalcSalaryStatement,
     onSalaryStatementIFSCInput, lookupSalaryStatementIFSC,

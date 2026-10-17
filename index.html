@@ -1213,7 +1213,10 @@
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div class="nav nav-pills" id="client-db-tabs" role="tablist">
           <button class="nav-link active py-1 px-3 fw-bold small" id="tab-clients-active" onclick="App.switchClientDbTab('active')">
-            <i class="bi bi-people-fill me-1"></i> Active Clients <span class="badge bg-primary ms-1" id="badge-active-count">0</span>
+            <i class="bi bi-people-fill me-1"></i> Active Tax Clients <span class="badge bg-primary ms-1" id="badge-active-count">0</span>
+          </button>
+          <button class="nav-link py-1 px-3 fw-bold small text-info" id="tab-clients-salary" onclick="App.switchClientDbTab('salary-slip')">
+            <i class="bi bi-file-earmark-person-fill me-1"></i> Salary Slip Customers <span class="badge bg-info ms-1" id="badge-salary-slip-count">0</span>
           </button>
           <button class="nav-link py-1 px-3 fw-bold small text-danger" id="tab-clients-trash" onclick="App.switchClientDbTab('trash')">
             <i class="bi bi-trash3-fill me-1"></i> Recycle Bin <span class="badge bg-danger ms-1" id="badge-trash-count">0</span>
@@ -1240,6 +1243,9 @@
 
       <!-- Client Cards Grid -->
       <div class="client-grid" id="clientGrid" aria-live="polite"></div>
+
+      <!-- Salary Slip Customers Container (when Salary Slip tab is active) -->
+      <div id="salarySlipClientsContainer" style="display:none;" aria-live="polite"></div>
 
       <!-- Empty state -->
       <div class="empty-state" id="no-clients" style="display:none" aria-live="polite">
@@ -1996,8 +2002,8 @@
         </button>
         <button type="button" class="ss-tab-btn" id="ss-tab-7" role="tab" aria-selected="false" aria-controls="ss-tab-panel-7" onclick="App.switchSlipTab(7)">
           <span class="ss-tab-badge">7</span>
-          <i class="bi bi-folder2-open"></i>
-          <span>Saved Salary Slips</span>
+          <i class="bi bi-person-lines-fill"></i>
+          <span>Customer Database &amp; Slips</span>
         </button>
       </div>
 
@@ -2249,28 +2255,103 @@
         </div>
       </div>
 
-      <!-- ── TAB 7: Saved Salary Slips ── -->
+      <!-- ── TAB 7: Salary Slip Customer Database (Name-Wise Directory) ── -->
       <div class="ss-tab-panel" id="ss-tab-panel-7" role="tabpanel" aria-labelledby="ss-tab-7">
         <div class="ss-section">
-          <div class="ss-section-header"><i class="bi bi-folder2-open"></i> Saved Salary Slips</div>
+          <div class="ss-section-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <i class="bi bi-people-fill text-primary"></i> <strong>Salary Slip Customer Database</strong>
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-2" style="font-size:11px;">Name-Wise Directory</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="text-muted small" id="ss-customer-stats-summary">0 Customers | 0 Slips</span>
+            </div>
+          </div>
           <div class="ss-section-body">
-            <div class="ss-saved-filters d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <!-- Customer DB Metrics KPI Strip -->
+            <div class="row g-2 mb-3" id="ss-customer-kpis">
+              <div class="col-6 col-md-3">
+                <div class="p-2.5 px-3 rounded-3 border bg-surface-subtle d-flex align-items-center gap-3">
+                  <div class="rounded-circle p-2 d-flex align-items-center justify-content-center bg-primary-subtle text-primary" style="width:36px;height:36px;">
+                    <i class="bi bi-people-fill"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold fs-6" id="kpi-slip-cust-count">0</div>
+                    <div class="text-muted" style="font-size:11px;">Total Customers</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="p-2.5 px-3 rounded-3 border bg-surface-subtle d-flex align-items-center gap-3">
+                  <div class="rounded-circle p-2 d-flex align-items-center justify-content-center bg-success-subtle text-success" style="width:36px;height:36px;">
+                    <i class="bi bi-file-earmark-text-fill"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold fs-6" id="kpi-slip-total-slips">0</div>
+                    <div class="text-muted" style="font-size:11px;">Generated Slips</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="p-2.5 px-3 rounded-3 border bg-surface-subtle d-flex align-items-center gap-3">
+                  <div class="rounded-circle p-2 d-flex align-items-center justify-content-center bg-info-subtle text-info" style="width:36px;height:36px;">
+                    <i class="bi bi-cash-stack"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold fs-6" id="kpi-slip-total-net">₹ 0</div>
+                    <div class="text-muted" style="font-size:11px;">Total Net Pay</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="p-2.5 px-3 rounded-3 border bg-surface-subtle d-flex align-items-center gap-3">
+                  <div class="rounded-circle p-2 d-flex align-items-center justify-content-center bg-warning-subtle text-warning" style="width:36px;height:36px;">
+                    <i class="bi bi-building"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold fs-6" id="kpi-slip-total-comps">0</div>
+                    <div class="text-muted" style="font-size:11px;">Companies</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Toolbar: Filters, Search, View Mode -->
+            <div class="ss-saved-filters d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
               <div class="d-flex gap-2 align-items-center flex-wrap">
                 <select class="form-select form-select-sm" id="ss-filter-comp" onchange="App.renderSavedSlips()" style="width:auto">
                   <option value="">All Companies</option>
                 </select>
-                <input type="search" class="form-control form-control-sm" id="ss-filter-search" placeholder="Search name, emp code..." oninput="App.renderSavedSlips()" style="width:220px" />
+                <div class="input-group input-group-sm" style="width:260px">
+                  <span class="input-group-text"><i class="bi bi-search"></i></span>
+                  <input type="search" class="form-control" id="ss-filter-search" placeholder="Search customer, emp code, PAN..." oninput="App.renderSavedSlips()" />
+                </div>
               </div>
-              <button class="btn btn-outline-primary btn-sm" onclick="App.downloadAllSlips()" title="Export All Salary Slips (JSON)">
-                <i class="bi bi-download me-1"></i>Export All Payslips
-              </button>
+
+              <div class="d-flex align-items-center gap-2">
+                <!-- View Mode Toggle -->
+                <div class="btn-group btn-group-sm" role="group" aria-label="Customer View Mode">
+                  <button type="button" class="btn btn-outline-primary active" id="btn-view-namewise" onclick="App.setSlipViewMode('namewise')">
+                    <i class="bi bi-person-lines-fill me-1"></i>Name-Wise Directory
+                  </button>
+                  <button type="button" class="btn btn-outline-primary" id="btn-view-flat" onclick="App.setSlipViewMode('flat')">
+                    <i class="bi bi-list-ul me-1"></i>All Slips List
+                  </button>
+                </div>
+
+                <button class="btn btn-outline-secondary btn-sm" onclick="App.downloadAllSlips()" title="Export All Salary Slips (JSON)">
+                  <i class="bi bi-download me-1"></i>Export JSON
+                </button>
+              </div>
             </div>
+
+            <!-- Directory Render Target -->
             <div id="ss-saved-list"></div>
           </div>
         </div>
         <div class="ss-tab-footer-nav">
           <button type="button" class="btn btn-outline-secondary btn-sm" onclick="App.switchSlipTab(6)"><i class="bi bi-arrow-left me-1"></i> Back to Summary</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(1)">Create New Payslip <i class="bi bi-arrow-repeat ms-1"></i></button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="App.switchSlipTab(1)">+ Create New Payslip <i class="bi bi-arrow-repeat ms-1"></i></button>
         </div>
       </div>
 
