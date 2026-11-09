@@ -6456,7 +6456,8 @@ Tax & Financial Consultancy Services`);
       deductions: { items: r.deductions || [], total: r.totalDeduction || 0 }
     }));
 
-    const html = SalarySlipEngine.generateMulti(dataList);
+    const custFormat = (cust.slips && cust.slips[0] && cust.slips[0].format) || 'corporate';
+    const html = SalarySlipEngine.generateMulti(dataList, custFormat);
     const title = `${cust.empName}_All_Payslips_${cust.slips.length}M`;
     const win = window.open('', '_blank', 'width=920,height=750');
     if (win) {
@@ -6673,6 +6674,12 @@ Tax & Financial Consultancy Services`);
     }
     setSlipMode('manual');
     calcSlipNet();
+    // Restore format selection
+    const fmtVal = r.format || 'corporate';
+    ['ss-format', 'ss-format-summary'].forEach(fId => {
+      const el = document.getElementById(fId);
+      if (el) el.value = fmtVal;
+    });
     // Switch to Tab 3 (Employee Details) to review loaded record
     switchSlipTab(3);
     // Remove old record and let save create new
@@ -6691,7 +6698,7 @@ Tax & Financial Consultancy Services`);
       attendance: { totalDays: r.totalDays, daysPaid: r.daysPaid, lop: r.lop },
       earnings: r.earnings || [],
       deductions: { items: r.deductions || [], total: r.totalDeduction || 0 },
-    });
+    }, r.format || 'corporate');
     const title = `${r.companyName}_${r.month}_${r.year}_Slip`;
     const win = window.open('', '_blank', 'width=900,height=700');
     if (win) {
@@ -6749,6 +6756,7 @@ Tax & Financial Consultancy Services`);
 
     return {
       company,
+      format: document.getElementById('ss-format')?.value || 'corporate',
       month: document.getElementById('ss-month')?.value || 'April',
       year: document.getElementById('ss-year')?.value || new Date().getFullYear(),
       employee: {
@@ -6865,8 +6873,20 @@ Tax & Financial Consultancy Services`);
       <div class="ss-earn-row" data-type="hra"><input type="text" class="form-control form-control-sm" value="HRA" readonly /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" /></div>
       <div class="ss-earn-row" data-type="special"><input type="text" class="form-control form-control-sm" value="Special Allowance" readonly /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Actual" /><input type="number" class="form-control form-control-sm" value="0" min="0" oninput="App.calcSlipNet()" placeholder="Salary" /></div>`;
     document.getElementById('ss-deductions-list').innerHTML = '';
+    // Reset format dropdowns
+    ['ss-format', 'ss-format-summary'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = 'corporate';
+    });
     calcSlipNet();
     switchSlipTab(1);
+  }
+
+  function onSlipFormatChange(val) {
+    ['ss-format', 'ss-format-summary'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.value !== val) el.value = val;
+    });
   }
 
   function saveSlipEmployee() {
@@ -6895,6 +6915,7 @@ Tax & Financial Consultancy Services`);
         companyLogoText: baseData.company.logoText || '',
         companyPhone: baseData.company.phone || '',
         companyEmail: baseData.company.email || '',
+        format: baseData.format || 'corporate',
         empCode: baseData.employee.id,
         empName: baseData.employee.name,
         location: baseData.employee.location,
@@ -6966,6 +6987,7 @@ Tax & Financial Consultancy Services`);
         companyLogoText: data.company.logoText || '',
         companyPhone: data.company.phone || '',
         companyEmail: data.company.email || '',
+        format: data.format || 'corporate',
         empCode: data.employee.id,
         empName: data.employee.name,
         location: data.employee.location,
@@ -6992,7 +7014,8 @@ Tax & Financial Consultancy Services`);
       DB.saveSlipRecord(record);
     });
 
-    const html = SalarySlipEngine.generateMulti(dataList);
+    const selectedFormat = baseData.format || 'corporate';
+    const html = SalarySlipEngine.generateMulti(dataList, selectedFormat);
 
     const isMulti = dataList.length > 1;
     const title = isMulti
@@ -8560,7 +8583,7 @@ Tax & Financial Consultancy Services`);
     toggleSlipMonth, selectSlipMonthsPreset, getSelectedSlipMonths,
     calcSlipNet, addSlipEarning, addSlipDeduction, resetSlipForm, saveSlipEmployee, generateSalarySlip,
     renderSavedSlips, setSlipViewMode, newSlipForCustomer, printAllCustomerSlips, toggleCustomerDrawer, deleteCustomerProfile,
-    editSlipRecord, reprintSlipRecord, deleteSlipRecord,
+    editSlipRecord, reprintSlipRecord, deleteSlipRecord, onSlipFormatChange,
     autoGenStatementTxs, addStatementTxnRow, clearStatementTxns, recalcStatement,
     autoGenSalaryStatementTxs, addSalaryStatementTxnRow, clearSalaryStatementTxns, recalcSalaryStatement,
     onSalaryStatementIFSCInput, lookupSalaryStatementIFSC,
