@@ -3484,6 +3484,15 @@ textarea.form-control { min-height: 72px; resize: vertical; }
 }
 
 /* ── 34. PRINT STYLES ────────────────────────────────────────── */
+/* Default page box for the Classic computation. Kept at the top level
+   (not nested inside @media print) so every Chromium build and the
+   interactive print preview honours it. ITR-V and Modern override it
+   with their own page boxes inside their report HTML. */
+@page {
+  size: A4 portrait;
+  margin: 14mm 12mm 14mm 12mm;
+}
+
 @media print {
   *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
@@ -3555,11 +3564,13 @@ textarea.form-control { min-height: 72px; resize: vertical; }
     break-inside: avoid !important;
   }
 
-  /* Classic report constraints */
+  /* Classic report constraints. The 2mm inner inset is a safety net for
+     Chromium builds whose print preview overrides the @page margin: the
+     content never starts flush against the paper edge. */
   .report-classic {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 0 !important;
+    padding: 2mm !important;
     margin: 0 !important;
     overflow: visible !important;
     font-size: 11px !important;
@@ -3602,15 +3613,20 @@ textarea.form-control { min-height: 72px; resize: vertical; }
     padding: 8px 16px !important;
   }
 
-  /* Page setup */
-  @page {
-    size: A4 portrait;
-    margin: 8mm 6mm 8mm 6mm;
-  }
-
   .rpt-page-break { page-break-after: always; break-after: page; }
   .mrpt-page-break { page-break-after: always; break-after: page; }
   .rpt-keep, .mrpt-keep, .itr-ack-container { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Classic annexure pagination: keep statements intact, repeat table heads */
+  .rpt-annex:not(.rpt-splittable) { page-break-inside: avoid; break-inside: avoid; }
+  .rpt-table thead { display: table-header-group; }
+  .rpt-table tfoot { display: table-footer-group; }
+  .rpt-table tr { page-break-inside: avoid; break-inside: avoid; }
+  .rpt-splittable { page-break-inside: auto; break-inside: auto; }
+  .rpt-schedules-heading, .rpt-annex-title, .rpt-section-title {
+    page-break-after: avoid; break-after: avoid;
+  }
+  .report-classic { orphans: 2; widows: 2; }
 }
 
 /* ── 35. UTILITY ─────────────────────────────────────────────── */
@@ -3657,6 +3673,42 @@ body.modal-open {
 #reportBody .mrpt,
 #reportBody .itr-ack-container {
   background: #fff;
+}
+
+/* ── Off-screen PDF export source (html2pdf) ───────────────────
+   The .pdf-export node is the static source passed to html2pdf. It is
+   wrapped in an off-screen sandbox in JS, so no positioning is applied
+   here (positioning on the cloned node would break the capture). */
+.pdf-export {
+  background: #fff !important;
+  overflow: visible !important;
+}
+.pdf-export .report-classic {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.pdf-export .rpt-keep,
+.pdf-export .rpt-annex:not(.rpt-splittable) {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
+.pdf-export .rpt-splittable {
+  page-break-inside: auto !important;
+  break-inside: auto !important;
+}
+.pdf-export .rpt-table tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.pdf-export .rpt-table thead { display: table-header-group; }
+.pdf-export .rpt-table { table-layout: fixed; }
+.pdf-export .rpt-schedules-heading,
+.pdf-export .rpt-annex-title,
+.pdf-export .rpt-section-title {
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 /* ── Bank Autocomplete Suggestions ── */

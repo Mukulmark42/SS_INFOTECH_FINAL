@@ -2144,12 +2144,11 @@ const App = (() => {
   }
 
   function downloadReportPdf() {
-    const reportBody = document.getElementById('reportBody');
-    if (!reportBody || !reportBody.firstElementChild) {
+    const d = activePrintData || _buildComputationData();
+    if (!d || !d.client) {
       alert('No report content available to export.');
       return;
     }
-    const d = activePrintData || _buildComputationData();
     const pan = ((d.client && d.client.pan) || 'CLIENT').toUpperCase();
     const ay = ((d.client && d.client.ay) || 'AY').replace(/[^a-zA-Z0-9]/g, '-');
     const repType = selectedReport === 'ack' ? 'ITR_Ack' : (selectedReport === 'modern' ? 'Computation_Modern' : 'Computation_Classic');
@@ -2161,21 +2160,60 @@ const App = (() => {
       return;
     }
 
+    // IMPORTANT: never render from #reportBody — it lives inside a
+    // scrollable modal, so html2canvas clips everything below the fold.
+    // Render the full report into a static (non-positioned) source node
+    // inside an off-screen wrapper. The wrapper is NOT passed to
+    // html2pdf, so its off-screen position cannot affect the capture.
+    _renderReportHTML(d);
+    const printArea = document.getElementById('print-area');
+    if (!printArea || !printArea.firstElementChild) {
+      alert('No report content available to export.');
+      return;
+    }
+
+    const sandbox = document.createElement('div');
+    sandbox.id = 'pdf-export-sandbox';
+    sandbox.style.cssText = 'position:absolute; left:-10000px; top:0; width:210mm; z-index:-1; background:#fff;';
+
+    const source = document.createElement('div');
+    source.className = 'pdf-export';
+    source.style.cssText = 'background:#fff;';
+    source.innerHTML = printArea.innerHTML;
+    sandbox.appendChild(source);
+    document.body.appendChild(sandbox);
+
+    // ITR-V is calibrated for a tight single page; Modern uses the legacy
+    // global margin; Classic gets the wider, comfortable safe area.
+    const pageMargin = selectedReport === 'ack' ? [6, 6, 4, 6]
+      : selectedReport === 'modern' ? [8, 6, 8, 6]
+      : [14, 12, 14, 12];
+
     const opt = {
-      margin:       [8, 8, 8, 8],
+      margin:       pageMargin,
       filename:     filename,
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      html2canvas:  {
+        scale: 2,
+        useCORS: true,
+        letterRendering: true,
+        scrollX: 0,
+        scrollY: 0,
+        backgroundColor: '#ffffff'
+      },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+      pagebreak:    { mode: ['css', 'legacy'], before: [], after: [], avoid: ['.rpt-keep', 'tr'] }
     };
 
     showCloudToast('Generating PDF document...', 'info');
-    html2pdf().set(opt).from(reportBody).save().then(() => {
+    html2pdf().set(opt).from(source).save().then(() => {
       showCloudToast('PDF downloaded successfully!', 'success');
     }).catch(err => {
       console.error('PDF generation error:', err);
       alert('Could not generate PDF directly. Falling back to print.');
       triggerPrint();
+    }).finally(() => {
+      sandbox.remove();
     });
   }
 

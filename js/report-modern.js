@@ -209,6 +209,10 @@ const ReportModern = (() => {
 .mrpt-page-break { page-break-after:always; break-after:page; border:none; height:0; margin:0; }
 .mrpt-keep { page-break-inside:avoid; break-inside:avoid; }
 
+/* Modern is a denser card layout; keep its original page box so it does
+   not spill a footer onto an extra page. */
+@page { size: A4 portrait; margin: 8mm 6mm 8mm 6mm; }
+
 @media print {
   .mrpt-cover { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .mrpt-stats { -webkit-print-color-adjust:exact; print-color-adjust:exact; }

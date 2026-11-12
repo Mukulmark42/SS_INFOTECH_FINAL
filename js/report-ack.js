@@ -682,11 +682,12 @@ const ReportAck = (() => {
 }
 
 /* ── Print Optimization ── */
+@page {
+  size: A4 portrait;
+  margin: 6mm 6mm 4mm 6mm;
+}
+
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 6mm 6mm 4mm 6mm;
-  }
   .itr-ack-container {
     width: 100% !important;
     max-width: 100% !important;
