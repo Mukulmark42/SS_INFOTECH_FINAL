@@ -4,12 +4,13 @@
   "private": true,
   "description": "Offline-first Indian income tax computation, reporting and office automation SPA for CAs and tax practitioners.",
   "scripts": {
-    "test": "node test/test-salaried-calc.js && node test/test_salaried_itr1.js && node test/test-tax-engine.js && node test/test-db.js && node test/test-idb.js",
+    "test": "node test/test-salaried-calc.js && node test/test_salaried_itr1.js && node test/test-tax-engine.js && node test/test-db.js && node test/test-idb.js && node test/test-ack-layout.js",
     "test:calc": "node test/test-salaried-calc.js",
     "test:itr1": "node test/test_salaried_itr1.js",
     "test:tax": "node test/test-tax-engine.js",
     "test:db": "node test/test-db.js",
-    "test:idb": "node test/test-idb.js"
+    "test:idb": "node test/test-idb.js",
+    "test:ack": "node test/test-ack-layout.js"
   },
   "engines": {
     "node": ">=18"

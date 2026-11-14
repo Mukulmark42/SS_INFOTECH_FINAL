@@ -262,7 +262,7 @@ const ReportAck = (() => {
     }
 
     return `
-      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="display:block; margin: 0 auto; max-width: 100%; height: auto;">
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="display:block; margin: 0 auto; max-width: 100%; height: auto;" shape-rendering="crispEdges">
         <path d="${pathD.trim()}" fill="#000" />
       </svg>
     `;
@@ -286,7 +286,7 @@ const ReportAck = (() => {
     const client      = data.client || {};
     const computation = data.computation || {};
     const tds         = data.tds || { totalTDS: 0 };
-    const ay          = client.ay || '2026-27';
+    const ay          = String(client.ay || '2026-27');
     
     // Acknowledgement & Filing details
     const ackNo       = _getAckNo(client, data.compNo);
@@ -321,11 +321,11 @@ const ReportAck = (() => {
     const address     = (client.address || '').toUpperCase();
 
     // Tax Details
-    const totalIncome = computation.totalIncome || computation.grossTotalIncome || 0;
-    const netTaxPayable = computation.totalTaxPayable || 0;
-    const interestFee   = (computation.interestFee || 0);
+    const totalIncome    = computation.totalIncome || computation.grossTotalIncome || 0;
+    const netTaxPayable  = computation.totalTaxPayable || 0;
+    const interestFee    = (computation.interestFee || 0);
     const totalTaxAndFee = netTaxPayable + interestFee;
-    const taxesPaid     = computation.tdsCredit || tds.totalTDS || 0;
+    const taxesPaid      = computation.tdsCredit || tds.totalTDS || 0;
     
     // Refund or Payable computation
     const refundAmt = computation.refund || 0;
@@ -337,30 +337,161 @@ const ReportAck = (() => {
       row8Val = _fmtINR(taxDueAmt);
     }
 
+    // Build AY-specific dynamic tax detail sections & rows
+    // Preserves exact field numbering: 2021-22 vs official 2022-23 to 2026-27+
+    const isLegacyAY = ay.startsWith('2021') || ay.startsWith('2020') || ay.startsWith('2019') || ay.startsWith('2018');
+    let taxSections = [];
+
+    if (data.taxSections && Array.isArray(data.taxSections) && data.taxSections.length > 0) {
+      taxSections = data.taxSections;
+    } else {
+      let sec1Rows = [];
+      if (isLegacyAY) {
+        // Official AY 2021-22 & prior structure
+        sec1Rows = [
+          { desc: 'Gross Total Income', code: '1', amt: _fmtINR(computation.grossTotalIncome || totalIncome) },
+          { desc: 'Deductions under Chapter VI-A', code: '2', amt: _fmtINR(computation.totalDeductions || 0) },
+          { desc: 'Total Income', code: '3', amt: _fmtINR(totalIncome) },
+          { desc: 'Net tax payable', code: '4', amt: _fmtINR(netTaxPayable) },
+          { desc: 'Interest and Fee Payable', code: '5', amt: _fmtINR(interestFee) },
+          { desc: 'Total tax, interest and Fee payable', code: '6', amt: _fmtINR(totalTaxAndFee) },
+          { desc: 'Taxes Paid', code: '7', amt: _fmtINR(taxesPaid) },
+          { desc: '(+) Tax Payable /(-) Refundable (6-7)', code: '8', amt: row8Val },
+        ];
+      } else {
+        // Official AY 2022-23 to AY 2026-27+ structure
+        sec1Rows = [
+          { desc: 'Current Year business loss, if any', code: '1', amt: _fmtINR(computation.currentYearBusinessLoss || 0) },
+          { desc: 'Total Income', code: '1A', amt: _fmtINR(totalIncome) },
+          { desc: 'Book Profit under MAT, where applicable', code: '2', amt: _fmtINR(computation.bookProfitMAT || 0) },
+          { desc: 'Adjusted Total Income under AMT, where applicable', code: '3', amt: _fmtINR(computation.adjustedTotalIncomeAMT || 0) },
+          { desc: 'Net tax payable', code: '4', amt: _fmtINR(netTaxPayable) },
+          { desc: 'Interest and Fee Payable', code: '5', amt: _fmtINR(interestFee) },
+          { desc: 'Total tax, interest and Fee payable', code: '6', amt: _fmtINR(totalTaxAndFee) },
+          { desc: 'Taxes Paid', code: '7', amt: _fmtINR(taxesPaid) },
+          { desc: '(+) Tax Payable /(-) Refundable (6-7)', code: '8', amt: row8Val },
+        ];
+      }
+
+      taxSections = [
+        {
+          title: 'Taxable Income and Tax details',
+          rows: sec1Rows
+        }
+      ];
+
+      const omitAccreted = data.omitAccretedIncome || client.omitAccretedIncome || data.shortReport;
+      if (!omitAccreted) {
+        taxSections.push({
+          title: 'Accreted Income & Tax Detail',
+          rows: [
+            { desc: 'Accreted Income as per section 115TD', code: '9', amt: _fmtINR(computation.accretedIncome || 0) },
+            { desc: 'Additional Tax payable u/s 115TD', code: '10', amt: _fmtINR(computation.additionalTax115TD || 0) },
+            { desc: 'Interest payable u/s 115TE', code: '11', amt: _fmtINR(computation.interest115TE || 0) },
+            { desc: 'Additional Tax and interest payable', code: '12', amt: _fmtINR(computation.additionalTaxInterest || 0) },
+            { desc: 'Tax and interest paid', code: '13', amt: _fmtINR(computation.accretedTaxPaid || 0) },
+            { desc: '(+) Tax Payable /(-) Refundable (12-13)', code: '14', amt: _fmtINR(computation.accretedNetPayable || 0) },
+          ]
+        });
+      }
+    }
+
+    const taxRowsHTML = taxSections.map(sec => {
+      const rows = sec.rows || [];
+      return rows.map((r, idx) => {
+        const vheader = idx === 0 ? `<td rowspan="${rows.length}" class="itr-ack-vheader">${sec.title}</td>` : '';
+        return `
+      <tr>
+        ${vheader}
+        <td class="itr-ack-col-desc">${r.desc}</td>
+        <td class="itr-ack-col-code">${r.code}</td>
+        <td class="itr-ack-col-amt">${r.amt}</td>
+      </tr>`;
+      }).join('');
+    }).join('');
+
     // Full 68-char barcode text: PAN (10) + Form Code (2) + AckNo (15) + Hex Hash (40) + '9'
     const hexHash = _getHexHash(pan, ackNo, ay);
     const barcodeText = `${pan}${formCodeNum}${ackNo}${hexHash}`;
-    const barcodeSVG = _generate2DBarcodeSVG(barcodeText, 245, 42);
+    const barcodeSVG = _generate2DBarcodeSVG(barcodeText, 250, 44);
 
     return `
 <style>
 @import url('https://fonts.cdnfonts.com/css/dejavu-sans');
 
 /* ─── ITR Acknowledgement Strict Single-Page Layout & Typography ─── */
-.itr-ack-container {
+@page {
+  size: A4 portrait;
+  margin: 10mm 9mm;
+}
+
+@media print {
+  html, body {
+    width: 210mm;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .acknowledgement, .itr-ack-container {
+    width: 192mm !important;
+    margin: 0 auto !important;
+    padding: 6mm 0 0 0 !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-shadow: none !important;
+  }
+
+  .verification-section {
+    margin-top: 0 !important;
+    border-top: none !important;
+    position: relative !important;
+  }
+
+  .barcode-section {
+    margin-top: 0 !important;
+    text-align: center !important;
+  }
+
+  .footer-section {
+    margin-top: 0 !important;
+    text-align: center !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .itr-watermark-wrapper {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* ─── Screen Preview & Shared Container (Natural Flow) ─── */
+.itr-ack-container, .acknowledgement {
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   color: #000;
   background: #fff;
-  width: 100%;
-  max-width: 196mm;
+  width: 192mm;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 8pt 14px 4pt 14px;
+  padding: 6mm 0 0 0;
   box-sizing: border-box;
   position: relative;
   font-size: 9pt;
-  line-height: 1.2;
-  page-break-inside: avoid !important;
-  break-inside: avoid !important;
+  line-height: 1.25;
+  display: block;
 }
 
 /* ── 1. Top Header Bar ── */
@@ -370,13 +501,23 @@ const ReportAck = (() => {
   align-items: flex-end;
   font-size: 9.5pt;
   font-weight: 700;
-  padding-bottom: 2px;
-  border-bottom: 0.6pt solid #000;
+  padding: 0 0 2px 0;
+  border-bottom: 0.75pt solid #000;
   margin-bottom: 3px;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-/* ── 2. Main Title Box (Table Layout) ── */
+.itr-ack-hdr-left {
+  text-align: left;
+}
+
+.itr-ack-hdr-right {
+  text-align: right;
+}
+
+/* ── 2. Main Title Box ── */
 .itr-ack-title-table {
   width: 100%;
   border-collapse: collapse;
@@ -384,14 +525,17 @@ const ReportAck = (() => {
   margin-bottom: 0;
   background: #fff;
   table-layout: fixed;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .itr-ack-title-left {
   width: 81%;
   text-align: center;
-  padding: 3px 6px;
+  padding: 6px 8px 5px 8px;
   border-right: 1px solid #B8C0D8;
   vertical-align: middle;
+  box-sizing: border-box;
 }
 
 .itr-ack-main-heading {
@@ -406,7 +550,7 @@ const ReportAck = (() => {
 
 .itr-ack-sub-heading {
   font-size: 8pt;
-  line-height: 1.15;
+  line-height: 1.2;
   color: #000;
   font-weight: 400;
 }
@@ -421,9 +565,10 @@ const ReportAck = (() => {
 .itr-ack-ay-box {
   width: 19%;
   text-align: center;
-  padding: 2px 4px;
+  padding: 5px 6px;
   vertical-align: middle;
   background: #fff;
+  box-sizing: border-box;
 }
 
 .itr-ack-ay-label {
@@ -433,13 +578,13 @@ const ReportAck = (() => {
 }
 
 .itr-ack-ay-val {
-  font-size: 13pt;
+  font-size: 14pt;
   font-weight: 700;
-  margin-top: 1px;
+  margin-top: 2px;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
 }
 
-/* ── 3. Assessee Details Table (5 rows @ 22pt each) ── */
+/* ── 3. Assessee Details Table ── */
 .itr-ack-table {
   width: 100%;
   border-collapse: collapse;
@@ -452,24 +597,27 @@ const ReportAck = (() => {
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   table-layout: fixed;
   margin-bottom: 0;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .itr-ack-table tr {
-  height: 22pt;
+  height: 23pt;
 }
 
-.itr-ack-table td, .itr-ack-table th {
+.itr-ack-table td {
   border: 1px solid #B8C0D8;
-  padding: 0 6px;
+  padding: 3.5px 6px;
   vertical-align: middle;
   box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .itr-ack-lbl {
   font-size: 9pt;
   color: #000;
   font-weight: 400;
-  width: 17%;
 }
 
 .itr-ack-val {
@@ -484,6 +632,8 @@ const ReportAck = (() => {
   background: transparent;
   margin-bottom: 0;
   width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .itr-watermark-wrapper {
@@ -491,28 +641,27 @@ const ReportAck = (() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 100mm;
-  max-width: 380px;
+  width: 95mm;
+  max-width: 360px;
   height: auto;
   pointer-events: none;
   z-index: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.13;
+  opacity: 0.08;
 }
 
 .itr-watermark-img {
   width: 100%;
   height: auto;
-  max-height: 380px;
+  max-height: 360px;
   object-fit: contain;
   display: block;
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
 }
 
-/* ── Tax Details Table (15 rows @ 22.5pt each) ── */
 .itr-ack-data-table {
   position: relative;
   z-index: 1;
@@ -527,21 +676,21 @@ const ReportAck = (() => {
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   table-layout: fixed;
   margin-bottom: 0;
+  box-sizing: border-box;
 }
 
 .itr-ack-data-table tr {
-  height: 22.5pt;
+  height: 22pt;
 }
 
-.itr-ack-data-table td, .itr-ack-data-table th {
+.itr-ack-data-table td {
   border: 1px solid #B8C0D8;
-  padding: 0 6px;
+  padding: 2.5px 6px;
   vertical-align: middle;
   background: transparent;
   box-sizing: border-box;
 }
 
-/* Vertical Rotated Text Header (5.8% column width) */
 .itr-ack-vheader {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
@@ -549,11 +698,11 @@ const ReportAck = (() => {
   font-weight: 700;
   font-size: 8.5pt;
   letter-spacing: 0.2px;
-  width: 5.8%;
   padding: 3px 1px !important;
   background: rgba(255, 255, 255, 0.4) !important;
-  line-height: 1.1;
+  line-height: 1.15;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
+  vertical-align: middle;
 }
 
 .itr-ack-col-desc {
@@ -570,51 +719,49 @@ const ReportAck = (() => {
   text-align: right;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   font-size: 9pt;
-  padding-right: 10px !important;
+  padding-right: 8px !important;
 }
 
-/* ── 5. Dedicated Verification Block (Single continuous text section) ── */
-.itr-ack-verification-box {
+/* ── 5. Dedicated Verification Block ── */
+.itr-ack-verification-box, .verification-section {
   display: block;
   clear: both;
   width: 100%;
   border-left: 1px solid #B8C0D8;
   border-right: 1px solid #B8C0D8;
   border-bottom: 1px solid #B8C0D8;
+  border-top: none;
   box-sizing: border-box;
-  padding: 5pt 8pt 4pt 8pt;
+  padding: 6pt 8pt 5pt 8pt;
   font-size: 8.5pt;
-  line-height: 1.65;
+  line-height: 1.6;
   text-align: justify;
   text-justify: inter-word;
   text-align-last: left;
   background: #fff;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
+  margin-top: 0;
   margin-bottom: 0;
+  position: relative;
+  flex-shrink: 0;
 }
 
 .itr-ack-u {
-  display: inline-block;
-  border-bottom: 1px solid #000;
-  text-align: center;
+  display: inline;
+  text-decoration: underline;
+  text-underline-offset: 2.5px;
+  text-decoration-thickness: 0.75pt;
   font-weight: 400;
-  padding: 0 3px;
-  margin: 0 1px;
-  line-height: 1.1;
-  vertical-align: baseline;
-  box-sizing: border-box;
+  padding: 0 1px;
+  color: #000;
 }
 
-.itr-ack-u-datetime { min-width: 130px; }
-.itr-ack-u-ip { min-width: 100px; }
-.itr-ack-u-name { min-width: 140px; }
-.itr-ack-u-pan { min-width: 85px; }
-.itr-ack-u-date { min-width: 75px; }
-.itr-ack-u-evc { min-width: 95px; }
-.itr-ack-u-mode { min-width: 90px; }
+.itr-ack-nowrap {
+  white-space: nowrap;
+}
 
 /* ── 6. Dedicated Barcode / QR Code Block ── */
-.itr-ack-barcode-table {
+.itr-ack-barcode-table, .barcode-section {
   width: 100%;
   border-collapse: collapse;
   border-left: 1px solid #B8C0D8;
@@ -623,99 +770,95 @@ const ReportAck = (() => {
   border-top: none;
   background: #fff;
   table-layout: fixed;
+  margin-top: 0;
   margin-bottom: 0;
+  box-sizing: border-box;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .itr-ack-barcode-lbl {
-  width: 125px;
-  padding: 4px 6px;
+  width: 18%;
+  padding: 5px 6px;
   text-align: center;
   vertical-align: middle;
   font-size: 8pt;
   font-weight: 400;
-  line-height: 1.2;
+  line-height: 1.25;
   border-right: 1px solid #B8C0D8;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   box-sizing: border-box;
 }
 
 .itr-ack-barcode-body {
-  padding: 3px 6px 2px;
+  width: 82%;
+  padding: 5px 8px 4px 8px;
   text-align: center;
   vertical-align: middle;
   box-sizing: border-box;
+}
+
+.itr-ack-barcode-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.itr-ack-barcode-wrap svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
 }
 
 .itr-ack-hash {
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   font-size: 7.5pt;
   font-weight: 700;
-  letter-spacing: 0.1px;
-  margin-top: 1px;
+  letter-spacing: 0.2px;
+  margin-top: 3px;
   color: #000;
   word-break: break-all;
+  text-align: center;
 }
 
 /* ── 7. Dedicated Bottom Warning Banner ── */
-.itr-ack-footer-banner {
+.itr-ack-footer-banner, .footer-section {
   display: block;
   clear: both;
   width: 100%;
   border-left: 1px solid #B8C0D8;
   border-right: 1px solid #B8C0D8;
   border-bottom: 1px solid #B8C0D8;
+  border-top: none;
   box-sizing: border-box;
   text-align: center;
   color: #ff0000;
   font-weight: 700;
   font-size: 8.5pt;
   letter-spacing: 0.3px;
-  padding: 3.5px 0;
+  padding: 4.5px 0;
   text-transform: uppercase;
   font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif;
   background: #fff;
+  margin-top: 0;
   margin-bottom: 0;
+  flex-shrink: 0;
 }
 
 .itr-ack-footer-banner u {
   text-decoration: underline;
-}
-
-/* ── Print Optimization ── */
-@page {
-  size: A4 portrait;
-  margin: 6mm 6mm 4mm 6mm;
-}
-
-@media print {
-  .itr-ack-container {
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 4pt 0 0 0 !important;
-    margin: 0 !important;
-    box-shadow: none !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .itr-ack-table, .itr-ack-data-table, .itr-ack-verification-box, .itr-ack-barcode-table, .itr-ack-footer-banner {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .itr-watermark-wrapper {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
+  text-underline-offset: 2px;
 }
 </style>
 
-<div class="itr-ack-container">
+<div class="itr-ack-container acknowledgement">
 
   <!-- ── 1. Top Header Bar ── -->
   <div class="itr-ack-header-bar">
-    <div>Acknowledgement Number:${ackNo}</div>
-    <div>Date of filing : ${filingDate}</div>
+    <div class="itr-ack-hdr-left">Acknowledgement Number : ${ackNo}</div>
+    <div class="itr-ack-hdr-right">Date of filing : ${filingDate}</div>
   </div>
 
   <!-- ── 2. Main Title Box ── -->
@@ -733,11 +876,11 @@ const ReportAck = (() => {
     </tr>
   </table>
 
-  <!-- ── 3. Assessee Details Table (5 rows @ 22pt) ── -->
+  <!-- ── 3. Assessee Details Table ── -->
   <table class="itr-ack-table">
     <colgroup>
-      <col style="width: 12%;">
-      <col style="width: 38%;">
+      <col style="width: 15%;">
+      <col style="width: 35%;">
       <col style="width: 25%;">
       <col style="width: 25%;">
     </colgroup>
@@ -762,7 +905,7 @@ const ReportAck = (() => {
     <tr>
       <td class="itr-ack-lbl">Filed u/s</td>
       <td class="itr-ack-val">${filingSection}</td>
-      <td class="itr-ack-lbl" style="font-size: 8.5pt;">e-Filing Acknowledgement Number</td>
+      <td class="itr-ack-lbl" style="line-height: 1.15;">e-Filing Acknowledgement<br>Number</td>
       <td class="itr-ack-val">${ackNo}</td>
     </tr>
   </table>
@@ -774,114 +917,36 @@ const ReportAck = (() => {
     <table class="itr-ack-data-table">
       <colgroup>
         <col style="width: 5.8%;">
-        <col style="width: 69.0%;">
-        <col style="width: 8.7%;">
-        <col style="width: 16.5%;">
+        <col style="width: 67.2%;">
+        <col style="width: 8.5%;">
+        <col style="width: 18.5%;">
       </colgroup>
-
-      <!-- Section 1: Taxable Income and Tax details (Rows 1 to 8) -->
-      <tr>
-        <td rowspan="9" class="itr-ack-vheader">Taxable Income and Tax details</td>
-        <td class="itr-ack-col-desc">Current Year business loss, if any</td>
-        <td class="itr-ack-col-code">1</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Total Income</td>
-        <td class="itr-ack-col-code">1A</td>
-        <td class="itr-ack-col-amt">${_fmtINR(totalIncome)}</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Book Profit under MAT, where applicable</td>
-        <td class="itr-ack-col-code">2</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Adjusted Total Income under AMT, where applicable</td>
-        <td class="itr-ack-col-code">3</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Net tax payable</td>
-        <td class="itr-ack-col-code">4</td>
-        <td class="itr-ack-col-amt">${_fmtINR(netTaxPayable)}</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Interest and Fee Payable</td>
-        <td class="itr-ack-col-code">5</td>
-        <td class="itr-ack-col-amt">${_fmtINR(interestFee)}</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Total tax, interest and Fee payable</td>
-        <td class="itr-ack-col-code">6</td>
-        <td class="itr-ack-col-amt">${_fmtINR(totalTaxAndFee)}</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Taxes Paid</td>
-        <td class="itr-ack-col-code">7</td>
-        <td class="itr-ack-col-amt">${_fmtINR(taxesPaid)}</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">(+) Tax Payable /(-) Refundable (6-7)</td>
-        <td class="itr-ack-col-code">8</td>
-        <td class="itr-ack-col-amt">${row8Val}</td>
-      </tr>
-
-      <!-- Section 2: Accreted Income & Tax Detail (Rows 9 to 14) -->
-      <tr>
-        <td rowspan="6" class="itr-ack-vheader">Accreted Income & Tax Detail</td>
-        <td class="itr-ack-col-desc">Accreted Income as per section 115TD</td>
-        <td class="itr-ack-col-code">9</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Additional Tax payable u/s 115TD</td>
-        <td class="itr-ack-col-code">10</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Interest payable u/s 115TE</td>
-        <td class="itr-ack-col-code">11</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Additional Tax and interest payable</td>
-        <td class="itr-ack-col-code">12</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">Tax and interest paid</td>
-        <td class="itr-ack-col-code">13</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
-      <tr>
-        <td class="itr-ack-col-desc">(+) Tax Payable /(-) Refundable (12-13)</td>
-        <td class="itr-ack-col-code">14</td>
-        <td class="itr-ack-col-amt">0</td>
-      </tr>
+      ${taxRowsHTML}
     </table>
   </div>
 
   <!-- ── 5. Dedicated Verification Block (Single continuous text section) ── -->
-  <div class="itr-ack-verification-box">
-    Income Tax Return electronically transmitted on <span class="itr-ack-u itr-ack-u-datetime">${filingDate} ${filingTime}</span> from IP address <span class="itr-ack-u itr-ack-u-ip">${ipAddress}</span> and verified by <span class="itr-ack-u itr-ack-u-name">${name}</span> having PAN <span class="itr-ack-u itr-ack-u-pan">${pan}</span> on <span class="itr-ack-u itr-ack-u-date">${filingDate}</span> using paper ITR-Verification Form /Electronic Verification Code <span class="itr-ack-u itr-ack-u-evc">${evcCode}</span> generated through <span class="itr-ack-u itr-ack-u-mode">${evcMode}</span> mode
+  <div class="itr-ack-verification-box verification-section">
+    Income Tax Return electronically transmitted on <span class="itr-ack-u itr-ack-nowrap">${filingDate} ${filingTime}</span> from IP address <span class="itr-ack-u itr-ack-nowrap">${ipAddress}</span> and verified by <span class="itr-ack-u">${name}</span> having PAN <span class="itr-ack-u itr-ack-nowrap">${pan}</span> on <span class="itr-ack-u itr-ack-nowrap">${filingDate}</span> using paper ITR-Verification Form /Electronic Verification Code <span class="itr-ack-u itr-ack-nowrap">${evcCode}</span> generated through <span class="itr-ack-u itr-ack-nowrap">${evcMode}</span> mode
   </div>
 
   <!-- ── 6. Dedicated Barcode / QR Code Block ── -->
-  <table class="itr-ack-barcode-table">
+  <table class="itr-ack-barcode-table barcode-section">
     <tr>
       <td class="itr-ack-barcode-lbl">
         System Generated<br>Barcode/QR Code
       </td>
       <td class="itr-ack-barcode-body">
-        ${barcodeSVG}
-        <div class="itr-ack-hash">${barcodeText}</div>
+        <div class="itr-ack-barcode-wrap">
+          ${barcodeSVG}
+          <div class="itr-ack-hash">${barcodeText}</div>
+        </div>
       </td>
     </tr>
   </table>
 
   <!-- ── 7. Dedicated Bottom Warning Banner ── -->
-  <div class="itr-ack-footer-banner">
+  <div class="itr-ack-footer-banner footer-section">
     <u>DO NOT SEND THIS ACKNOWLEDGEMENT TO CPC, BENGALURU</u>
   </div>
 

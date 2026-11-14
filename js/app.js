@@ -2195,9 +2195,9 @@ const App = (() => {
     sandbox.appendChild(source);
     document.body.appendChild(sandbox);
 
-    // ITR-V is calibrated for a tight single page; Modern uses the legacy
-    // global margin; Classic gets the wider, comfortable safe area.
-    const pageMargin = selectedReport === 'ack' ? [6, 6, 4, 6]
+    // ITR-V is calibrated for authentic A4 page margins (10mm top/bottom, 9mm left/right);
+    // Modern uses the legacy global margin; Classic gets the wider, comfortable safe area.
+    const pageMargin = selectedReport === 'ack' ? [10, 9, 10, 9]
       : selectedReport === 'modern' ? [8, 6, 8, 6]
       : [14, 12, 14, 12];
 
