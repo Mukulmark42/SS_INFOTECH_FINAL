@@ -37,10 +37,13 @@ const DB = (() => {
   /** Write the raw string for a key — IDB when available, else localStorage */
   function _writeRaw(key, value, triggerSync = true) {
     const ok = _idb ? _idb.set(key, value) : _safeSetItem(key, value, false);
-    if (ok && triggerSync && typeof SupabaseSync !== 'undefined' &&
-        typeof SupabaseSync.isAutoSyncEnabled === 'function' &&
-        SupabaseSync.isAutoSyncEnabled()) {
-      SupabaseSync.triggerAutoBackup('Auto Sync');
+    if (ok && triggerSync) {
+      try { localStorage.setItem('ssinfotech_last_mutation', String(Date.now())); } catch {}
+      if (typeof SupabaseSync !== 'undefined' &&
+          typeof SupabaseSync.isAutoSyncEnabled === 'function' &&
+          SupabaseSync.isAutoSyncEnabled()) {
+        SupabaseSync.triggerAutoBackup('Auto Sync');
+      }
     }
     return ok;
   }
@@ -172,6 +175,7 @@ const DB = (() => {
     const idx = clients.findIndex(c => c.id === id);
     if (idx >= 0) {
       clients[idx].deletedAt = Date.now();
+      clients[idx].updatedAt = Date.now();
       _persist(clients);
       return true;
     }
@@ -184,6 +188,7 @@ const DB = (() => {
     const idx = clients.findIndex(c => c.id === id);
     if (idx >= 0) {
       delete clients[idx].deletedAt;
+      clients[idx].updatedAt = Date.now();
       _persist(clients);
       return true;
     }
@@ -196,9 +201,11 @@ const DB = (() => {
     const idSet = new Set(ids);
     const clients = _rawAll();
     let count = 0;
+    const now = Date.now();
     clients.forEach(c => {
       if (idSet.has(c.id) && !c.deletedAt) {
-        c.deletedAt = Date.now();
+        c.deletedAt = now;
+        c.updatedAt = now;
         count++;
       }
     });
@@ -212,9 +219,11 @@ const DB = (() => {
     const idSet = new Set(ids);
     const clients = _rawAll();
     let count = 0;
+    const now = Date.now();
     clients.forEach(c => {
       if (idSet.has(c.id) && c.deletedAt) {
         delete c.deletedAt;
+        c.updatedAt = now;
         count++;
       }
     });
@@ -744,6 +753,20 @@ const DB = (() => {
     _writeRaw(STMT_REC_KEY, JSON.stringify(list));
   }
 
+  function getLastMutationTime() {
+    try {
+      return parseInt(localStorage.getItem('ssinfotech_last_mutation') || '0', 10);
+    } catch {
+      return 0;
+    }
+  }
+
+  function markSynced() {
+    try {
+      localStorage.setItem('ssinfotech_last_mutation', '0');
+    } catch { /* ignore */ }
+  }
+
   return { all, save, remove, bulkRemove, findById, search, duplicate, stats, exportCSV, getStorageUsage, isEmpty,
            trash, restore, bulkRestore, permanentRemove, bulkPermanentRemove, emptyTrash,
            getAdmin, saveAdmin,
@@ -753,7 +776,8 @@ const DB = (() => {
            getSlipCustomers, deleteSlipCustomer,
            getStatementRecords, saveStatementRecord, removeStatementRecord,
            init, usingIndexedDB, getStorageEstimate, storageKeys,
-           readKey, writeKey, exportAll, importAll, flush };
+           readKey, writeKey, exportAll, importAll, flush,
+           getLastMutationTime, markSynced };
 })();
 
 if (typeof module !== 'undefined') {

@@ -3774,6 +3774,29 @@ Tax & Financial Consultancy Services`);
     }
   }
 
+  function _refreshAllActiveViews() {
+    _refreshDashboard();
+    _renderClientTable();
+    if (typeof _renderSalarySlipClientsInMainView === 'function') {
+      try { _renderSalarySlipClientsInMainView(); } catch (e) {}
+    }
+    if (typeof renderSavedSlips === 'function') {
+      try { renderSavedSlips(); } catch (e) {}
+    }
+    if (typeof _renderSlipCompanies === 'function') {
+      try { _renderSlipCompanies(); } catch (e) {}
+    }
+    if (typeof renderSavedStatements === 'function') {
+      try { renderSavedStatements(); } catch (e) {}
+    }
+    if (typeof renderSavedSalaryStatements === 'function') {
+      try { renderSavedSalaryStatements(); } catch (e) {}
+    }
+    if (document.getElementById('page-admin')?.classList.contains('active')) {
+      try { _initAdminPanel(); } catch (e) {}
+    }
+  }
+
   async function _runStartupCloudSync() {
     if (typeof SupabaseSync === 'undefined') return;
     _updateTopbarCloudState('checking', 'Connecting Cloud...');
@@ -3782,9 +3805,7 @@ Tax & Financial Consultancy Services`);
       const res = await SupabaseSync.checkStartupSync();
       if (res.status === 'auto_restored') {
         _updateTopbarCloudState('synced', 'Cloud Restored');
-        _refreshDashboard();
-        _renderClientTable();
-        _initAdminPanel();
+        _refreshAllActiveViews();
         _showCloudToast({
           title: '☁️ Cloud Backup Restored',
           message: `Loaded <strong>${res.stats.clients} Computations</strong>, <strong>${res.stats.statements} Statements</strong>, and <strong>${res.stats.slips} Payslips</strong> from Supabase.`,
@@ -3793,11 +3814,7 @@ Tax & Financial Consultancy Services`);
         });
       } else if (res.status === 'auto_merged') {
         _updateTopbarCloudState('synced', 'Cloud Synced');
-        _refreshDashboard();
-        _renderClientTable();
-        if (document.getElementById('page-admin')?.classList.contains('active')) {
-          _initAdminPanel();
-        }
+        _refreshAllActiveViews();
         _showCloudToast({
           title: '⚡ Cloud Data Synced',
           message: `Merged the latest snapshot automatically — <strong>${res.stats.clients} Computations</strong>, <strong>${res.stats.statements} Statements</strong>, <strong>${res.stats.slips} Payslips</strong>.`,
@@ -3845,9 +3862,7 @@ Tax & Financial Consultancy Services`);
       if (action === 'pull' || isLocalEmpty) {
         const res = await SupabaseSync.restoreBackup(null, { merge: !isLocalEmpty });
         _updateTopbarCloudState('synced', 'Cloud Synced');
-        _refreshDashboard();
-        _renderClientTable();
-        _initAdminPanel();
+        _refreshAllActiveViews();
         _showCloudToast({
           title: '☁️ Cloud Restore Successful',
           message: `Loaded snapshot "${_esc(res.label)}" (${res.stats.clients} clients, ${res.stats.statements} statements).`,
@@ -3909,17 +3924,26 @@ Tax & Financial Consultancy Services`);
           _updateTopbarCloudState('synced', 'Cloud Synced');
         }, 3500);
 
-        _refreshDashboard();
-        _renderClientTable();
-        if (document.getElementById('page-admin')?.classList.contains('active')) {
-          _initAdminPanel();
-        }
+        _refreshAllActiveViews();
 
         _showCloudToast({
           title: '⚡ Live Realtime Sync',
           message: `Auto-merged updates from peer workstation: <strong>${label}</strong> (${cCount} Computations).`,
           type: 'info',
           delay: 6000
+        });
+      });
+
+      // Tab visibility & focus auto-refresh event
+      window.addEventListener('supabase:visibility-synced', (e) => {
+        _updateTopbarCloudState('synced', 'Cloud Synced');
+        _refreshAllActiveViews();
+        const stats = e.detail?.stats || {};
+        _showCloudToast({
+          title: '⚡ Cloud Refreshed',
+          message: `Synced with cloud: <strong>${stats.clients || 0} Computations</strong>, <strong>${stats.statements || 0} Statements</strong>, <strong>${stats.slips || 0} Payslips</strong>.`,
+          type: 'info',
+          delay: 4000
         });
       });
 
@@ -4078,9 +4102,7 @@ Tax & Financial Consultancy Services`);
       const res = await SupabaseSync.restoreBackup(null, { merge });
       _updateTopbarCloudState('synced', 'Cloud Synced');
       alert(`🎉 ${actionName} Successful!\n\nRestored Snapshot: "${res.label}"\nFrom: ${new Date(res.createdAt).toLocaleString('en-IN')}\n\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips`);
-      _refreshDashboard();
-      _renderClientTable();
-      _initAdminPanel();
+      _refreshAllActiveViews();
     } catch (err) {
       _updateTopbarCloudState('offline', 'Restore Failed');
       alert(`❌ Restore Failed:\n${err.message}`);
@@ -4176,9 +4198,7 @@ Tax & Financial Consultancy Services`);
       const res = await SupabaseSync.restoreBackup(backupId, { merge: true });
       _updateTopbarCloudState('synced', 'Cloud Synced');
       alert(`🎉 Merge Successful!\n\nMerged Snapshot: "${res.label}"\n• Total Clients: ${DB.all().length}\n• Total Statements: ${DB.getStatementRecords().length}\n• Total Payslips: ${DB.getSlipRecords().length}`);
-      _refreshDashboard();
-      _renderClientTable();
-      _initAdminPanel();
+      _refreshAllActiveViews();
     } catch (err) {
       _updateTopbarCloudState('offline', 'Merge Failed');
       alert(`❌ Merge Failed:\n${err.message}`);
@@ -4194,9 +4214,7 @@ Tax & Financial Consultancy Services`);
       const res = await SupabaseSync.restoreBackup(backupId, { merge: false });
       _updateTopbarCloudState('synced', 'Cloud Synced');
       alert(`🎉 Restore Successful!\n\nRestored Snapshot: "${res.label}"\n• ${res.stats.clients} Clients\n• ${res.stats.statements} Statements\n• ${res.stats.slips} Payslips`);
-      _refreshDashboard();
-      _renderClientTable();
-      _initAdminPanel();
+      _refreshAllActiveViews();
     } catch (err) {
       _updateTopbarCloudState('offline', 'Restore Failed');
       alert(`❌ Restore Failed:\n${err.message}`);

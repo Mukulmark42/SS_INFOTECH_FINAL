@@ -189,7 +189,11 @@ const SupabaseSync = (() => {
     _incomingSyncTimer = setTimeout(async () => {
       try {
         console.log(`⚡ Realtime Live Sync: Received snapshot "${record.label || 'Snapshot'}" from device ${record.device_id}`);
-        const restoreRes = await restoreBackup(record.id, { merge: true });
+        const lastSyncAt = cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0;
+        const lastMutation = (typeof DB !== 'undefined' && DB.getLastMutationTime) ? DB.getLastMutationTime() : 0;
+        const hasUnpushedLocal = lastMutation > lastSyncAt;
+
+        const restoreRes = await restoreBackup(record.id, { merge: hasUnpushedLocal });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('supabase:realtime-merged', {
             detail: {
@@ -426,6 +430,9 @@ const SupabaseSync = (() => {
     }
 
     saveConfig({ lastSyncAt: Date.now() });
+    if (typeof DB !== 'undefined' && DB && typeof DB.markSynced === 'function') {
+      DB.markSynced();
+    }
     return { success: true, backup: data, stats: bundle.stats };
   }
 
@@ -594,9 +601,13 @@ const SupabaseSync = (() => {
           restoredKeys.push(key);
         }
       });
-      if (typeof DB !== 'undefined' && DB && typeof DB.flush === 'function') {
-        try { await DB.flush(); } catch { /* ignore */ }
+      if (typeof DB !== 'undefined' && DB && typeof DB.markSynced === 'function') {
+        DB.markSynced();
       }
+    }
+
+    if (typeof DB !== 'undefined' && DB && typeof DB.flush === 'function') {
+      try { await DB.flush(); } catch { /* ignore */ }
     }
 
     saveConfig({ lastSyncAt: Date.now() });
@@ -795,10 +806,11 @@ const SupabaseSync = (() => {
 
       const totalCloudRecords = (latestValid.client_count || 0) + (latestValid.statement_count || 0) + (latestValid.slip_count || 0);
 
-      // Case 1: Fresh device / empty workspace, and cloud has data -> Auto Restore safely with merge!
+      // Case 1: Fresh device / empty workspace, and cloud has data -> Auto Restore cleanly!
       if (isLocalEmpty && totalCloudRecords > 0) {
         console.log('🔄 Fresh device detected with empty storage. Auto-restoring cloud snapshot:', latestValid.id);
-        const restoreRes = await restoreBackup(latestValid.id, { merge: true });
+        const restoreRes = await restoreBackup(latestValid.id, { merge: false });
+        if (isRealtimeEnabled()) startRealtimeSync();
         return {
           status: 'auto_restored',
           backup: latestValid,
@@ -806,18 +818,23 @@ const SupabaseSync = (() => {
         };
       }
 
-      // Case 2: Device already has data. Auto-merge any newer peer snapshot
+      // Case 2: Device already has data. Check if cloud has newer peer snapshot
       // so opening the app on device B picks up device A's work immediately.
       const cfg = getConfig();
       const lastSyncAt = cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0;
       const cloudTime = new Date(latestValid.created_at).getTime();
 
       if (cloudTime > lastSyncAt && latestValid.device_id !== cfg.deviceId && totalCloudRecords > 0) {
-        console.log('🔄 Newer peer snapshot found. Auto-merging:', latestValid.id);
-        const restoreRes = await restoreBackup(latestValid.id, { merge: true });
+        // If local device has NOT made any unpushed edits since last sync,
+        // cleanly replace local storage so additions, edits and deletions from PC 1 are 100% mirrored.
+        const lastMutation = (typeof DB !== 'undefined' && DB.getLastMutationTime) ? DB.getLastMutationTime() : 0;
+        const hasUnpushedLocal = lastMutation > lastSyncAt;
+
+        console.log(`🔄 Newer peer snapshot found (unpushed local changes: ${hasUnpushedLocal}). Syncing:`, latestValid.id);
+        const restoreRes = await restoreBackup(latestValid.id, { merge: hasUnpushedLocal });
         if (isRealtimeEnabled()) startRealtimeSync();
         return {
-          status: 'auto_merged',
+          status: hasUnpushedLocal ? 'auto_merged' : 'auto_restored',
           backup: latestValid,
           stats: restoreRes.stats,
         };
@@ -931,6 +948,32 @@ BEGIN
 END $$;
 `;
   }
+
+  let _lastVisibilitySyncCheck = 0;
+  function _bindVisibilitySync() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const triggerIfStale = () => {
+      if (!isAutoSyncEnabled() && !isRealtimeEnabled()) return;
+      const now = Date.now();
+      if (now - _lastVisibilitySyncCheck < 20000) return; // at most once per 20 seconds
+      _lastVisibilitySyncCheck = now;
+      checkStartupSync().then(res => {
+        if (res && (res.status === 'auto_restored' || res.status === 'auto_merged')) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('supabase:visibility-synced', { detail: res }));
+          }
+        }
+      }).catch(() => {});
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') triggerIfStale();
+    });
+    window.addEventListener('focus', triggerIfStale);
+  }
+
+  // Bind visibility & focus auto-refresh on startup
+  try { _bindVisibilitySync(); } catch {}
 
   function isConfigured() {
     const cfg = getConfig();
