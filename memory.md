@@ -25,21 +25,26 @@ The system operates **entirely client-side** using standard web technologies. Al
   2. Eliminates `node_modules` dependency vulnerabilities, supply-chain risks, and build-time breakages.
   3. Ensures high long-term stability with minimal maintenance overhead.
 
-#### ADR 2: LocalStorage-First Data Tenancy
-- **Decision:** Browser `window.localStorage` serves as the primary database for clients, salary slip history, statement records, and office settings.
+#### ADR 2: IndexedDB-First Data Tenancy
+- **Decision:** Browser IndexedDB (`js/idb-store.js`) is the primary database for clients, salary slip history, statement records, and office settings, with a synchronous in-memory cache so `DB.*` callers stay unchanged. `localStorage` is retained only for tiny preferences (`theme`, admin PIN, device id, cloud config) and as an automatic fallback.
 - **Rationale:** 
-  1. Guarantees complete data privacy for tax consultants handling confidential client PAN and income details.
-  2. Works natively in air-gapped or offline office environments.
-  3. All local writes are protected by an abstract wrapper (`_safeSetItem` in `js/db.js`) that intercepts `QuotaExceededError` and alerts the user before storage saturation occurs.
+  1. localStorage is hard-capped at roughly 5 MB per origin; a handful of saved bank statements exhausted it. IndexedDB is bounded by a share of free disk instead.
+  2. Guarantees complete data privacy for tax consultants handling confidential client PAN and income details (still client-side only).
+  3. Works natively in air-gapped or offline office environments.
+  4. Legacy data migrates on first boot with write → flush → verify → delete ordering, so no record can be lost if the browser refuses the IndexedDB write.
+  5. When IndexedDB is unavailable the layer degrades to localStorage and the existing `QuotaExceededError` alert path still applies.
 
 #### ADR 3: Dual-Mode Cloud Sync with Overwrite Guards
-- **Decision:** Supabase integration acts as an asynchronous cloud backup and multi-device sync layer.
+- **Decision:** Supabase integration acts as an asynchronous cloud backup and multi-device sync layer over a single shared workspace (`workspace_id`, default `public`). Credentials ship in `js/config.js` so every device syncs with zero setup; Admin-panel values override per installation.
 - **Rationale:**
   1. **Debounced Auto-Sync:** A 2-second debounce timer triggers silent cloud backups following any data mutation without stalling the UI.
-  2. **Empty-Workspace Overwrite Guard:** If a user opens the application in a clean browser or private window with empty local storage, the auto-sync engine is blocked from pushing an empty backup, protecting existing cloud snapshots.
-  3. **Auto-Restore on First Boot:** Automatically detects an empty local store on startup and prompts or restores the latest valid cloud snapshot.
-  4. **Smart Merge Conflict Resolution:** When merging cloud snapshots with local data, the engine compares individual records across all entities (computations, statements, salary slips, companies) and retains records with the most recent `updatedAt` timestamp.
-  5. **Supabase Realtime Live Sync:** Subscribes to Supabase Postgres Realtime channels (`INSERT` events on the backup table). When a peer workstation pushes updates, peer devices automatically detect the change, debounced-merge the incoming snapshot, refresh active views/dashboards, and show non-intrusive live toast alerts without requiring page reloads.
+  2. **Merge-Before-Push:** Any peer snapshot newer than `lastSyncAt` is pulled and merged before a new revision is inserted, preventing cross-device clobbering.
+  3. **Empty-Workspace Overwrite Guard:** If a user opens the application in a clean browser or private window with empty local storage, the auto-sync engine is blocked from pushing an empty backup, protecting existing cloud snapshots.
+  4. **Auto-Restore / Auto-Merge on Boot:** Empty local storage restores the latest valid cloud snapshot; non-empty storage silently merges newer peer snapshots.
+  5. **Append-Only Snapshots:** Rows are inserted, never updated, and a retention trigger keeps the newest 100 per workspace — a wipe is recoverable from an older revision.
+  6. **Smart Merge Conflict Resolution:** The engine compares individual records across all entities (computations, statements, salary slips, companies) and retains records with the most recent `updatedAt` timestamp.
+  7. **Supabase Realtime Live Sync:** Subscribes to Supabase Postgres Realtime channels (`INSERT` events on the backup table). When a peer workstation pushes updates, peer devices automatically detect the change, debounced-merge the incoming snapshot, refresh active views/dashboards, and show non-intrusive live toast alerts without requiring page reloads.
+  8. **Accepted Risk (documented):** Because there is no login, anyone holding the public publishable key can read/write the shared workspace. An invite-code / authenticated workspace is the planned upgrade; the `workspace_id` column and `getWorkspaceId()` seam exist so that upgrade needs no data migration.
 
 #### ADR 4: Tri-Format Report Rendering Strategy
 - **Decision:** Provide three distinct reporting engines for different stakeholder needs:

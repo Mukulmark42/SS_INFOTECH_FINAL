@@ -1,6 +1,7 @@
 /**
  * ═══════════════════════════════════════════════════════════
- * CLIENT DATABASE  –  localStorage-backed client store
+ * CLIENT DATABASE  –  IndexedDB-backed client store
+ * (falls back to localStorage when IndexedDB is unavailable)
  * Full CRUD with PAN / mobile search
  * ═══════════════════════════════════════════════════════════
  */
@@ -11,6 +12,89 @@ const DB = (() => {
   const SLIP_COMP_KEY = 'ssinfotech_slip_companies';
   const SLIP_REC_KEY = 'ssinfotech_slip_records';
   const STMT_REC_KEY = 'ssinfotech_statement_records';
+
+  /** Collections that live in the bulk store (IndexedDB when available) */
+  const PERSIST_KEYS = [KEY, ADMIN_KEY, SLIP_COMP_KEY, SLIP_REC_KEY, STMT_REC_KEY];
+
+  /**
+   * IndexedDB is the primary store. `_idb` stays null in environments
+   * without IndexedDB (Node regression tests, locked-down browsers),
+   * in which case every read/write goes to localStorage exactly as before.
+   */
+  const _idb = (typeof IDBStore !== 'undefined' && IDBStore.available && IDBStore.available()) ? IDBStore : null;
+  let _initPromise = null;
+
+  function usingIndexedDB() {
+    return !!(_idb && typeof _idb.isReady === 'function' && _idb.isReady());
+  }
+
+  /** Read the raw string for a key — IDB cache first, then localStorage */
+  function _readRaw(key) {
+    if (_idb && _idb.has(key)) return _idb.get(key);
+    try { return localStorage.getItem(key); } catch { return null; }
+  }
+
+  /** Write the raw string for a key — IDB when available, else localStorage */
+  function _writeRaw(key, value, triggerSync = true) {
+    const ok = _idb ? _idb.set(key, value) : _safeSetItem(key, value, false);
+    if (ok && triggerSync && typeof SupabaseSync !== 'undefined' &&
+        typeof SupabaseSync.isAutoSyncEnabled === 'function' &&
+        SupabaseSync.isAutoSyncEnabled()) {
+      SupabaseSync.triggerAutoBackup('Auto Sync');
+    }
+    return ok;
+  }
+
+  /**
+   * Boot the storage layer and migrate any legacy localStorage payloads.
+   * Safe to call more than once; resolves to a small status object.
+   */
+  async function init() {
+    if (_initPromise) return _initPromise;
+    _initPromise = (async () => {
+      if (!_idb) return { storage: 'localStorage', migrated: 0 };
+      const ok = await _idb.init();
+      if (!ok) return { storage: 'localStorage', migrated: 0 };
+      const migrated = await _migrateFromLocalStorage();
+      return { storage: 'indexedDB', migrated };
+    })();
+    return _initPromise;
+  }
+
+  /**
+   * One-time localStorage → IndexedDB migration.
+   * Writes everything first, flushes, verifies each key, and only
+   * then removes the localStorage copy (so a failure never loses data).
+   */
+  async function _migrateFromLocalStorage() {
+    const pending = [];
+    for (const key of PERSIST_KEYS) {
+      let val = null;
+      try { val = localStorage.getItem(key); } catch { val = null; }
+      if (val == null) continue;
+      if (!_idb.has(key)) {
+        _idb.set(key, val);
+        pending.push(key);
+      }
+    }
+
+    if (!pending.length) return 0;
+
+    await _idb.flush();
+
+    let migrated = 0;
+    for (const key of pending) {
+      const val = (() => { try { return localStorage.getItem(key); } catch { return null; } })();
+      if (val == null) continue;
+      if (_idb.get(key) === val) {
+        try { localStorage.removeItem(key); } catch { /* ignore */ }
+        migrated++;
+      }
+    }
+
+    if (migrated) console.log(`📦 Migrated ${migrated} collection(s) from localStorage to IndexedDB.`);
+    return migrated;
+  }
 
   /** Safe localStorage write wrapper with QuotaExceededError protection */
   function _safeSetItem(key, value, triggerSync = true) {
@@ -50,7 +134,7 @@ const DB = (() => {
 
   /** Load all raw clients including trash */
   function _rawAll() {
-    try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
+    try { return JSON.parse(_readRaw(KEY) || '[]'); }
     catch { return []; }
   }
 
@@ -233,20 +317,40 @@ const DB = (() => {
     return [headers.join(','), ...rows].join('\r\n');
   }
 
+  /** Every storage key this app knows about (bulk store + small prefs) */
+  function storageKeys() {
+    const set = new Set();
+    if (_idb) {
+      _idb.keys().forEach(k => { if (k.startsWith('ssinfotech_') || k === 'theme') set.add(k); });
+    }
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k === 'theme' || k.startsWith('ssinfotech_'))) set.add(k);
+      }
+    } catch { /* ignore */ }
+    PERSIST_KEYS.forEach(k => { if (_readRaw(k) != null) set.add(k); });
+    return Array.from(set).sort();
+  }
+
   /** Storage Usage Analytics (in Bytes / KB / MB) */
   function getStorageUsage() {
     let totalBytes = 0;
     const breakdown = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      const val = localStorage.getItem(key) || '';
+    storageKeys().forEach(key => {
+      const val = _readRaw(key) || '';
       const size = (key.length + val.length) * 2; // Approximate UTF-16 bytes
       totalBytes += size;
       breakdown[key] = size;
-    }
+    });
+
     const totalKB = (totalBytes / 1024).toFixed(1);
     const totalMB = (totalBytes / (1024 * 1024)).toFixed(2);
-    const maxMB = 5.0; // Typical browser limit
+    const idbActive = usingIndexedDB() && _idb && _idb.isReady();
+    const softLimitMB = (typeof window !== 'undefined' && window.SS_CONFIG && window.SS_CONFIG.INDEXEDDB_SOFT_LIMIT_MB)
+      ? window.SS_CONFIG.INDEXEDDB_SOFT_LIMIT_MB
+      : 512;
+    const maxMB = idbActive ? softLimitMB : 5.0;
     const pctUsed = Math.min(100, ((totalBytes / (maxMB * 1024 * 1024)) * 100)).toFixed(1);
 
     return {
@@ -255,12 +359,91 @@ const DB = (() => {
       totalMB: parseFloat(totalMB),
       maxMB,
       pctUsed: parseFloat(pctUsed),
+      usingIndexedDB: !!idbActive,
       breakdown,
       clientCount: all().length,
       slipCompanyCount: getSlipCompanies().length,
       slipRecordCount: getSlipRecords().length,
       statementRecordCount: getStatementRecords().length
     };
+  }
+
+  /** Real browser-exposed quota (async, IndexedDB era) */
+  async function getStorageEstimate() {
+    if (!_idb) {
+      const usage = getStorageUsage();
+      return {
+        usage: usage.totalBytes,
+        quota: 5 * 1024 * 1024,
+        pctUsed: usage.pctUsed,
+        source: 'localStorage',
+      };
+    }
+    const est = await _idb.estimate();
+    const quota = est.quota || 0;
+    return {
+      usage: Math.max(est.usage || 0, 0),
+      quota,
+      pctUsed: quota ? Math.min(100, parseFloat(((est.usage / quota) * 100).toFixed(1))) : 0,
+      source: est.source || 'indexeddb',
+    };
+  }
+
+  // ── Generic key access (used by cloud sync & backup/restore) ──
+  function readKey(key) {
+    if (key === 'theme') {
+      try { return localStorage.getItem('theme'); } catch { return null; }
+    }
+    return _readRaw(key);
+  }
+
+  function writeKey(key, value, triggerSync = false) {
+    if (key === 'theme') {
+      try { localStorage.setItem('theme', value); } catch { /* ignore */ }
+      return true;
+    }
+    return _writeRaw(key, value, triggerSync);
+  }
+
+  /** Snapshot every app key as raw strings (local backup format) */
+  const BACKUP_EXCLUDED_KEYS = new Set([
+    'ssinfotech_supabase_config', // per-device cloud credentials
+    'ssinfotech_device_id',       // per-device sync identity
+  ]);
+
+  function exportAll() {
+    const data = {};
+    storageKeys().forEach(key => {
+      if (BACKUP_EXCLUDED_KEYS.has(key)) return;
+      const raw = readKey(key);
+      if (raw != null) data[key] = raw;
+    });
+    return data;
+  }
+
+  /** Replace the whole store with a raw-string map */
+  async function importAll(data) {
+    if (!data || typeof data !== 'object') return false;
+    storageKeys().forEach(key => {
+      if (!(key in data)) {
+        if (key === 'theme') { try { localStorage.removeItem('theme'); } catch {} }
+        else if (_idb) _idb.remove(key);
+        else { try { localStorage.removeItem(key); } catch {} }
+      }
+    });
+    Object.entries(data).forEach(([key, value]) => {
+      // Never let a restored backup overwrite this device's cloud
+      // credentials or sync identity.
+      if (BACKUP_EXCLUDED_KEYS.has(key)) return;
+      if (typeof value === 'string') writeKey(key, value);
+    });
+    if (_idb) await _idb.flush();
+    return true;
+  }
+
+  function flush() {
+    if (_idb && typeof _idb.flush === 'function') return _idb.flush();
+    return Promise.resolve(true);
   }
 
   /** Stats */
@@ -287,7 +470,7 @@ const DB = (() => {
   }
 
   function _persist(clients) {
-    _safeSetItem(KEY, JSON.stringify(clients));
+    _writeRaw(KEY, JSON.stringify(clients));
   }
 
   function _uid() {
@@ -297,7 +480,7 @@ const DB = (() => {
   // ── Admin Config ──────────────────────────────────────────
   function getAdmin() {
     try {
-      const config = JSON.parse(localStorage.getItem(ADMIN_KEY) || '{}');
+      const config = JSON.parse(_readRaw(ADMIN_KEY) || '{}');
       if (!config.deductors || !Array.isArray(config.deductors) || config.deductors.length === 0) {
         config.deductors = [
           { name: 'Razorpay Payments Pvt Ltd', tan: 'DELR12345E', category: 'Payment Gateway' },
@@ -309,7 +492,7 @@ const DB = (() => {
           { name: 'Delhivery Limited', tan: 'GREP12345E', category: 'Logistics' },
           { name: 'BlueDart Express Limited', tan: 'CHEP12345E', category: 'Logistics' },
         ];
-        _safeSetItem(ADMIN_KEY, JSON.stringify(config), false);
+        _writeRaw(ADMIN_KEY, JSON.stringify(config), false);
       }
       return config;
     }
@@ -317,13 +500,13 @@ const DB = (() => {
   }
 
   function saveAdmin(config) {
-    _safeSetItem(ADMIN_KEY, JSON.stringify(config));
+    _writeRaw(ADMIN_KEY, JSON.stringify(config));
   }
 
   // ── Salary Slip Companies ──────────────────────────────────
   function getSlipCompanies() {
     try {
-      const stored = localStorage.getItem(SLIP_COMP_KEY);
+      const stored = _readRaw(SLIP_COMP_KEY);
       if (stored) return JSON.parse(stored);
       const defaults = [
         {
@@ -345,7 +528,7 @@ const DB = (() => {
           createdAt: Date.now()
         }
       ];
-      _safeSetItem(SLIP_COMP_KEY, JSON.stringify(defaults), false);
+      _writeRaw(SLIP_COMP_KEY, JSON.stringify(defaults), false);
       return defaults;
     }
     catch { return []; }
@@ -361,18 +544,18 @@ const DB = (() => {
       company.createdAt = Date.now();
       list.unshift(company);
     }
-    _safeSetItem(SLIP_COMP_KEY, JSON.stringify(list));
+    _writeRaw(SLIP_COMP_KEY, JSON.stringify(list));
     return company;
   }
 
   function removeSlipCompany(id) {
     const list = getSlipCompanies().filter(c => c.id !== id);
-    _safeSetItem(SLIP_COMP_KEY, JSON.stringify(list));
+    _writeRaw(SLIP_COMP_KEY, JSON.stringify(list));
   }
 
   // ── Salary Slip Records ──────────────────────────────────
   function getSlipRecords() {
-    try { return JSON.parse(localStorage.getItem(SLIP_REC_KEY) || '[]'); }
+    try { return JSON.parse(_readRaw(SLIP_REC_KEY) || '[]'); }
     catch { return []; }
   }
 
@@ -395,13 +578,13 @@ const DB = (() => {
       record.updatedAt = Date.now();
       list.unshift(record);
     }
-    _safeSetItem(SLIP_REC_KEY, JSON.stringify(list));
+    _writeRaw(SLIP_REC_KEY, JSON.stringify(list));
     return record;
   }
 
   function removeSlipRecord(id) {
     const list = getSlipRecords().filter(r => r.id !== id);
-    _safeSetItem(SLIP_REC_KEY, JSON.stringify(list));
+    _writeRaw(SLIP_REC_KEY, JSON.stringify(list));
   }
 
   const MONTH_ORDER = {
@@ -518,7 +701,7 @@ const DB = (() => {
       const key = `${name}___${compId}`;
       return key !== customerKey;
     });
-    _safeSetItem(SLIP_REC_KEY, JSON.stringify(list));
+    _writeRaw(SLIP_REC_KEY, JSON.stringify(list));
     return true;
   }
 
@@ -537,7 +720,7 @@ const DB = (() => {
 
   // ── Bank Statement Records ────────────────────────────────
   function getStatementRecords() {
-    try { return JSON.parse(localStorage.getItem(STMT_REC_KEY) || '[]'); }
+    try { return JSON.parse(_readRaw(STMT_REC_KEY) || '[]'); }
     catch { return []; }
   }
 
@@ -552,13 +735,13 @@ const DB = (() => {
       record.updatedAt = Date.now();
       list.unshift(record);
     }
-    _safeSetItem(STMT_REC_KEY, JSON.stringify(list));
+    _writeRaw(STMT_REC_KEY, JSON.stringify(list));
     return record;
   }
 
   function removeStatementRecord(id) {
     const list = getStatementRecords().filter(r => r.id !== id);
-    _safeSetItem(STMT_REC_KEY, JSON.stringify(list));
+    _writeRaw(STMT_REC_KEY, JSON.stringify(list));
   }
 
   return { all, save, remove, bulkRemove, findById, search, duplicate, stats, exportCSV, getStorageUsage, isEmpty,
@@ -568,7 +751,9 @@ const DB = (() => {
            getSlipRecords, getSlipRecordsByEmployee, getSlipRecordsByCompany,
            saveSlipRecord, removeSlipRecord, generateEmpCode,
            getSlipCustomers, deleteSlipCustomer,
-           getStatementRecords, saveStatementRecord, removeStatementRecord };
+           getStatementRecords, saveStatementRecord, removeStatementRecord,
+           init, usingIndexedDB, getStorageEstimate, storageKeys,
+           readKey, writeKey, exportAll, importAll, flush };
 })();
 
 if (typeof module !== 'undefined') {

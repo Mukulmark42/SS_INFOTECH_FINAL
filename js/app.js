@@ -437,7 +437,19 @@ const App = (() => {
   }
 
   // ── Init ───────────────────────────────────────────────────
-  function init() {
+  async function init() {
+    // Boot the storage layer first: hydrates the IndexedDB cache and
+    // migrates any legacy localStorage collections. Without this the
+    // first render could read an empty cache.
+    try {
+      if (typeof DB !== 'undefined' && typeof DB.init === 'function') {
+        const storage = await DB.init();
+        console.log(`🗄️ Storage engine: ${storage.storage}${storage.migrated ? ` (migrated ${storage.migrated})` : ''}`);
+      }
+    } catch (err) {
+      console.warn('Storage init failed, continuing with localStorage:', err);
+    }
+
     _bindNav();
     _bindTheme();
     _bindSidebar();
@@ -3558,15 +3570,26 @@ Tax & Financial Consultancy Services`);
   };
 
   function _backupKeys() {
+    if (typeof DB !== 'undefined' && typeof DB.storageKeys === 'function') {
+      return DB.storageKeys();
+    }
     return Object.keys(localStorage).filter(key =>
       key === 'theme' || key.startsWith('ssinfotech_')
     ).sort();
   }
 
+  function _exportAllData() {
+    if (typeof DB !== 'undefined' && typeof DB.exportAll === 'function') {
+      return DB.exportAll();
+    }
+    const data = {};
+    _backupKeys().forEach(key => { data[key] = localStorage.getItem(key); });
+    return data;
+  }
+
   function downloadLocalBackup() {
     try {
-      const data = {};
-      _backupKeys().forEach(key => { data[key] = localStorage.getItem(key); });
+      const data = _exportAllData();
       const backup = {
         format: BACKUP_FORMAT,
         version: BACKUP_VERSION,
@@ -3611,6 +3634,10 @@ Tax & Financial Consultancy Services`);
         if (!['light', 'dark'].includes(value)) throw new Error('The saved theme is invalid.');
         return;
       }
+      if (key === 'ssinfotech_supabase_config' || key === 'ssinfotech_device_id') {
+        // Older backups captured these per-device keys; accept and ignore them.
+        return;
+      }
       if (!(key in BACKUP_JSON_KEYS)) {
         throw new Error(`The backup contains an unsupported application key: ${key}`);
       }
@@ -3637,21 +3664,28 @@ Tax & Financial Consultancy Services`);
     }
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const backup = JSON.parse(reader.result);
         _validateBackup(backup);
         const created = backup.createdAt ? new Date(backup.createdAt).toLocaleString('en-IN') : 'unknown date';
         if (!confirm(`Restore backup from ${created}?\n\nThis will replace all current local application data. This action cannot be undone.`)) return;
 
-        const current = {};
-        _backupKeys().forEach(key => { current[key] = localStorage.getItem(key); });
+        const current = _exportAllData();
         try {
-          _backupKeys().forEach(key => localStorage.removeItem(key));
-          Object.entries(backup.data).forEach(([key, value]) => localStorage.setItem(key, value));
+          if (typeof DB !== 'undefined' && typeof DB.importAll === 'function') {
+            await DB.importAll(backup.data);
+          } else {
+            _backupKeys().forEach(key => localStorage.removeItem(key));
+            Object.entries(backup.data).forEach(([key, value]) => localStorage.setItem(key, value));
+          }
         } catch (storageError) {
-          _backupKeys().forEach(key => localStorage.removeItem(key));
-          Object.entries(current).forEach(([key, value]) => localStorage.setItem(key, value));
+          if (typeof DB !== 'undefined' && typeof DB.importAll === 'function') {
+            await DB.importAll(current);
+          } else {
+            _backupKeys().forEach(key => localStorage.removeItem(key));
+            Object.entries(current).forEach(([key, value]) => localStorage.setItem(key, value));
+          }
           throw storageError;
         }
 
@@ -3756,6 +3790,19 @@ Tax & Financial Consultancy Services`);
           message: `Loaded <strong>${res.stats.clients} Computations</strong>, <strong>${res.stats.statements} Statements</strong>, and <strong>${res.stats.slips} Payslips</strong> from Supabase.`,
           type: 'success',
           delay: 8000
+        });
+      } else if (res.status === 'auto_merged') {
+        _updateTopbarCloudState('synced', 'Cloud Synced');
+        _refreshDashboard();
+        _renderClientTable();
+        if (document.getElementById('page-admin')?.classList.contains('active')) {
+          _initAdminPanel();
+        }
+        _showCloudToast({
+          title: '⚡ Cloud Data Synced',
+          message: `Merged the latest snapshot automatically — <strong>${res.stats.clients} Computations</strong>, <strong>${res.stats.statements} Statements</strong>, <strong>${res.stats.slips} Payslips</strong>.`,
+          type: 'info',
+          delay: 6000
         });
       } else if (res.status === 'cloud_update_available') {
         _updateTopbarCloudState('update', 'Update Available');
@@ -4307,7 +4354,23 @@ Tax & Financial Consultancy Services`);
       }
     }
     if (elTxt) {
-      elTxt.textContent = `${usage.totalKB} KB / ${usage.maxMB.toFixed(1)} MB (${usage.pctUsed}% used)`;
+      const engine = usage.usingIndexedDB ? 'IndexedDB' : 'localStorage (5 MB cap)';
+      elTxt.textContent = `${usage.totalKB} KB used · ${engine}`;
+    }
+
+    // Refine with the browser's real quota when IndexedDB is active
+    if (usage.usingIndexedDB && typeof DB.getStorageEstimate === 'function') {
+      DB.getStorageEstimate().then(est => {
+        if (!est || !elTxt) return;
+        const usedMB = (est.usage / (1024 * 1024)).toFixed(2);
+        if (est.quota) {
+          const quotaMB = (est.quota / (1024 * 1024)).toFixed(0);
+          elTxt.textContent = `${usedMB} MB of ~${quotaMB} MB (${est.pctUsed}%) · IndexedDB`;
+          if (elBar) elBar.style.width = `${Math.min(100, Math.max(0.5, est.pctUsed))}%`;
+        } else {
+          elTxt.textContent = `${usedMB} MB used · IndexedDB`;
+        }
+      }).catch(() => { /* ignore */ });
     }
   }
 

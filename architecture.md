@@ -148,26 +148,31 @@ graph TD
 - **Official ITR Acknowledgement (`js/report-ack.js`):** 100% pixel-perfect recreation of the Income Tax Department ITR-V form. Features exact official styling, DejaVu Sans font rendering, official background watermark, simulated 2D barcode, and statutory verification warnings, strictly calibrated for single-page A4 output.
 - **Export Drivers:** Direct printing via browser print dialog (`window.print()`) targeting `@media print` rules, or single-click client-side PDF rasterization using `html2pdf.js`.
 
-#### 2.5 Data Persistence & Storage Layer (`js/db.js`)
-- **Storage Driver:** Browser `window.localStorage` key-value store.
+#### 2.5 Data Persistence & Storage Layer (`js/db.js`, `js/idb-store.js`)
+- **Storage Driver:** IndexedDB (`ssinfotech_storage` → object store `kv`) behind a synchronous in-memory cache. IndexedDB has no practical 5 MB ceiling (browser quota is a fraction of free disk), which removes the old localStorage saturation wall.
+- **Fallback Chain:** When IndexedDB is unavailable (locked-down browsers, Node regression tests) `IDBStore` transparently degrades to `window.localStorage`, so every caller keeps working unchanged.
 - **Key Namespace:**
   - `ssinfotech_clients`: Active client computation records array.
   - `ssinfotech_admin`: Office branding, signatory data, custom slabs, and deductors.
   - `ssinfotech_slip_companies`: Registered corporate payroll entities.
   - `ssinfotech_slip_records`: Generated salary slip history.
   - `ssinfotech_statement_records`: Saved bank statement configurations.
+- **Migration:** On first boot `DB.init()` copies any legacy localStorage collections into IndexedDB, flushes, verifies each key byte-for-byte, and only then removes the localStorage copy. A failed write therefore never loses data.
 - **Fault-Tolerant Operations:**
-  - `_safeSetItem`: Try-catch wrapper trapping `QuotaExceededError` (Error code 22 / 1014) to prevent data corruption.
-  - Automated diagnostic analyzer `getStorageUsage()` tracking storage consumption in Bytes, KB, and MB against browser limits.
+  - `_safeSetItem`: Try-catch wrapper trapping `QuotaExceededError` (Error code 22 / 1014); now only reached in localStorage fallback mode.
+  - Automated diagnostic analyzer `getStorageUsage()` (synchronous byte accounting per key) plus `getStorageEstimate()` backed by `navigator.storage.estimate()` for the true browser quota.
   - **Soft-Delete Recycle Bin:** Soft-deletes records with a `deletedAt` timestamp instead of immediate deletion, enabling recovery from accidental loss.
 
-#### 2.6 Cloud Synchronization Subsystem (`js/supabase-sync.js`)
-- **Client:** `@supabase/supabase-js` v2 initialized with project URL and public anonymous key.
+#### 2.6 Cloud Synchronization Subsystem (`js/supabase-sync.js`, `js/config.js`)
+- **Client:** `@supabase/supabase-js` v2 initialized with the project URL and publishable key baked into `js/config.js` (Admin-panel values still override). A new device therefore needs no manual setup.
+- **Workspace Model:** One shared workspace (`WORKSPACE_ID`, default `public`). Every snapshot row carries `workspace_id`; queries filter on it when the column exists and degrade gracefully to an unfiltered query on pre-workspace tables.
 - **Synchronization Logic:**
   - **Debounced Auto-Sync:** Listens to `DB` mutation events and queues an automatic cloud push with a 2-second debounce timer.
+  - **Merge-Before-Push:** Before inserting a new revision the engine pulls any peer snapshot newer than `lastSyncAt`, merges it locally, and only then pushes. Two workstations can no longer overwrite each other's work.
   - **Safety Guard:** Verifies local record counts before auto-pushing; empty workspaces are strictly blocked from pushing to prevent overwriting cloud history.
-  - **Startup Auto-Restore:** Detects if a user opens the application on a fresh device with empty local storage and automatically pulls down the latest valid cloud snapshot.
+  - **Startup Auto-Restore / Auto-Merge:** Empty local storage pulls the latest valid snapshot; non-empty local storage automatically merges any newer peer snapshot on boot.
   - **Smart Merge Engine:** Reconciles differences between cloud snapshots and local data using entity identifiers (`id` or `PAN + AY`) and timestamp comparisons (`updatedAt`), preserving newer edits without data loss.
+  - **Append-Only History:** Snapshots are inserted, never updated; a retention trigger keeps the newest 100 per workspace so an accidental wipe is recoverable.
 
 ---
 
@@ -379,9 +384,9 @@ WITH CHECK (true);
 
 ### 5. Security, Privacy & Integrity Model
 
-1. **Client-Side Isolation:** Sensitive financial data (PAN, bank accounts, income streams) is strictly stored in the user's browser `localStorage` by default. No background telemetry or analytics scripts are loaded.
+1. **Client-Side Isolation:** Sensitive financial data (PAN, bank accounts, income streams) is strictly stored in the user's browser (IndexedDB, with `localStorage` as a degraded fallback). No background telemetry or analytics scripts are loaded.
 2. **Supabase Row Level Security (RLS):** Supabase integration operates using public anonymous keys (`anonKey`) restricted strictly to the configured backup table. Because publishable keys are embedded in client code, the backup table is readable/writable by anyone holding the key — always use a dedicated Supabase project that contains only backup snapshots, never co-locate sensitive data, and rotate the key on leak. Credentials are configured per-installation in the Admin Panel and are never hardcoded in source.
-3. **Storage Quota & Data Corruption Safeguards:** Local writes are wrapped with quota handlers. When approaching the 5MB browser quota, the system warns the user, provides a single-click JSON download, and blocks unhandled exceptions.
+3. **Storage Quota & Data Corruption Safeguards:** Bulk collections live in IndexedDB, which is bounded by a share of free disk rather than the 5 MB localStorage cap. The storage layer still wraps every write, falls back to `localStorage` when IndexedDB is refused, surfaces quota errors instead of throwing, and offers a single-click JSON backup. Migration from the legacy localStorage layout is write → flush → verify → delete.
 4. **Input Sanitization:** All report engines use HTML escaping helpers (`_esc`) to neutralize XSS vulnerabilities when rendering dynamic client inputs into the print DOM.
 
 ---

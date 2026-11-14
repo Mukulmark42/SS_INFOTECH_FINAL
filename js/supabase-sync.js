@@ -9,13 +9,16 @@ const SupabaseSync = (() => {
   const CONFIG_KEY = 'ssinfotech_supabase_config';
   const DEFAULT_TABLE = 'ssinfotech_backups';
 
-  // Credentials are NOT shipped in source. Configure your own Supabase
-  // project via the Admin Panel (Cloud Sync settings) — the app stores
-  // them in localStorage and stays in Local-only mode until then.
+  // Boot defaults come from js/config.js so a brand-new device needs no
+  // manual setup. Anything saved in the Admin panel (localStorage) still
+  // takes precedence, so existing installations keep their own settings.
+  const _BOOT = (typeof window !== 'undefined' && window.SS_CONFIG) ? window.SS_CONFIG : {};
+
   const DEFAULT_CONFIG = {
-    url: '',
-    anonKey: '',
-    tableName: DEFAULT_TABLE,
+    url: _BOOT.SUPABASE_URL || '',
+    anonKey: _BOOT.SUPABASE_ANON_KEY || '',
+    tableName: _BOOT.SUPABASE_TABLE || DEFAULT_TABLE,
+    workspaceId: _BOOT.WORKSPACE_ID || 'public',
     autoSync: true,
     realtimeSync: true,
     lastSyncAt: null,
@@ -28,6 +31,7 @@ const SupabaseSync = (() => {
   let _realtimeChannel = null;
   let _realtimeStatus = 'idle'; // 'idle' | 'connecting' | 'connected' | 'error' | 'closed'
   let _incomingSyncTimer = null;
+  let _workspaceColumnMissing = false;
 
   function _getOrCreateDeviceId() {
     let id = localStorage.getItem('ssinfotech_device_id');
@@ -36,6 +40,32 @@ const SupabaseSync = (() => {
       localStorage.setItem('ssinfotech_device_id', id);
     }
     return id;
+  }
+
+  // ── storage indirection (IndexedDB-aware) ──────────────────
+  function _readKey(key) {
+    if (typeof DB !== 'undefined' && DB && typeof DB.readKey === 'function') {
+      return DB.readKey(key);
+    }
+    try { return localStorage.getItem(key); } catch { return null; }
+  }
+
+  function _writeKey(key, value) {
+    if (typeof DB !== 'undefined' && DB && typeof DB.writeKey === 'function') {
+      DB.writeKey(key, value, false);
+      return;
+    }
+    try { localStorage.setItem(key, value); } catch { /* ignore */ }
+  }
+
+  function _readJSON(key) {
+    const raw = _readKey(key);
+    if (raw == null) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  function getWorkspaceId() {
+    return getConfig().workspaceId || 'public';
   }
 
   function isAutoSyncEnabled() {
@@ -203,14 +233,19 @@ const SupabaseSync = (() => {
     }, 2000);
   }
 
-  /** Get configuration with fallback to defaults */
+  /** Get configuration with fallback to boot defaults */
   function getConfig() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
-      return { ...DEFAULT_CONFIG, ...saved };
-    } catch {
-      return { ...DEFAULT_CONFIG };
-    }
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}') || {}; } catch { saved = {}; }
+    const merged = { ...DEFAULT_CONFIG, ...saved };
+
+    // Empty strings saved by an unconfigured install must not mask the
+    // baked-in boot defaults.
+    if (!merged.url) merged.url = DEFAULT_CONFIG.url;
+    if (!merged.anonKey) merged.anonKey = DEFAULT_CONFIG.anonKey;
+    if (!merged.tableName) merged.tableName = DEFAULT_CONFIG.tableName;
+    if (!merged.workspaceId) merged.workspaceId = DEFAULT_CONFIG.workspaceId;
+    return merged;
   }
 
   /** Save updated configuration */
@@ -296,11 +331,12 @@ const SupabaseSync = (() => {
 
     const payload = {};
     keys.forEach(k => {
+      const raw = _readKey(k);
+      if (raw == null || raw === '') return;
       try {
-        const val = localStorage.getItem(k);
-        if (val) payload[k] = JSON.parse(val);
+        payload[k] = JSON.parse(raw);
       } catch {
-        payload[k] = localStorage.getItem(k);
+        payload[k] = raw;
       }
     });
 
@@ -323,12 +359,19 @@ const SupabaseSync = (() => {
   /**
    * Push current local data as a cloud snapshot into Supabase
    */
-  async function pushBackup(customLabel = '', isAuto = false) {
+  async function pushBackup(customLabel = '', isAuto = false, opts = {}) {
     const client = getClient();
     if (!client) {
       throw new Error('Supabase is not configured. Please check your Project URL and Key.');
     }
     const cfg = getConfig();
+
+    // Merge-before-push: fold in any peer snapshot newer than our last
+    // sync so two workstations can never overwrite each other's work.
+    if (opts.mergeFirst !== false) {
+      try { await _mergeNewerCloudIntoLocal(); } catch (e) { /* non-fatal */ }
+    }
+
     const bundle = collectAllData();
     const label = customLabel || `Snapshot (${new Date().toLocaleString('en-IN')})`;
 
@@ -344,6 +387,7 @@ const SupabaseSync = (() => {
     const record = {
       label: label,
       device_id: cfg.deviceId,
+      workspace_id: cfg.workspaceId || 'public',
       client_count: bundle.stats.clients,
       statement_count: bundle.stats.statementRecords,
       slip_count: bundle.stats.slipRecords,
@@ -352,15 +396,31 @@ const SupabaseSync = (() => {
       created_at: new Date().toISOString(),
     };
 
-    const { data, error } = await client
-      .from(cfg.tableName || DEFAULT_TABLE)
+    const table = cfg.tableName || DEFAULT_TABLE;
+    let res = await client
+      .from(table)
       .insert([record])
       .select('id, label, created_at')
       .single();
 
+    // Graceful degradation: a table created before the workspace column
+    // existed must not break sync. Retry once without it.
+    if (res.error && _isMissingWorkspaceColumn(res.error)) {
+      _workspaceColumnMissing = true;
+      const fallback = { ...record };
+      delete fallback.workspace_id;
+      res = await client
+        .from(table)
+        .insert([fallback])
+        .select('id, label, created_at')
+        .single();
+    }
+
+    const { data, error } = res;
+
     if (error) {
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        throw new Error(`Table "${cfg.tableName}" does not exist. Please run the SQL Setup Script in Supabase.`);
+        throw new Error(`Table "${table}" does not exist. Please run the SQL Setup Script in Supabase.`);
       }
       throw new Error(error.message || 'Failed to upload backup to Supabase.');
     }
@@ -369,22 +429,100 @@ const SupabaseSync = (() => {
     return { success: true, backup: data, stats: bundle.stats };
   }
 
+  /** Detect a pre-workspace table so sync can degrade instead of failing */
+  function _isMissingWorkspaceColumn(error) {
+    if (!error) return false;
+    const msg = (error.message || '').toLowerCase();
+    return error.code === '42703' || error.code === 'PGRST204' ||
+      (msg.includes('workspace_id') && (msg.includes('column') || msg.includes('schema cache')));
+  }
+
+  /**
+   * Pull the newest peer snapshot and merge it locally.
+   * Only merges when the cloud copy is newer than our last successful
+   * sync and was produced by another device — this keeps merges cheap
+   * and avoids resurrecting records we just deleted locally.
+   */
+  async function _mergeNewerCloudIntoLocal() {
+    const client = getClient();
+    if (!client) return null;
+    const cfg = getConfig();
+    const table = cfg.tableName || DEFAULT_TABLE;
+
+    const { data, error } = await _querySnapshots(
+      'id, label, device_id, client_count, statement_count, slip_count, created_at',
+      10
+    );
+    if (error || !data || !data.length) return null;
+
+    const newest = data[0];
+    const cloudTime = new Date(newest.created_at).getTime();
+    const lastSyncAt = cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0;
+
+    if (cloudTime <= lastSyncAt) return null;            // nothing new
+    if (newest.device_id && newest.device_id === cfg.deviceId) return null; // our own echo
+
+    const scored = data.find(r =>
+      (r.client_count || 0) + (r.statement_count || 0) + (r.slip_count || 0) > 0
+    );
+    const target = scored || newest;
+
+    const { data: full, error: fetchErr } = await client
+      .from(table)
+      .select('*')
+      .eq('id', target.id)
+      .single();
+
+    if (fetchErr || !full || !full.data) return null;
+
+    _mergePayloadIntoLocalStorage(full.data);
+    return full;
+  }
+
   /**
    * Fetch list of saved cloud backups from Supabase
    */
   async function listBackups(limit = 20) {
     const client = getClient();
     if (!client) throw new Error('Supabase client not initialized.');
-    const cfg = getConfig();
 
-    const { data, error } = await client
-      .from(cfg.tableName || DEFAULT_TABLE)
-      .select('id, label, device_id, client_count, statement_count, slip_count, company_count, created_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await _querySnapshots(
+      'id, label, device_id, client_count, statement_count, slip_count, company_count, created_at',
+      limit
+    );
 
     if (error) throw new Error(error.message || 'Failed to fetch cloud backups.');
     return data || [];
+  }
+
+  /**
+   * Query recent snapshots, scoped to this workspace when the table
+   * supports the workspace_id column (older tables degrade gracefully).
+   */
+  async function _querySnapshots(select, limit = 10) {
+    const client = getClient();
+    if (!client) return { data: null, error: new Error('Supabase client not initialized.') };
+    const cfg = getConfig();
+    const table = cfg.tableName || DEFAULT_TABLE;
+
+    const build = (withWorkspace) => {
+      let q = client
+        .from(table)
+        .select(select)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (withWorkspace && !_workspaceColumnMissing && cfg.workspaceId) {
+        q = q.eq('workspace_id', cfg.workspaceId);
+      }
+      return q;
+    };
+
+    let { data, error } = await build(true);
+    if (error && _isMissingWorkspaceColumn(error)) {
+      _workspaceColumnMissing = true;
+      ({ data, error } = await build(false));
+    }
+    return { data, error };
   }
 
   /**
@@ -393,15 +531,12 @@ const SupabaseSync = (() => {
   async function getLatestValidBackup() {
     const client = getClient();
     if (!client) return null;
-    const cfg = getConfig();
 
     try {
-      // Get the 10 most recent backups
-      const { data, error } = await client
-        .from(cfg.tableName || DEFAULT_TABLE)
-        .select('id, label, device_id, client_count, statement_count, slip_count, company_count, created_at')
-        .order('created_at', { ascending: false })
-        .limit(10);
+      const { data, error } = await _querySnapshots(
+        'id, label, device_id, client_count, statement_count, slip_count, company_count, created_at',
+        10
+      );
 
       if (error || !data || !data.length) return null;
 
@@ -451,14 +586,17 @@ const SupabaseSync = (() => {
       // MERGE MODE: Combine local records with cloud snapshot without overwriting newer items
       _mergePayloadIntoLocalStorage(payload);
     } else {
-      // REPLACE MODE: Write back to localStorage safely
+      // REPLACE MODE: Write back through the storage layer (IndexedDB-aware)
       Object.keys(payload).forEach(key => {
         if (key.startsWith('ssinfotech_')) {
           const val = typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key];
-          localStorage.setItem(key, val);
+          _writeKey(key, val);
           restoredKeys.push(key);
         }
       });
+      if (typeof DB !== 'undefined' && DB && typeof DB.flush === 'function') {
+        try { await DB.flush(); } catch { /* ignore */ }
+      }
     }
 
     saveConfig({ lastSyncAt: Date.now() });
@@ -485,7 +623,7 @@ const SupabaseSync = (() => {
   function _mergePayloadIntoLocalStorage(payload) {
     // 1. Clients
     if (payload.ssinfotech_clients && Array.isArray(payload.ssinfotech_clients)) {
-      const localClients = JSON.parse(localStorage.getItem('ssinfotech_clients') || '[]');
+      const localClients = (_readJSON('ssinfotech_clients') || []);
       const clientMap = new Map();
       localClients.forEach(c => {
         const k = c.id || (c.pan ? `${c.pan}_${c.ay}` : null);
@@ -503,12 +641,12 @@ const SupabaseSync = (() => {
           }
         }
       });
-      localStorage.setItem('ssinfotech_clients', JSON.stringify(Array.from(clientMap.values())));
+      _writeKey('ssinfotech_clients', JSON.stringify(Array.from(clientMap.values())));
     }
 
     // 2. Statements
     if (payload.ssinfotech_statement_records && Array.isArray(payload.ssinfotech_statement_records)) {
-      const localStmts = JSON.parse(localStorage.getItem('ssinfotech_statement_records') || '[]');
+      const localStmts = (_readJSON('ssinfotech_statement_records') || []);
       const stmtMap = new Map();
       localStmts.forEach(s => stmtMap.set(s.id || s.accountNo, s));
       payload.ssinfotech_statement_records.forEach(s => {
@@ -523,12 +661,12 @@ const SupabaseSync = (() => {
           }
         }
       });
-      localStorage.setItem('ssinfotech_statement_records', JSON.stringify(Array.from(stmtMap.values())));
+      _writeKey('ssinfotech_statement_records', JSON.stringify(Array.from(stmtMap.values())));
     }
 
     // 3. Salary Slip records
     if (payload.ssinfotech_slip_records && Array.isArray(payload.ssinfotech_slip_records)) {
-      const localSlips = JSON.parse(localStorage.getItem('ssinfotech_slip_records') || '[]');
+      const localSlips = (_readJSON('ssinfotech_slip_records') || []);
       const slipMap = new Map();
       localSlips.forEach(s => slipMap.set(s.id || `${s.employeeId}_${s.month}_${s.year}`, s));
       payload.ssinfotech_slip_records.forEach(s => {
@@ -543,12 +681,12 @@ const SupabaseSync = (() => {
           }
         }
       });
-      localStorage.setItem('ssinfotech_slip_records', JSON.stringify(Array.from(slipMap.values())));
+      _writeKey('ssinfotech_slip_records', JSON.stringify(Array.from(slipMap.values())));
     }
 
     // 4. Companies
     if (payload.ssinfotech_slip_companies && Array.isArray(payload.ssinfotech_slip_companies)) {
-      const localComps = JSON.parse(localStorage.getItem('ssinfotech_slip_companies') || '[]');
+      const localComps = (_readJSON('ssinfotech_slip_companies') || []);
       const compMap = new Map();
       localComps.forEach(c => compMap.set(c.id || c.name, c));
       payload.ssinfotech_slip_companies.forEach(c => {
@@ -563,12 +701,12 @@ const SupabaseSync = (() => {
           }
         }
       });
-      localStorage.setItem('ssinfotech_slip_companies', JSON.stringify(Array.from(compMap.values())));
+      _writeKey('ssinfotech_slip_companies', JSON.stringify(Array.from(compMap.values())));
     }
 
     // 5. Admin Masters (Deductors, Banks, Nature Codes, AYs, Company Info)
     if (payload.ssinfotech_admin && typeof payload.ssinfotech_admin === 'object') {
-      const localAdmin = JSON.parse(localStorage.getItem('ssinfotech_admin') || '{}');
+      const localAdmin = (_readJSON('ssinfotech_admin') || {});
       const pAdmin = payload.ssinfotech_admin;
 
       // Merge deductors
@@ -632,7 +770,7 @@ const SupabaseSync = (() => {
       if (localAdmin.rate194C === undefined && pAdmin.rate194C !== undefined) localAdmin.rate194C = pAdmin.rate194C;
       if (localAdmin.rate194NF === undefined && pAdmin.rate194NF !== undefined) localAdmin.rate194NF = pAdmin.rate194NF;
 
-      localStorage.setItem('ssinfotech_admin', JSON.stringify(localAdmin));
+      _writeKey('ssinfotech_admin', JSON.stringify(localAdmin));
     }
   }
 
@@ -647,7 +785,7 @@ const SupabaseSync = (() => {
 
     const isLocalEmpty = typeof DB !== 'undefined' && typeof DB.isEmpty === 'function'
       ? DB.isEmpty()
-      : (JSON.parse(localStorage.getItem('ssinfotech_clients') || '[]').length === 0);
+      : (((DB && DB.readKey && DB.readKey('ssinfotech_clients')) || localStorage.getItem('ssinfotech_clients') || '[]').length <= 2);
 
     try {
       const latestValid = await getLatestValidBackup();
@@ -668,17 +806,20 @@ const SupabaseSync = (() => {
         };
       }
 
-      // Case 2: Device already has data. Check if cloud has a newer snapshot from another device
+      // Case 2: Device already has data. Auto-merge any newer peer snapshot
+      // so opening the app on device B picks up device A's work immediately.
       const cfg = getConfig();
       const lastSyncAt = cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0;
       const cloudTime = new Date(latestValid.created_at).getTime();
 
-      if (cloudTime > (lastSyncAt + 60000) && latestValid.device_id !== cfg.deviceId && totalCloudRecords > 0) {
-        // Startup sync found update; also ensure Realtime is listening
+      if (cloudTime > lastSyncAt && latestValid.device_id !== cfg.deviceId && totalCloudRecords > 0) {
+        console.log('🔄 Newer peer snapshot found. Auto-merging:', latestValid.id);
+        const restoreRes = await restoreBackup(latestValid.id, { merge: true });
         if (isRealtimeEnabled()) startRealtimeSync();
         return {
-          status: 'cloud_update_available',
+          status: 'auto_merged',
           backup: latestValid,
+          stats: restoreRes.stats,
         };
       }
 
@@ -716,6 +857,7 @@ const SupabaseSync = (() => {
     return `-- ═══════════════════════════════════════════════════════════
 -- SS INFOTECH - SUPABASE CLOUD BACKUP & SYNC TABLE SETUP
 -- Run this in your Supabase SQL Editor (1-Click Setup)
+-- Safe to re-run: every statement is idempotent.
 -- ═══════════════════════════════════════════════════════════
 -- SECURITY NOTE: The app authenticates with the public
 -- publishable (anon) key, so the policy below permits
@@ -728,6 +870,7 @@ CREATE TABLE IF NOT EXISTS public.${tbl} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     label TEXT NOT NULL DEFAULT 'Manual Backup',
     device_id TEXT,
+    workspace_id TEXT NOT NULL DEFAULT 'public',
     client_count INT DEFAULT 0,
     statement_count INT DEFAULT 0,
     slip_count INT DEFAULT 0,
@@ -736,13 +879,17 @@ CREATE TABLE IF NOT EXISTS public.${tbl} (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Create index for fast retrieval by created_at
+-- 1b. Upgrade tables created before the workspace column existed
+ALTER TABLE public.${tbl} ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAULT 'public';
+
+-- 2. Indexes
 CREATE INDEX IF NOT EXISTS idx_${tbl}_created_at ON public.${tbl}(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_${tbl}_workspace ON public.${tbl}(workspace_id, created_at DESC);
 
 -- 3. Enable Row Level Security (RLS)
 ALTER TABLE public.${tbl} ENABLE ROW LEVEL SECURITY;
 
--- 4. Create policy for public anon read/write (for publishable key access)
+-- 4. Policy for the public publishable key
 DROP POLICY IF EXISTS "Allow anon all on ${tbl}" ON public.${tbl};
 CREATE POLICY "Allow anon all on ${tbl}" 
 ON public.${tbl} 
@@ -751,7 +898,27 @@ TO anon
 USING (true) 
 WITH CHECK (true);
 
--- 5. Enable Realtime Replication for instant multi-device live sync
+-- 5. Retention: keep the newest 100 snapshots per workspace
+CREATE OR REPLACE FUNCTION public.${tbl}_prune()
+RETURNS trigger AS $$
+BEGIN
+  DELETE FROM public.${tbl}
+  WHERE id IN (
+    SELECT id FROM public.${tbl}
+    WHERE workspace_id = NEW.workspace_id
+    ORDER BY created_at DESC
+    OFFSET 100
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_${tbl}_prune ON public.${tbl};
+CREATE TRIGGER trg_${tbl}_prune
+AFTER INSERT ON public.${tbl}
+FOR EACH ROW EXECUTE FUNCTION public.${tbl}_prune();
+
+-- 6. Enable Realtime Replication for instant multi-device live sync
 ALTER TABLE public.${tbl} REPLICA IDENTITY FULL;
 DO $$
 BEGIN
@@ -775,6 +942,7 @@ END $$;
     saveConfig,
     getClient,
     isConfigured,
+    getWorkspaceId,
     testConnection,
     pushBackup,
     triggerAutoBackup,
