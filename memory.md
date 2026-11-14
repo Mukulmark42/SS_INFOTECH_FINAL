@@ -188,10 +188,12 @@ To introduce a future Assessment Year (e.g., AY 2027-28):
 4. Add the bank to the bank selector dropdown in `index.html`.
 
 #### 5.3 Modifying Supabase Sync Configuration
-1. Supabase credentials are NOT stored in source. Users configure their own Project URL and anon key via the Admin Panel (Cloud Sync settings); until then the app runs in Local-only mode (`SupabaseSync.isConfigured()` returns false and auto-sync stays dormant).
+1. Endpoint, publishable key, table and `WORKSPACE_ID` ship in `js/config.js` so every device syncs with zero setup. Values saved from the Admin Panel (`ssinfotech_supabase_config`) override them per installation.
 2. Table name and sync behavior defaults live in `js/supabase-sync.js` under `DEFAULT_CONFIG`.
-3. If the backup schema needs extension, update `collectAllData()` and `_mergePayloadIntoLocalStorage()` to serialize and restore the new keys.
-4. Update `getSqlSchema()` to reflect any new database columns or indexes.
+3. **Required one-time step:** run [`supabase/setup.sql`](supabase/setup.sql) in the Supabase SQL editor. It adds `workspace_id`, the workspace index, the 100-revision retention trigger and Realtime replication. Until it is run the app still syncs — `_isMissingWorkspaceColumn()` detects the pre-workspace schema and retries inserts without the column — but scoping and retention stay unavailable.
+4. If the backup schema needs extension, update `collectAllData()` and `_mergePayloadIntoLocalStorage()` to serialize and restore the new keys.
+5. Update `getSqlSchema()` (and `supabase/setup.sql`) to reflect any new database columns or indexes.
+6. Rotating the publishable key: update `js/config.js`, bump the `?v=` query strings on the script tags in `index.html`, commit and push. Pages caches JS for ~10 minutes.
 
 ---
 
@@ -203,5 +205,5 @@ When validating any updates or fixes to this codebase:
 - [ ] **Rebate 87A Marginal Relief:** Verify that an income of ₹7,05,000 (AY 24-25) or ₹12,10,000 (AY 26-27) correctly applies marginal relief rather than levying full tax.
 - [ ] **Rounding Compliance:** Check that Taxable Income rounds to the nearest ₹10 (Section 288A) and Tax Due/Refund rounds to the nearest ₹10 (Section 288B).
 - [ ] **A4 Print Alignment:** Verify that `ReportClassic` cleanly paginates across multi-page schedules, and `ReportAck` strictly remains confined to a single A4 sheet without spilling onto page 2.
-- [ ] **LocalStorage Quota Protection:** Ensure adding and soft-deleting clients updates storage telemetry in the Admin panel without throwing unhandled exceptions.
-- [ ] **Cloud Sync Safeguard:** Confirm that auto-sync does not trigger when opening the application in a clean profile with 0 local records, and that sync stays dormant until Supabase credentials are configured in the Admin Panel.
+- [ ] **Storage Quota Protection:** Ensure adding and soft-deleting clients updates storage telemetry in the Admin panel without throwing unhandled exceptions, and that `DB.usingIndexedDB()` is true in a normal desktop browser (`npm run test:idb`).
+- [ ] **Cloud Sync Safeguard:** Confirm that auto-sync does not trigger when opening the application in a clean profile with 0 local records, and that a second device auto-pulls the shared workspace on boot.
