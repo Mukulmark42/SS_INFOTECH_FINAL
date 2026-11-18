@@ -6234,10 +6234,12 @@ Tax & Financial Consultancy Services`);
       comps.map(c => `<option value="${c.id}">${_esc(c.name)}</option>`).join('');
     if (cur) sel.value = cur;
   }
+  const _populateSlipCompanyFilter = _renderSavedSlipFilters;
 
   // ── Salary Slip Customer Database (Name-Wise Directory) ────
   let _slipViewMode = 'namewise'; // 'namewise' | 'flat'
   let _openCustomerDrawers = new Set();
+  let _closedCustomerDrawers = new Set();
 
   function setSlipViewMode(mode) {
     _slipViewMode = mode;
@@ -6250,19 +6252,41 @@ Tax & Financial Consultancy Services`);
 
   function toggleCustomerDrawer(encodedKey) {
     const customerKey = decodeURIComponent(encodedKey);
-    if (_openCustomerDrawers.has(customerKey)) {
+    const currentlyOpen = _openCustomerDrawers.has(customerKey) || !_closedCustomerDrawers.has(customerKey);
+    if (currentlyOpen) {
+      _closedCustomerDrawers.add(customerKey);
       _openCustomerDrawers.delete(customerKey);
     } else {
+      _closedCustomerDrawers.delete(customerKey);
       _openCustomerDrawers.add(customerKey);
     }
     renderSavedSlips();
+    if (typeof _renderSalarySlipClientsInMainView === 'function') {
+      try { _renderSalarySlipClientsInMainView(); } catch (e) {}
+    }
+  }
+
+  function toggleAllCustomerDrawers() {
+    const customers = DB.getSlipCustomers();
+    const anyOpen = customers.some(c => _openCustomerDrawers.has(c.customerKey) || !_closedCustomerDrawers.has(c.customerKey));
+    if (anyOpen) {
+      _closedCustomerDrawers = new Set(customers.map(c => c.customerKey));
+      _openCustomerDrawers.clear();
+    } else {
+      _closedCustomerDrawers.clear();
+      _openCustomerDrawers = new Set(customers.map(c => c.customerKey));
+    }
+    renderSavedSlips();
+    if (typeof _renderSalarySlipClientsInMainView === 'function') {
+      try { _renderSalarySlipClientsInMainView(); } catch (e) {}
+    }
   }
 
   function renderSavedSlips() {
     const container = document.getElementById('ss-saved-list');
     if (!container) return;
 
-    _populateSlipCompanyFilter();
+    _renderSavedSlipFilters();
     const filterComp = document.getElementById('ss-filter-comp')?.value || '';
     const filterSearch = (document.getElementById('ss-filter-search')?.value || '').trim();
 
@@ -6353,7 +6377,7 @@ Tax & Financial Consultancy Services`);
 
     container.innerHTML = customers.map(cust => {
       const initials = (cust.empName || 'E').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      const isDrawerOpen = _openCustomerDrawers.has(cust.customerKey) || customers.length === 1;
+      const isDrawerOpen = _openCustomerDrawers.has(cust.customerKey) || !_closedCustomerDrawers.has(cust.customerKey);
       const encodedKey = encodeURIComponent(cust.customerKey);
       const safeId = cust.customerKey.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -6393,7 +6417,7 @@ Tax & Financial Consultancy Services`);
                 <i class="bi bi-printer me-1"></i>Print All (${cust.totalSlips})
               </button>
               <button class="btn btn-sm btn-outline-secondary" onclick="App.toggleCustomerDrawer('${encodedKey}')" title="Toggle Month Slips">
-                <i class="bi bi-${isDrawerOpen ? 'chevron-up' : 'chevron-down'} me-1"></i>${isDrawerOpen ? 'Hide' : `Slips (${cust.totalSlips})`}
+                <i class="bi bi-${isDrawerOpen ? 'chevron-up' : 'chevron-down'} me-1"></i>${isDrawerOpen ? 'Hide Slips' : `Slips (${cust.totalSlips})`}
               </button>
               <button class="btn btn-sm btn-outline-danger" onclick="App.deleteCustomerProfile('${encodedKey}')" title="Delete Customer & All Associated Slips">
                 <i class="bi bi-trash"></i>
@@ -6647,7 +6671,7 @@ Tax & Financial Consultancy Services`);
     if (listEl) {
       listEl.innerHTML = customers.map(cust => {
         const initials = (cust.empName || 'E').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-        const isDrawerOpen = _openCustomerDrawers.has(cust.customerKey) || customers.length === 1;
+        const isDrawerOpen = _openCustomerDrawers.has(cust.customerKey) || !_closedCustomerDrawers.has(cust.customerKey);
         const encodedKey = encodeURIComponent(cust.customerKey);
         return `
         <div class="ss-cust-card">
@@ -7061,20 +7085,46 @@ Tax & Financial Consultancy Services`);
       DB.saveSlipRecord(record);
     });
 
+    // Auto-open drawer for this customer & clear filters so it's always visible
+    const custName = (baseData.employee.name || '').trim().toUpperCase();
+    const custComp = (baseData.company.id || baseData.company.name || '').trim().toUpperCase();
+    const custKey = `${custName}___${custComp}`;
+    _openCustomerDrawers.add(custKey);
+    _closedCustomerDrawers.delete(custKey);
+
+    const filterSearchEl = document.getElementById('ss-filter-search');
+    if (filterSearchEl) filterSearchEl.value = '';
+    const filterCompEl = document.getElementById('ss-filter-comp');
+    if (filterCompEl) filterCompEl.value = '';
+
     alert(`✅ Successfully saved ${selectedMonths.length} payslip record(s) for ${selectedMonths.join(', ')} under customer "${baseData.employee.name}"!`);
+    switchSlipTab(7);
     renderSavedSlips();
     updateProjectStorageStats();
-    switchSlipTab(7);
+    if (typeof _renderSalarySlipClientsInMainView === 'function') {
+      try { _renderSalarySlipClientsInMainView(); } catch (e) {}
+    }
+
+    const safeId = custKey.replace(/[^a-zA-Z0-9]/g, '_');
+    setTimeout(() => {
+      const custCard = document.getElementById(`cust-card-${safeId}`);
+      if (custCard) {
+        custCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        custCard.classList.add('border-primary', 'shadow-sm');
+        setTimeout(() => custCard.classList.remove('border-primary', 'shadow-sm'), 3000);
+      }
+    }, 150);
   }
 
   function generateSalarySlip() {
     const baseData = _collectSlipData();
-    if (!baseData.company.name) { alert('Please select a company.'); return; }
-    if (!baseData.employee.name) { alert('Please enter employee name.'); return; }
+    if (!baseData.company.name) { alert('Please select a company.'); switchSlipTab(1); return; }
+    if (!baseData.employee.name) { alert('Please enter employee name.'); switchSlipTab(3); return; }
 
     const selectedMonths = getSelectedSlipMonths();
     if (!selectedMonths.length) {
       alert('Please select at least one month for salary slip generation.');
+      switchSlipTab(1);
       return;
     }
 
@@ -7150,8 +7200,36 @@ Tax & Financial Consultancy Services`);
       alert('Please allow popups to print the salary slip.');
     }
 
+    // Auto-open drawer for this customer & clear filters so it's immediately visible
+    const custName = (baseData.employee.name || '').trim().toUpperCase();
+    const custComp = (baseData.company.id || baseData.company.name || '').trim().toUpperCase();
+    const custKey = `${custName}___${custComp}`;
+    _openCustomerDrawers.add(custKey);
+    _closedCustomerDrawers.delete(custKey);
+
+    const filterSearchEl = document.getElementById('ss-filter-search');
+    if (filterSearchEl) filterSearchEl.value = '';
+    const filterCompEl = document.getElementById('ss-filter-comp');
+    if (filterCompEl) filterCompEl.value = '';
+
+    // Switch to Tab 7 (Customer Database & Slips)
+    switchSlipTab(7);
     renderSavedSlips();
     updateProjectStorageStats();
+    if (typeof _renderSalarySlipClientsInMainView === 'function') {
+      try { _renderSalarySlipClientsInMainView(); } catch (e) {}
+    }
+
+    const safeId = custKey.replace(/[^a-zA-Z0-9]/g, '_');
+    setTimeout(() => {
+      const custCard = document.getElementById(`cust-card-${safeId}`);
+      if (custCard) {
+        custCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        custCard.classList.add('border-primary', 'shadow-sm');
+        setTimeout(() => custCard.classList.remove('border-primary', 'shadow-sm'), 3000);
+      }
+    }, 150);
+
     showCloudToast({
       title: '✅ Salary Slip Generated & Saved',
       message: `Saved ${dataList.length} payslip(s) for customer <strong>${_esc(baseData.employee.name)}</strong> under Customer Database.`,
@@ -8701,7 +8779,7 @@ Tax & Financial Consultancy Services`);
     switchSlipTab, nextSlipTab, prevSlipTab,
     toggleSlipMonth, selectSlipMonthsPreset, getSelectedSlipMonths,
     calcSlipNet, addSlipEarning, addSlipDeduction, resetSlipForm, saveSlipEmployee, generateSalarySlip,
-    renderSavedSlips, setSlipViewMode, newSlipForCustomer, printAllCustomerSlips, toggleCustomerDrawer, deleteCustomerProfile,
+    renderSavedSlips, setSlipViewMode, newSlipForCustomer, printAllCustomerSlips, toggleCustomerDrawer, toggleAllCustomerDrawers, deleteCustomerProfile,
     editSlipRecord, reprintSlipRecord, deleteSlipRecord, onSlipFormatChange,
     autoGenStatementTxs, addStatementTxnRow, clearStatementTxns, recalcStatement,
     autoGenSalaryStatementTxs, addSalaryStatementTxnRow, clearSalaryStatementTxns, recalcSalaryStatement,

@@ -578,11 +578,32 @@ const DB = (() => {
 
   function saveSlipRecord(record) {
     const list = getSlipRecords();
-    const idx = list.findIndex(r => r.id === record.id);
+    let idx = -1;
+    if (record.id) {
+      idx = list.findIndex(r => r.id === record.id);
+    }
+    // Deduplicate by employee name + company + month + year if no ID or ID not found
+    if (idx < 0 && record.empName && record.month && record.year) {
+      const targetEmp = (record.empName || '').trim().toUpperCase();
+      const targetComp = (record.companyId || record.companyName || '').trim().toUpperCase();
+      const targetMonth = String(record.month).trim().toUpperCase();
+      const targetYear = String(record.year).trim();
+      idx = list.findIndex(r => {
+        const rEmp = (r.empName || '').trim().toUpperCase();
+        const rComp = (r.companyId || r.companyName || '').trim().toUpperCase();
+        const rMonth = String(r.month || '').trim().toUpperCase();
+        const rYear = String(r.year || '').trim();
+        return rEmp === targetEmp && rComp === targetComp && rMonth === targetMonth && rYear === targetYear;
+      });
+    }
+
     if (idx >= 0) {
-      list[idx] = { ...list[idx], ...record, updatedAt: Date.now() };
+      record.id = list[idx].id;
+      record.createdAt = list[idx].createdAt || Date.now();
+      record.updatedAt = Date.now();
+      list[idx] = { ...list[idx], ...record };
     } else {
-      record.id = _uid();
+      record.id = record.id || _uid();
       record.createdAt = Date.now();
       record.updatedAt = Date.now();
       list.unshift(record);
@@ -611,15 +632,19 @@ const DB = (() => {
 
     records.forEach(r => {
       const name = (r.empName || 'Unnamed Employee').trim().toUpperCase();
-      const compId = r.companyId || (r.companyName || '').trim().toUpperCase();
-      const key = `${name}___${compId}`;
+      let compId = r.companyId || '';
+      if (!compId && r.companyName) {
+        const found = getSlipCompanies().find(c => c.name.trim().toUpperCase() === r.companyName.trim().toUpperCase());
+        if (found) compId = found.id;
+      }
+      const key = `${name}___${compId || (r.companyName || '').trim().toUpperCase()}`;
 
       if (!customerMap.has(key)) {
         customerMap.set(key, {
           customerKey: key,
-          empName: name,
+          empName: r.empName ? r.empName.trim() : 'Unnamed Employee',
           empCode: r.empCode || '',
-          companyId: r.companyId || '',
+          companyId: r.companyId || compId || '',
           companyName: r.companyName || '',
           companyAddress: r.companyAddress || '',
           companyLogo: r.companyLogo || null,
@@ -706,8 +731,12 @@ const DB = (() => {
   function deleteSlipCustomer(customerKey) {
     const list = getSlipRecords().filter(r => {
       const name = (r.empName || 'Unnamed Employee').trim().toUpperCase();
-      const compId = r.companyId || (r.companyName || '').trim().toUpperCase();
-      const key = `${name}___${compId}`;
+      let compId = r.companyId || '';
+      if (!compId && r.companyName) {
+        const found = getSlipCompanies().find(c => c.name.trim().toUpperCase() === r.companyName.trim().toUpperCase());
+        if (found) compId = found.id;
+      }
+      const key = `${name}___${compId || (r.companyName || '').trim().toUpperCase()}`;
       return key !== customerKey;
     });
     _writeRaw(SLIP_REC_KEY, JSON.stringify(list));

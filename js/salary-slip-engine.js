@@ -104,6 +104,7 @@ const SalarySlipEngine = (() => {
     const monthYearStr = _formatMonthYear(data.month, data.year);
 
     const U = s => (s ? String(s).trim().toUpperCase() : '');
+    const RAW = s => (s ? String(s).trim() : '');
 
     const logoData  = c.logoData || null;
     const compName  = U(c.name)    || 'COMPANY NAME';
@@ -111,18 +112,28 @@ const SalarySlipEngine = (() => {
     const compPhone = c.phone || '';
     const compEmail = c.email || '';
 
+    const rawCompName = RAW(c.name)    || compName;
+    const rawCompAddr = RAW(c.address) || compAddr;
+
     const empId          = U(e.id)          || '--';
     const empName        = U(e.name)        || '--';
+    const rawEmpName     = RAW(e.name)      || empName;
     const empLocation    = U(e.location)    || '--';
+    const rawEmpLocation = RAW(e.location)  || empLocation;
     const empDivision    = U(e.division)    || '--';
+    const rawEmpDivision = RAW(e.division)  || empDivision;
     const empDoj         = _formatDoj(e.doj);
     const empDesignation = U(e.designation) || '--';
+    const rawEmpDesignation = RAW(e.designation) || empDesignation;
     const empUan         = U(e.uan)         || '--';
     const empBankName    = U(e.bankName)    || '--';
+    const rawEmpBankName = RAW(e.bankName)  || empBankName;
     const empEsic        = U(e.esic)        || '--';
     const empAcNo        = U(e.acNo)        || '--';
     const empPan         = U(e.pan)         || '--';
     const empIfsc        = U(e.ifsc)        || '--';
+    const empPf          = U(e.pfNo || e.pf || e.pf_no || '') || '--';
+    const empGender      = RAW(e.gender || e.sex || '') || 'Male';
 
     const totalDaysStr = _fmtDays(att.totalDays, 31);
     const daysPaidStr  = _fmtDays(att.daysPaid, totalDaysStr);
@@ -140,8 +151,11 @@ const SalarySlipEngine = (() => {
       c, e, att, earnings, deductions, dedItems,
       totalEarn, totalDed, netPay, monthYearStr,
       logoData, compName, compAddr, compPhone, compEmail,
-      empId, empName, empLocation, empDivision, empDoj, empDesignation,
-      empUan, empBankName, empEsic, empAcNo, empPan, empIfsc,
+      rawCompName, rawCompAddr,
+      empId, empName, rawEmpName, empLocation, rawEmpLocation,
+      empDivision, rawEmpDivision, empDoj, empDesignation, rawEmpDesignation,
+      empUan, empBankName, rawEmpBankName, empEsic, empAcNo, empPan, empIfsc,
+      empPf, empGender,
       totalDaysStr, daysPaidStr, lopStr, bankCreditText
     };
   }
@@ -632,12 +646,166 @@ const SalarySlipEngine = (() => {
     </div>`;
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FORMAT 4 – CLASSIC FORMAT 2 (Innov Minimal Corporate)
+     Clean centered logo, bold company header, 2-column key-value matrix,
+     attendance count block, 4-column bordered ledger with Net Pay callout.
+  ═══════════════════════════════════════════════════════════════════════════ */
+
+  function _renderClassic2(data) {
+    const d = _extractSlipData(data);
+
+    let logoHtml;
+    if (d.logoData) {
+      logoHtml = `<div class="c2-logo-wrap"><img src="${d.logoData}" alt="${_esc(d.rawCompName)}" class="c2-logo-img" /></div>`;
+    } else {
+      logoHtml = `<div class="c2-logo-wrap"><div class="c2-logo-placeholder">${_esc(d.rawCompName)}</div></div>`;
+    }
+
+    const addrHtml = d.rawCompAddr ? _esc(d.rawCompAddr).replace(/\n/g, '<br>') : '';
+    const monthFull = data.month || 'July';
+    const titleMyr = `${monthFull}-${data.year || new Date().getFullYear()}`;
+
+    const maxRows = Math.max(d.earnings.length, d.dedItems.length, 4);
+    let tableRows = '';
+    for (let i = 0; i < maxRows; i++) {
+      const er = d.earnings[i];
+      const dr = d.dedItems[i];
+      const erName = er && er.name ? _esc(er.name) : '&nbsp;';
+      let erAmt = '&nbsp;';
+      if (er) {
+        if (er.salary !== undefined && er.salary !== '') erAmt = fmt(er.salary);
+        else if (er.actual !== undefined && er.actual !== '') erAmt = fmt(er.actual);
+      }
+      const drName = dr && dr.name ? _esc(dr.name) : '&nbsp;';
+      let drAmt = '&nbsp;';
+      if (dr && dr.amount !== undefined && dr.amount !== '') {
+        drAmt = fmt(dr.amount);
+      }
+      tableRows += `
+      <tr>
+        <td class="c2-col-earn-name">${erName}</td>
+        <td class="c2-col-earn-amt">${erAmt}</td>
+        <td class="c2-col-ded-name">${drName}</td>
+        <td class="c2-col-ded-amt">${drAmt}</td>
+      </tr>`;
+    }
+
+    const netFormatted = (d.netPay % 1 === 0) ? Math.round(d.netPay) : fmt(d.netPay);
+
+    return `
+    <div class="slip-card-wrapper fmt-classic2">
+      <div class="c2-outer">
+
+        <!-- ── HEADER ── -->
+        <div class="c2-header">
+          ${logoHtml}
+          <div class="c2-company-name">${_esc(d.rawCompName)}</div>
+          ${addrHtml ? `<div class="c2-company-addr">${addrHtml}</div>` : ''}
+        </div>
+
+        <!-- ── TITLE ── -->
+        <div class="c2-slip-title">PAYSLIP FOR THE MONTH OF ${_esc(titleMyr)}</div>
+
+        <!-- ── 2-COLUMN EMPLOYEE MATRIX ── -->
+        <table class="c2-emp-table">
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">Employee ID :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.empId)}</td>
+            <td class="c2-emp-lbl c2-emp-l2">Employee Name :</td>
+            <td class="c2-emp-val c2-emp-v2">${_esc(d.rawEmpName)}</td>
+          </tr>
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">Location :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.rawEmpLocation)}</td>
+            <td class="c2-emp-lbl c2-emp-l2">Division :</td>
+            <td class="c2-emp-val c2-emp-v2">${_esc(d.rawEmpDivision === '--' ? '' : d.rawEmpDivision)}</td>
+          </tr>
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">PF No. :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.empPf)}</td>
+            <td class="c2-emp-lbl c2-emp-l2">Designation :</td>
+            <td class="c2-emp-val c2-emp-v2">${_esc(d.rawEmpDesignation)}</td>
+          </tr>
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">PF UAN :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.empUan)}</td>
+            <td class="c2-emp-lbl c2-emp-l2">Pay mode :</td>
+            <td class="c2-emp-val c2-emp-v2">Bank A/c</td>
+          </tr>
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">ESIC No :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.empEsic === '--' ? '' : d.empEsic)}</td>
+            <td class="c2-emp-lbl c2-emp-l2">Bank Name :</td>
+            <td class="c2-emp-val c2-emp-v2">${_esc(d.rawEmpBankName === '--' ? '' : d.rawEmpBankName)}</td>
+          </tr>
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">PAN No :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.empPan)}</td>
+            <td class="c2-emp-lbl c2-emp-l2">Bank Ac/ :</td>
+            <td class="c2-emp-val c2-emp-v2">${_esc(d.empAcNo === '--' ? '' : d.empAcNo)}</td>
+          </tr>
+          <tr>
+            <td class="c2-emp-lbl c2-emp-l1">Sex :</td>
+            <td class="c2-emp-val c2-emp-v1">${_esc(d.empGender)}</td>
+            <td class="c2-emp-lbl c2-emp-l2"></td>
+            <td class="c2-emp-val c2-emp-v2"></td>
+          </tr>
+        </table>
+
+        <!-- ── ATTENDANCE ── -->
+        <div class="c2-att-block">
+          <div class="c2-att-line">
+            <span class="c2-att-lbl">Total Days in Month:</span> <span class="c2-att-val">${d.totalDaysStr}</span>
+            <span class="c2-att-gap"></span>
+            <span class="c2-att-lbl">Days Paid:</span> <span class="c2-att-val">${d.daysPaidStr}</span>
+          </div>
+          <div class="c2-att-line">
+            <span class="c2-att-lbl">Arrears Days Paid:</span> <span class="c2-att-val">0.00</span>
+          </div>
+        </div>
+
+        <!-- ── 4-COLUMN FINANCIAL TABLE ── -->
+        <table class="c2-fin-table">
+          <thead>
+            <tr>
+              <th class="c2-col-earn-name">Earnings</th>
+              <th class="c2-col-earn-amt">Rs.</th>
+              <th class="c2-col-ded-name">Deductions</th>
+              <th class="c2-col-ded-amt">Rs.</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+          <tfoot>
+            <tr class="c2-tot-row">
+              <td colspan="2" class="c2-gross-cell">Gross Earning : ${fmt(d.totalEarn)}</td>
+              <td colspan="2" class="c2-ded-tot-cell">Total Deduction : ${fmt(d.totalDed)}</td>
+            </tr>
+            <tr class="c2-net-row">
+              <td colspan="2" class="c2-net-empty">&nbsp;</td>
+              <td colspan="2" class="c2-net-box">Net Pay : ${netFormatted}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <!-- ── DISCLAIMER NOTE (NO HELP DESK, NO UPDATE DETAILS) ── -->
+        <div class="c2-computer-note">
+          This is a computer generated statement and needs no authentication.
+        </div>
+
+      </div>
+    </div>`;
+  }
+
   /* ─────────────────────── FORMAT ROUTER ─────────────────────────────────── */
 
   function renderSingleSlipPage(data, format) {
     const f = (format || data.format || 'corporate').toLowerCase();
     if (f === 'modern') return _renderModern(data);
     if (f === 'compact' || f === 'classic') return _renderCompact(data);
+    if (f === 'classic2' || f === 'classic-2' || f === 'classic_2') return _renderClassic2(data);
     return _renderCorporate(data);
   }
 
@@ -695,6 +863,30 @@ const SalarySlipEngine = (() => {
       border: 1px solid #94a3b8 !important;
       box-shadow: none !important;
     }
+    .slip-card-wrapper.fmt-classic2 {
+      padding: 10mm 0 15mm 0 !important;
+      max-width: 168mm !important;
+      width: 100% !important;
+      min-height: auto !important;
+      margin: 0 auto !important;
+      border: none !important;
+      box-shadow: none !important;
+      page-break-after: always !important;
+      break-after: page !important;
+    }
+    .slip-card-wrapper.fmt-classic2:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    .slip-card-wrapper.fmt-classic2 .c2-outer,
+    .c2-outer {
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      max-width: 168mm !important;
+      width: 100% !important;
+      margin: 0 auto !important;
+    }
     .no-print {
       display: none !important;
     }
@@ -718,6 +910,24 @@ const SalarySlipEngine = (() => {
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
       padding: 2px;
       border-radius: 4px;
+    }
+    .slip-card-wrapper.fmt-classic2 {
+      background: #ffffff;
+      width: 100%;
+      max-width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto 40px auto;
+      padding: 24mm 21mm 25mm 21mm;
+      box-sizing: border-box;
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.09);
+      border: 1px solid #cbd5e1;
+      border-radius: 2px;
+    }
+    .slip-card-wrapper.fmt-classic2 .c2-outer {
+      padding: 0 !important;
+      margin: 0 auto;
+      max-width: 168mm;
+      width: 100%;
     }
   }
 
@@ -1441,6 +1651,197 @@ const SalarySlipEngine = (() => {
     cursor: pointer;
     outline: none;
   }
+  /* ═══════════════════════════════════════════════════════════════
+     4. FORMAT 4: CLASSIC FORMAT 2 (Innov Minimal Corporate)
+     ═══════════════════════════════════════════════════════════════ */
+  .c2-outer {
+    width: 100%;
+    max-width: 168mm;
+    margin: 0 auto;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #000000;
+    background: #ffffff;
+  }
+  .c2-header {
+    text-align: center;
+    margin: 0 0 22px 0;
+  }
+  .c2-logo-wrap {
+    margin: 0 0 10px 0;
+    text-align: center;
+  }
+  .c2-logo-img {
+    max-height: 52px;
+    max-width: 220px;
+    object-fit: contain;
+    display: inline-block;
+  }
+  .c2-logo-placeholder {
+    display: inline-block;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #0d47a1;
+  }
+  .c2-company-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #000000;
+    margin: 0 0 4px 0;
+    letter-spacing: 0.1px;
+  }
+  .c2-company-addr {
+    font-size: 10.5px;
+    color: #222222;
+    line-height: 1.45;
+    max-width: 95%;
+    margin: 0 auto;
+  }
+  .c2-slip-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+    margin: 0 0 20px 0;
+    letter-spacing: 0.5px;
+    color: #000000;
+  }
+  .c2-emp-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 18px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #000000;
+  }
+  .c2-emp-table td {
+    padding: 2.5px 0;
+    vertical-align: top;
+    border: none !important;
+  }
+  .c2-emp-lbl {
+    font-weight: 700;
+    color: #000000;
+    white-space: nowrap;
+  }
+  .c2-emp-val {
+    color: #000000;
+    word-break: break-word;
+  }
+  .c2-emp-l1 {
+    width: 18%;
+  }
+  .c2-emp-v1 {
+    width: 32%;
+    padding-right: 8px;
+  }
+  .c2-emp-l2 {
+    width: 20%;
+    padding-left: 12px;
+  }
+  .c2-emp-v2 {
+    width: 30%;
+  }
+  .c2-att-block {
+    margin: 0 0 16px 0;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: #000000;
+  }
+  .c2-att-line {
+    margin-bottom: 2px;
+  }
+  .c2-att-lbl {
+    font-weight: 700;
+    color: #000000;
+  }
+  .c2-att-val {
+    font-weight: 400;
+    color: #000000;
+  }
+  .c2-att-gap {
+    display: inline-block;
+    width: 42px;
+  }
+  .c2-fin-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 28px 0;
+    border: 1px solid #000000 !important;
+    font-size: 11px;
+    color: #000000;
+  }
+  .c2-fin-table th {
+    border: 1px solid #000000 !important;
+    padding: 5px 8px;
+    background: #dcdcdc !important;
+    font-weight: 700;
+    font-size: 11.5px;
+    color: #000000;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .c2-fin-table td {
+    border: 1px solid #000000 !important;
+    padding: 4px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    vertical-align: middle;
+    color: #000000;
+  }
+  .c2-col-earn-name {
+    width: 32%;
+    text-align: left;
+  }
+  .c2-col-earn-amt {
+    width: 18%;
+    text-align: right;
+  }
+  .c2-col-ded-name {
+    width: 32%;
+    text-align: left;
+  }
+  .c2-col-ded-amt {
+    width: 18%;
+    text-align: right;
+  }
+  .c2-tot-row td {
+    border: 1px solid #000000 !important;
+    padding: 5px 8px;
+    font-weight: 700;
+    font-size: 11.5px;
+    text-align: right;
+    color: #000000;
+  }
+  .c2-gross-cell {
+    text-align: right;
+  }
+  .c2-ded-tot-cell {
+    text-align: right;
+  }
+  .c2-net-row td.c2-net-empty {
+    border: none !important;
+    background: transparent !important;
+  }
+  .c2-net-row td.c2-net-box {
+    border: 1px solid #000000 !important;
+    text-align: right;
+    font-weight: 700;
+    padding: 5px 8px;
+    font-size: 12px;
+    color: #000000;
+  }
+  .c2-computer-note {
+    font-size: 10.5px;
+    color: #222222;
+    text-align: left;
+    margin-top: 36px;
+    line-height: 1.45;
+  }
   .fmt-switcher:focus { border-color: #38bdf8; }
   `;
 
@@ -1484,7 +1885,9 @@ const SalarySlipEngine = (() => {
         pan: d.employee?.pan || '',
         bankName: d.employee?.bankName || '',
         acNo: d.employee?.acNo || '',
-        ifsc: d.employee?.ifsc || ''
+        ifsc: d.employee?.ifsc || '',
+        pfNo: d.employee?.pfNo || d.employee?.pf || '',
+        gender: d.employee?.gender || d.employee?.sex || 'Male'
       },
       attendance: {
         totalDays: d.attendance?.totalDays ?? '30',
@@ -1518,6 +1921,7 @@ ${_CSS_GLOBAL}
   <span class="fmt-select-label">Format:</span>
   <select class="fmt-switcher" id="slipFormatSelector" onchange="window.__switchSlipFormat(this.value)" title="Change Salary Slip Corporate Format">
     <option value="corporate" ${resolvedFormat === 'corporate' ? 'selected' : ''}>Corporate Standard (Classic Box)</option>
+    <option value="classic2"  ${resolvedFormat === 'classic2' || resolvedFormat === 'classic-2' || resolvedFormat === 'classic_2' ? 'selected' : ''}>Classic Format 2</option>
     <option value="modern"    ${resolvedFormat === 'modern'    ? 'selected' : ''}>Modern Corporate (Executive Navy &amp; Emerald)</option>
     <option value="compact"   ${resolvedFormat === 'compact' || resolvedFormat === 'classic' ? 'selected' : ''}>Corporate Compact (Enterprise Slate)</option>
   </select>
@@ -1682,6 +2086,81 @@ ${_CSS_GLOBAL}
       '</div></div>';
   }
 
+  function _renderCls2(data){
+    var c=data.company||{},e=data.employee||{},att=data.attendance||{},earn=data.earnings||[],ded=data.deductions||{items:[],total:0};
+    var U=function(s){return s?String(s).trim().toUpperCase():'';};
+    var RAW=function(s){return s?String(s).trim():'';};
+    var totalEarn=earn.reduce(function(s,r){return s+(parseFloat(r.salary)||0);},0);
+    var dedItems=ded.items||[];
+    var totalDed=ded.total||(dedItems.reduce(function(s,r){return s+(parseFloat(r.amount)||0);},0));
+    var net=totalEarn-totalDed;
+    var monthFull = data.month || 'July';
+    var yr = data.year || new Date().getFullYear();
+    var titleMyr = monthFull + '-' + yr;
+    var compName = RAW(c.name) || 'INNOVSOURCE SERVICES PRIVATE LIMITED.';
+    var addr = RAW(c.address) ? (function(s){return _esc(s).replace(/\n/g,'<br>');})(c.address) : '';
+    var logoHtml = c.logoData ? '<div class="c2-logo-wrap"><img src="'+c.logoData+'" alt="'+_esc(compName)+'" class="c2-logo-img" /></div>' : '<div class="c2-logo-wrap"><div class="c2-logo-placeholder">'+_esc(compName)+'</div></div>';
+
+    var empId=U(e.id)||'--',empName=RAW(e.name)||'--',empLoc=RAW(e.location)||'--',empDiv=RAW(e.division)||'',empDesg=RAW(e.designation)||'--';
+    var empPf=U(e.pfNo||e.pf||'')||'--';
+    var empUan=U(e.uan)||'--';
+    var empBank=RAW(e.bankName)||'';
+    var empEsic=U(e.esic)||'';
+    if(empEsic==='--') empEsic='';
+    var empAc=U(e.acNo)||'';
+    if(empAc==='--') empAc='';
+    var empPan=U(e.pan)||'--';
+    var empGender=RAW(e.gender||e.sex)||'Male';
+
+    var td=_fmtDays(att.totalDays,31);
+    var dp=_fmtDays(att.daysPaid,td);
+
+    var maxR=Math.max(earn.length,dedItems.length,4);
+    var rows='';
+    for(var i=0;i<maxR;i++){
+      var er=earn[i],dr=dedItems[i];
+      var erN=er&&er.name?_esc(er.name):'&nbsp;';
+      var erA=er&&(er.salary!==undefined&&er.salary!==''?_fmt(er.salary):(er.actual!==undefined&&er.actual!==''?_fmt(er.actual):'&nbsp;'));
+      if(!erA) erA='&nbsp;';
+      var drN=dr&&dr.name?_esc(dr.name):'&nbsp;';
+      var drA=dr&&(dr.amount!==undefined&&dr.amount!==''?_fmt(dr.amount):'&nbsp;');
+      if(!drA) drA='&nbsp;';
+      rows+='<tr><td class="c2-col-earn-name">'+erN+'</td><td class="c2-col-earn-amt">'+erA+'</td><td class="c2-col-ded-name">'+drN+'</td><td class="c2-col-ded-amt">'+drA+'</td></tr>';
+    }
+
+    var netFormatted = (net % 1 === 0) ? Math.round(net) : _fmt(net);
+
+    return '<div class="slip-card-wrapper fmt-classic2"><div class="c2-outer">'+
+      '<div class="c2-header">'+logoHtml+
+      '<div class="c2-company-name">'+_esc(compName)+'</div>'+
+      (addr?'<div class="c2-company-addr">'+addr+'</div>':'')+
+      '</div>'+
+      '<div class="c2-slip-title">PAYSLIP FOR THE MONTH OF '+_esc(titleMyr)+'</div>'+
+      '<table class="c2-emp-table">'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">Employee ID :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empId)+'</td><td class="c2-emp-lbl c2-emp-l2">Employee Name :</td><td class="c2-emp-val c2-emp-v2">'+_esc(empName)+'</td></tr>'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">Location :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empLoc)+'</td><td class="c2-emp-lbl c2-emp-l2">Division :</td><td class="c2-emp-val c2-emp-v2">'+_esc(empDiv)+'</td></tr>'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">PF No. :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empPf)+'</td><td class="c2-emp-lbl c2-emp-l2">Designation :</td><td class="c2-emp-val c2-emp-v2">'+_esc(empDesg)+'</td></tr>'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">PF UAN :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empUan)+'</td><td class="c2-emp-lbl c2-emp-l2">Pay mode :</td><td class="c2-emp-val c2-emp-v2">Bank A/c</td></tr>'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">ESIC No :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empEsic)+'</td><td class="c2-emp-lbl c2-emp-l2">Bank Name :</td><td class="c2-emp-val c2-emp-v2">'+_esc(empBank)+'</td></tr>'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">PAN No :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empPan)+'</td><td class="c2-emp-lbl c2-emp-l2">Bank Ac/ :</td><td class="c2-emp-val c2-emp-v2">'+_esc(empAc)+'</td></tr>'+
+      '<tr><td class="c2-emp-lbl c2-emp-l1">Sex :</td><td class="c2-emp-val c2-emp-v1">'+_esc(empGender)+'</td><td class="c2-emp-lbl c2-emp-l2"></td><td class="c2-emp-val c2-emp-v2"></td></tr>'+
+      '</table>'+
+      '<div class="c2-att-block">'+
+      '<div class="c2-att-line"><span class="c2-att-lbl">Total Days in Month:</span> <span class="c2-att-val">'+td+'</span><span class="c2-att-gap"></span><span class="c2-att-lbl">Days Paid:</span> <span class="c2-att-val">'+dp+'</span></div>'+
+      '<div class="c2-att-line"><span class="c2-att-lbl">Arrears Days Paid:</span> <span class="c2-att-val">0.00</span></div>'+
+      '</div>'+
+      '<table class="c2-fin-table">'+
+      '<thead><tr><th class="c2-col-earn-name">Earnings</th><th class="c2-col-earn-amt">Rs.</th><th class="c2-col-ded-name">Deductions</th><th class="c2-col-ded-amt">Rs.</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot>'+
+      '<tr class="c2-tot-row"><td colspan="2" class="c2-gross-cell">Gross Earning : '+_fmt(totalEarn)+'</td><td colspan="2" class="c2-ded-tot-cell">Total Deduction : '+_fmt(totalDed)+'</td></tr>'+
+      '<tr class="c2-net-row"><td colspan="2" class="c2-net-empty">&nbsp;</td><td colspan="2" class="c2-net-box">Net Pay : '+netFormatted+'</td></tr>'+
+      '</tfoot>'+
+      '</table>'+
+      '<div class="c2-computer-note">This is a computer generated statement and needs no authentication.</div>'+
+      '</div></div>';
+  }
+
   window.__switchSlipFormat = function(fmt) {
     var wrap = document.getElementById('slipWrap');
     if (!wrap) return;
@@ -1689,6 +2168,7 @@ ${_CSS_GLOBAL}
       var f = (fmt || 'corporate').toLowerCase();
       if (f === 'modern') return _renderMod(d);
       if (f === 'compact' || f === 'classic') return _renderCls(d);
+      if (f === 'classic2' || f === 'classic-2' || f === 'classic_2') return _renderCls2(d);
       return _renderCorp(d);
     }).join('\n');
   };
