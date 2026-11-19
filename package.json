@@ -4,14 +4,15 @@
   "private": true,
   "description": "Offline-first Indian income tax computation, reporting and office automation SPA for CAs and tax practitioners.",
   "scripts": {
-    "test": "node test/test-salaried-calc.js && node test/test_salaried_itr1.js && node test/test-tax-engine.js && node test/test-db.js && node test/test-idb.js && node test/test-ack-layout.js && node test/test-supabase-sync-logic.js && node test/test-classic2-payslip.js && node test/test-salary-slip-db.js",
+    "test": "node test/test-salaried-calc.js && node test/test_salaried_itr1.js && node test/test-tax-engine.js && node test/test-db.js && node test/test-idb.js && node test/test-ack-layout.js && node test/test-supabase-sync-logic.js && node test/test-classic2-payslip.js && node test/test-salary-slip-db.js && node test/test-client-list-refinement.js",
     "test:calc": "node test/test-salaried-calc.js",
     "test:itr1": "node test/test_salaried_itr1.js",
     "test:tax": "node test/test-tax-engine.js",
     "test:db": "node test/test-db.js",
     "test:idb": "node test/test-idb.js",
     "test:ack": "node test/test-ack-layout.js",
-    "test:slip": "node test/test-classic2-payslip.js"
+    "test:slip": "node test/test-classic2-payslip.js",
+    "test:client": "node test/test-client-list-refinement.js"
   },
   "engines": {
     "node": ">=18"

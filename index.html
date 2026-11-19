@@ -1143,30 +1143,30 @@
          ════════════════════════════════════════════════════ -->
     <section id="page-clients" class="page" aria-label="Client Database">
 
-      <!-- Stats Row -->
+      <!-- Stats Row (Clickable Quick Filters) -->
       <div class="client-stats-row" id="clientStats">
-        <div class="client-stat-card">
+        <div class="client-stat-card cursor-pointer" onclick="App.filterClientByStat('all')" title="Show All Active Clients">
           <div class="client-stat-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="bi bi-people-fill"></i></div>
           <div class="client-stat-body">
             <div class="client-stat-num" id="cs-total">0</div>
             <div class="client-stat-label">Total Clients</div>
           </div>
         </div>
-        <div class="client-stat-card">
+        <div class="client-stat-card cursor-pointer" onclick="App.filterClientByStat('refund')" title="Filter: Refund Cases Only">
           <div class="client-stat-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="bi bi-arrow-return-left"></i></div>
           <div class="client-stat-body">
             <div class="client-stat-num" id="cs-refund">0</div>
             <div class="client-stat-label">Refund Cases</div>
           </div>
         </div>
-        <div class="client-stat-card">
+        <div class="client-stat-card cursor-pointer" onclick="App.filterClientByStat('payable')" title="Filter: Tax Payable Only">
           <div class="client-stat-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="bi bi-cash-stack"></i></div>
           <div class="client-stat-body">
             <div class="client-stat-num" id="cs-payable">0</div>
             <div class="client-stat-label">Tax Payable</div>
           </div>
         </div>
-        <div class="client-stat-card">
+        <div class="client-stat-card cursor-pointer" onclick="App.filterClientByStat('nil')" title="Filter: Nil Tax Only">
           <div class="client-stat-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6"><i class="bi bi-file-earmark-check"></i></div>
           <div class="client-stat-body">
             <div class="client-stat-num" id="cs-nil">0</div>
@@ -1182,14 +1182,14 @@
             <div class="panel-icon panel-icon-success" aria-hidden="true"><i class="bi bi-people-fill"></i></div>
             <div>
               <h6 class="panel-title-text">Client Database</h6>
-              <p class="panel-subtitle">All saved tax computations</p>
+              <p class="panel-subtitle">Comprehensive tax computations &amp; e-filing registry</p>
             </div>
           </div>
           <div class="panel-header-actions">
             <div class="search-box">
               <i class="bi bi-search search-icon" aria-hidden="true"></i>
               <input type="search" class="form-control search-input" id="clientSearch"
-                placeholder="Search name, PAN, mobile…"
+                placeholder="Search name, PAN, mobile, Ack No…"
                 oninput="App.searchClients()"
                 aria-label="Search clients" />
             </div>
@@ -1198,9 +1198,6 @@
             </button>
             <button class="btn btn-outline-primary btn-sm" onclick="App.downloadAllClients()" title="Export All Saved Client ITRs">
               <i class="bi bi-download me-1"></i>Export JSON
-            </button>
-            <button class="btn btn-danger btn-sm" id="btn-bulk-delete" onclick="App.bulkDeleteSelectedClients()" style="display:none;" title="Delete Selected Clients">
-              <i class="bi bi-trash-fill me-1"></i>Delete Selected (<span id="bulk-selected-count">0</span>)
             </button>
             <button class="btn btn-primary btn-sm" onclick="App.navTo('new-computation')" aria-label="Add new client">
               <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Client
@@ -1232,17 +1229,85 @@
         </div>
       </div>
 
+      <!-- Client Filters & View Mode Toolbar -->
+      <div class="card-panel mb-3 p-2.5" id="client-filter-panel">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <!-- Quick Filter Selects -->
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-1.5 text-muted small fw-semibold me-1">
+              <i class="bi bi-funnel-fill text-primary"></i> Filter:
+            </div>
+            <!-- AY Filter -->
+            <select class="form-select form-select-sm" id="clientFilterAY" onchange="App.applyClientFilters()" style="width:auto;min-width:125px;">
+              <option value="">All AYs</option>
+              <option value="2026-27">AY 2026-27</option>
+              <option value="2025-26">AY 2025-26</option>
+              <option value="2024-25">AY 2024-25</option>
+              <option value="2023-24">AY 2023-24</option>
+            </select>
+
+            <!-- Status Filter -->
+            <select class="form-select form-select-sm" id="clientFilterStatus" onchange="App.applyClientFilters()" style="width:auto;min-width:130px;">
+              <option value="">All Statuses</option>
+              <option value="refund">Refund Due</option>
+              <option value="payable">Tax Payable</option>
+              <option value="nil">Nil Tax</option>
+            </select>
+
+            <!-- ITR Type Filter -->
+            <select class="form-select form-select-sm" id="clientFilterType" onchange="App.applyClientFilters()" style="width:auto;min-width:145px;">
+              <option value="">All Forms</option>
+              <option value="salaried">ITR-1 (Salaried)</option>
+              <option value="business">ITR-4 (Business)</option>
+            </select>
+
+            <!-- Sort By -->
+            <select class="form-select form-select-sm" id="clientSortBy" onchange="App.applyClientFilters()" style="width:auto;min-width:140px;">
+              <option value="date-desc">Newest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="income-desc">Income (High-Low)</option>
+              <option value="refund-desc">Refund (High-Low)</option>
+            </select>
+
+            <!-- Reset Button -->
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-reset-client-filters" onclick="App.resetClientFilters()" title="Reset Filters" style="display:none;">
+              <i class="bi bi-x-circle me-1"></i>Reset
+            </button>
+          </div>
+
+          <!-- Right: View Switcher -->
+          <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small d-none d-md-inline" id="client-filter-summary"></span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Client View Mode">
+              <button type="button" class="btn btn-outline-primary active" id="btn-client-view-list" onclick="App.setClientViewMode('list')" title="High-Density Table / List View">
+                <i class="bi bi-table me-1"></i>List View
+              </button>
+              <button type="button" class="btn btn-outline-primary" id="btn-client-view-cards" onclick="App.setClientViewMode('cards')" title="Card Grid View">
+                <i class="bi bi-grid-fill me-1"></i>Card View
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Bulk Selection Toolbar -->
-      <div class="d-flex justify-content-between align-items-center mb-3 px-2 py-2 border rounded bg-surface-subtle" id="client-bulk-bar" style="font-size: 0.85rem;">
+      <div class="d-flex justify-content-between align-items-center mb-3 px-3 py-2 border rounded bg-surface-subtle" id="client-bulk-bar" style="font-size: 0.85rem;">
         <div class="form-check m-0 d-flex align-items-center gap-2">
           <input class="form-check-input" type="checkbox" id="selectAllClients" onchange="App.toggleSelectAllClients(this.checked)" />
           <label class="form-check-label fw-semibold cursor-pointer" for="selectAllClients">Select All</label>
         </div>
-        <div class="text-muted small" id="client-count-badge"></div>
+        <div class="d-flex align-items-center gap-3">
+          <div class="text-muted small" id="client-count-badge"></div>
+          <button class="btn btn-danger btn-sm py-0.5 px-2.5" id="btn-bulk-delete" onclick="App.bulkDeleteSelectedClients()" style="display:none;" title="Delete Selected Clients">
+            <i class="bi bi-trash-fill me-1"></i>Delete Selected (<span id="bulk-selected-count">0</span>)
+          </button>
+        </div>
       </div>
 
-      <!-- Client Cards Grid -->
-      <div class="client-grid" id="clientGrid" aria-live="polite"></div>
+      <!-- Client Rendering Target (Table List View or Card Grid View) -->
+      <div id="clientGrid" aria-live="polite"></div>
 
       <!-- Salary Slip Customers Container (when Salary Slip tab is active) -->
       <div id="salarySlipClientsContainer" style="display:none;" aria-live="polite"></div>

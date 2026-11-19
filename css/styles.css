@@ -3948,6 +3948,170 @@ body.modal-open {
 [data-theme="light"] .cc-action:hover { background: rgba(99,102,241,.06); }
 [data-theme="light"] .cc-action.cc-danger:hover { background: rgba(239,68,68,.06); }
 
+/* ── Refined Active Tax Clients List & Table View ────────── */
+.client-table-view {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.client-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.client-table {
+  width: 100%;
+  margin-bottom: 0;
+  font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.client-table thead th {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.client-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  transition: background 0.15s ease;
+}
+
+.client-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.client-table tbody tr:hover td {
+  background: var(--surface-active);
+}
+
+.client-table tr.selected-row td {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+.client-pan-code {
+  font-family: monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.client-ack-code {
+  font-family: monospace;
+  font-size: 11px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-copy-pan {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.btn-copy-pan:hover {
+  color: var(--primary-light);
+  background: var(--surface-subtle);
+}
+
+.cc-avatar-sm {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.cc-avatar-sm.success { background: linear-gradient(135deg, #10b981, #059669); }
+.cc-avatar-sm.danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.cc-avatar-sm.primary { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+.cc-avatar-sm.warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+.cc-avatar.success { background: linear-gradient(135deg, #10b981, #059669); }
+.cc-avatar.danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.cc-avatar.primary { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+
+.client-stat-card.cursor-pointer {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.client-stat-card.cursor-pointer:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.client-stat-card.active-stat-card {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+/* Light mode overrides for client list */
+[data-theme="light"] .client-table-responsive {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .client-table thead th {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .client-table tbody td {
+  border-color: #f1f5f9;
+  color: #1e293b;
+}
+
+[data-theme="light"] .client-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+[data-theme="light"] .client-pan-code {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+[data-theme="light"] .client-ack-code {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 @media (max-width: 768px) {
   .client-stats-row { grid-template-columns: repeat(2, 1fr); }
   .client-grid { grid-template-columns: 1fr; }

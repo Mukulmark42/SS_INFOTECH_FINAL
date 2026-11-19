@@ -2821,7 +2821,409 @@ Tax & Financial Consultancy Services`);
     }
   }
 
-  // ── Client Table ────────────────────────────────────────────
+  // ── Client Table & Active Clients List View ───────────────
+  let _clientViewMode = (typeof localStorage !== 'undefined' && localStorage.getItem('ssinfotech_client_view_mode')) || 'list';
+
+  function setClientViewMode(mode) {
+    _clientViewMode = mode;
+    try { localStorage.setItem('ssinfotech_client_view_mode', mode); } catch (e) {}
+    _updateClientViewModeButtons();
+    _renderClientTable();
+  }
+
+  function _updateClientViewModeButtons() {
+    const btnList = document.getElementById('btn-client-view-list');
+    const btnCards = document.getElementById('btn-client-view-cards');
+    if (btnList) btnList.classList.toggle('active', _clientViewMode === 'list');
+    if (btnCards) btnCards.classList.toggle('active', _clientViewMode === 'cards');
+  }
+
+  function _getFilteredClients() {
+    const isTrash = currentClientTab === 'trash';
+    let list = isTrash ? ((DB.trash && DB.trash()) || []) : DB.all();
+
+    const q = (document.getElementById('clientSearch')?.value || '').trim().toLowerCase();
+    if (q) {
+      list = list.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.pan || '').toLowerCase().includes(q) ||
+        (c.mobile || '').includes(q) ||
+        (c.ackNo || '').toLowerCase().includes(q) ||
+        (c.compNo || '').toLowerCase().includes(q) ||
+        (c.tradeName || c.bname || '').toLowerCase().includes(q) ||
+        (c.employerName || '').toLowerCase().includes(q) ||
+        (c.father || '').toLowerCase().includes(q)
+      );
+    }
+
+    const filterAY = (document.getElementById('clientFilterAY')?.value || '').trim();
+    if (filterAY) {
+      list = list.filter(c => (c.ay || '').trim() === filterAY);
+    }
+
+    const filterStatus = document.getElementById('clientFilterStatus')?.value || '';
+    if (filterStatus === 'refund') {
+      list = list.filter(c => (c.computation?.refund || 0) > 0);
+    } else if (filterStatus === 'payable') {
+      list = list.filter(c => (c.computation?.taxDue || 0) > 0);
+    } else if (filterStatus === 'nil') {
+      list = list.filter(c => (c.computation?.refund || 0) === 0 && (c.computation?.taxDue || 0) === 0);
+    }
+
+    const filterType = document.getElementById('clientFilterType')?.value || '';
+    if (filterType === 'salaried') {
+      list = list.filter(c => c.formNumber === 'ITR-1' || c.isSalaried || (c.incomeInputs && c.incomeInputs.isSalaried) || (c.computation?.grossSalary || 0) > 0);
+    } else if (filterType === 'business') {
+      list = list.filter(c => c.formNumber === 'ITR-4' || (!c.isSalaried && (c.presumptiveSection || c.nature || (c.turnover || 0) > 0)));
+    }
+
+    const sortBy = document.getElementById('clientSortBy')?.value || 'date-desc';
+    list.sort((a, b) => {
+      if (sortBy === 'name-asc') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'name-desc') return (b.name || '').localeCompare(a.name || '');
+      if (sortBy === 'income-desc') return ((b.computation?.totalIncome || 0) - (a.computation?.totalIncome || 0));
+      if (sortBy === 'income-asc') return ((a.computation?.totalIncome || 0) - (b.computation?.totalIncome || 0));
+      if (sortBy === 'refund-desc') {
+        const amtA = (a.computation?.refund || 0) - (a.computation?.taxDue || 0);
+        const amtB = (b.computation?.refund || 0) - (b.computation?.taxDue || 0);
+        return amtB - amtA;
+      }
+      if (sortBy === 'date-asc') return (a.createdAt || 0) - (b.createdAt || 0);
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    return list;
+  }
+
+  function applyClientFilters() {
+    _renderClientTable();
+  }
+
+  function resetClientFilters() {
+    const searchEl = document.getElementById('clientSearch');
+    if (searchEl) searchEl.value = '';
+    const ayEl = document.getElementById('clientFilterAY');
+    if (ayEl) ayEl.value = '';
+    const statusEl = document.getElementById('clientFilterStatus');
+    if (statusEl) statusEl.value = '';
+    const typeEl = document.getElementById('clientFilterType');
+    if (typeEl) typeEl.value = '';
+    const sortEl = document.getElementById('clientSortBy');
+    if (sortEl) sortEl.value = 'date-desc';
+    _renderClientTable();
+  }
+
+  function filterClientByStat(status) {
+    if (currentClientTab !== 'active') {
+      switchClientDbTab('active');
+    }
+    const statusEl = document.getElementById('clientFilterStatus');
+    if (statusEl) {
+      statusEl.value = (status === 'all') ? '' : status;
+    }
+    _renderClientTable();
+  }
+
+  function copyClientPAN(pan, btnEl) {
+    if (!pan) return;
+    const cleanPan = pan.trim().toUpperCase();
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cleanPan).then(() => {
+        if (btnEl) {
+          const orig = btnEl.innerHTML;
+          btnEl.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+          setTimeout(() => { btnEl.innerHTML = orig; }, 1500);
+        }
+        showCloudToast({
+          title: '📋 PAN Copied',
+          message: `PAN <strong>${cleanPan}</strong> copied to clipboard.`,
+          type: 'info',
+          delay: 2000
+        });
+      }).catch(() => {
+        prompt('Copy PAN:', cleanPan);
+      });
+    } else {
+      prompt('Copy PAN:', cleanPan);
+    }
+  }
+
+  function copyClientAckNo(ackNo, btnEl) {
+    if (!ackNo) return;
+    const cleanAck = String(ackNo).trim();
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cleanAck).then(() => {
+        if (btnEl) {
+          const orig = btnEl.innerHTML;
+          btnEl.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+          setTimeout(() => { btnEl.innerHTML = orig; }, 1500);
+        }
+        showCloudToast({
+          title: '📋 Ack No Copied',
+          message: `Acknowledgement No <strong>${cleanAck}</strong> copied.`,
+          type: 'info',
+          delay: 2000
+        });
+      }).catch(() => {
+        prompt('Copy Ack No:', cleanAck);
+      });
+    } else {
+      prompt('Copy Ack No:', cleanAck);
+    }
+  }
+
+  function _renderClientTableRowHtml(c, isTrash) {
+    const comp = c.computation || {};
+    const name = (c.name || 'Client').trim();
+    const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const isRefund = (comp.refund || 0) > 0;
+    const isPayable = (comp.taxDue || 0) > 0;
+    const statusClass = isRefund ? 'success' : isPayable ? 'danger' : 'primary';
+    const statusLabel = isRefund ? 'Refund' : isPayable ? 'Payable' : 'Nil Tax';
+    const statusAmt = isRefund ? comp.refund : isPayable ? comp.taxDue : 0;
+    const isChecked = selectedClientIds.has(c.id);
+
+    const isSal = (c.formNumber === 'ITR-1' || c.isSalaried || (c.incomeInputs && c.incomeInputs.isSalaried) || (comp.grossSalary || 0) > 0);
+    const formBadge = isSal
+      ? `<span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-2" style="font-size:11px;"><i class="bi bi-person-workspace me-1"></i>ITR-1 (Sahaj)</span>`
+      : `<span class="badge bg-warning-subtle text-warning border border-warning-subtle py-1 px-2" style="font-size:11px;"><i class="bi bi-shop me-1"></i>ITR-4 · ${_esc(c.presumptiveSection || '44AD')}</span>`;
+
+    const regimeBadge = c.regime === 'Old'
+      ? `<span class="badge bg-warning-subtle text-warning border border-warning-subtle" style="font-size:10px;">Old Regime</span>`
+      : `<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;">New Regime (115BAC)</span>`;
+
+    const tdsTotal = (c.tds && c.tds.totalTDS) || (c.incomeInputs && c.incomeInputs.salaryTds) || 0;
+    const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const deletedDate = c.deletedAt ? new Date(c.deletedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const cleanMobile = (c.mobile || '').replace(/\D/g, '');
+
+    return `
+      <tr class="${isChecked ? 'selected-row' : ''}" id="client-row-${c.id}">
+        <td class="text-center">
+          <input type="checkbox" class="form-check-input client-select-chk" value="${_esc(c.id)}" onchange="App.toggleClientSelect('${_esc(c.id)}', this.checked)" ${isChecked ? 'checked' : ''} aria-label="Select client" />
+        </td>
+        <td>
+          <div class="d-flex align-items-center gap-2.5">
+            <div class="cc-avatar-sm ${isTrash ? 'danger' : statusClass}">${initials}</div>
+            <div style="min-width:0">
+              <div class="fw-bold text-body text-truncate" style="max-width:200px; font-size:13.5px;" title="${_esc(name)}">${_esc(name)}</div>
+              <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                <code class="client-pan-code">${_esc(c.pan) || '—'}</code>
+                ${c.pan ? `<button type="button" class="btn-copy-pan" onclick="App.copyClientPAN('${_esc(c.pan)}', this)" title="Copy PAN"><i class="bi bi-copy"></i></button>` : ''}
+                ${c.father ? `<span class="text-muted small text-truncate d-none d-lg-inline" style="font-size:11px;" title="Father: ${_esc(c.father)}">· S/o ${_esc(c.father)}</span>` : (c.tradeName ? `<span class="text-muted small text-truncate d-none d-lg-inline" style="font-size:11px;" title="${_esc(c.tradeName)}">· ${_esc(c.tradeName)}</span>` : '')}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="d-flex flex-column align-items-start gap-1">
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace py-0.5 px-2" style="font-size:11px;">AY ${_esc(c.ay || '2026-27')}</span>
+            ${regimeBadge}
+          </div>
+        </td>
+        <td>
+          <div class="d-flex flex-column align-items-start gap-0.5">
+            ${formBadge}
+            ${c.employerName ? `<span class="text-muted small text-truncate" style="max-width:150px;font-size:10.5px;" title="${_esc(c.employerName)}"><i class="bi bi-building me-1"></i>${_esc(c.employerName)}</span>` : (c.bname ? `<span class="text-muted small text-truncate" style="max-width:150px;font-size:10.5px;" title="${_esc(c.bname)}"><i class="bi bi-briefcase me-1"></i>${_esc(c.bname)}</span>` : '')}
+          </div>
+        </td>
+        <td class="text-end">
+          <div class="fw-bold fs-6 text-body font-monospace">₹ ${((comp.totalIncome) || 0).toLocaleString('en-IN')}</div>
+          ${comp.grossSalary ? `<span class="text-muted small font-monospace" style="font-size:11px;">Gross: ₹ ${comp.grossSalary.toLocaleString('en-IN')}</span>` : (c.turnover ? `<span class="text-muted small font-monospace" style="font-size:11px;">Turnover: ₹ ${c.turnover.toLocaleString('en-IN')}</span>` : '')}
+        </td>
+        <td class="text-center">
+          ${isTrash ? `
+            <div class="badge bg-danger-subtle text-danger border border-danger-subtle py-1 px-2.5 rounded-pill" style="font-size:11px;">
+              <i class="bi bi-trash3 me-1"></i>Deleted ${deletedDate}
+            </div>
+          ` : `
+            <div class="badge bg-${statusClass}-subtle text-${statusClass} border border-${statusClass}-subtle py-1.5 px-2.5 rounded-pill fw-bold text-nowrap" style="font-size:11.5px;">
+              <i class="bi ${isRefund ? 'bi-arrow-down-left' : isPayable ? 'bi-arrow-up-right' : 'bi-check-circle'} me-1"></i>
+              ${statusLabel} ${statusAmt > 0 ? '₹ ' + statusAmt.toLocaleString('en-IN') : ''}
+            </div>
+            ${tdsTotal > 0 ? `<div class="text-muted small mt-0.5 text-nowrap" style="font-size:10.5px;">TDS: ₹ ${tdsTotal.toLocaleString('en-IN')}</div>` : ''}
+          `}
+        </td>
+        <td>
+          <div class="d-flex flex-column align-items-start gap-0.5">
+            <div class="d-flex align-items-center gap-1">
+              <code class="client-ack-code">${_esc(c.ackNo || '—')}</code>
+              ${c.ackNo ? `<button type="button" class="btn-copy-pan" onclick="App.copyClientAckNo('${_esc(c.ackNo)}', this)" title="Copy Ack No"><i class="bi bi-copy"></i></button>` : ''}
+            </div>
+            <span class="text-muted small" style="font-size:10.5px;">u/s ${_esc(c.filing || '139(1)')} · ${date}</span>
+          </div>
+        </td>
+        <td>
+          ${c.mobile ? `
+            <div class="d-flex align-items-center gap-1">
+              <a href="tel:${cleanMobile}" class="text-body font-monospace small text-decoration-none" title="Call client">${_esc(c.mobile)}</a>
+              <a href="https://wa.me/91${cleanMobile}" target="_blank" class="text-success small p-0.5" title="Chat on WhatsApp"><i class="bi bi-whatsapp"></i></a>
+            </div>
+          ` : '<span class="text-muted small">—</span>'}
+          ${c.email ? `<span class="text-muted small text-truncate d-block" style="max-width:120px;font-size:10px;" title="${_esc(c.email)}">${_esc(c.email)}</span>` : ''}
+        </td>
+        <td class="text-end text-nowrap">
+          ${isTrash ? `
+            <button class="btn btn-sm btn-outline-success py-1 px-2" title="Restore to Active Database" onclick="App.restoreClient('${_esc(c.id)}')">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
+            </button>
+            <button class="btn btn-sm btn-outline-danger py-1 px-2" title="Delete Permanently" onclick="App.permanentDeleteClient('${_esc(c.id)}')">
+              <i class="bi bi-trash-fill"></i>
+            </button>
+          ` : `
+            <button class="btn btn-sm btn-outline-success py-1 px-2" title="Print Tax Computation" onclick="App.printClient('${_esc(c.id)}')">
+              <i class="bi bi-printer-fill me-1"></i>Comp
+            </button>
+            <button class="btn btn-sm btn-outline-primary py-1 px-2" title="Print ITR-V Acknowledgement" onclick="App.printClientAck('${_esc(c.id)}')">
+              <i class="bi bi-file-earmark-check-fill me-1"></i>Ack
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-1 px-1.5" title="Edit Computation" onclick="App.editClient('${_esc(c.id)}')">
+              <i class="bi bi-pencil-fill"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-1 px-1.5" title="Duplicate Client" onclick="App.duplicateClient('${_esc(c.id)}')">
+              <i class="bi bi-copy"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-1 px-1.5" title="Download JSON" onclick="App.downloadClientRecord('${_esc(c.id)}')">
+              <i class="bi bi-download"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger py-1 px-1.5" title="Move to Recycle Bin" onclick="App.deleteClient('${_esc(c.id)}')">
+              <i class="bi bi-trash-fill"></i>
+            </button>
+          `}
+        </td>
+      </tr>
+    `;
+  }
+
+  function _renderClientCardHtml(c, isTrash) {
+    const comp = c.computation || {};
+    const name = (c.name || 'Client').trim();
+    const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const isRefund = (comp.refund || 0) > 0;
+    const isPayable = (comp.taxDue || 0) > 0;
+    const statusClass = isRefund ? 'success' : isPayable ? 'danger' : 'primary';
+    const statusLabel = isRefund ? 'Refund' : isPayable ? 'Payable' : 'Nil Tax';
+    const statusAmt = isRefund ? comp.refund : isPayable ? comp.taxDue : 0;
+    const isChecked = selectedClientIds.has(c.id);
+
+    const isSal = (c.formNumber === 'ITR-1' || c.isSalaried || (c.incomeInputs && c.incomeInputs.isSalaried) || (comp.grossSalary || 0) > 0);
+    const formBadge = isSal
+      ? `<span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:10.5px;"><i class="bi bi-person-workspace me-1"></i>ITR-1 (Sahaj)</span>`
+      : `<span class="badge bg-warning-subtle text-warning border border-warning-subtle" style="font-size:10.5px;"><i class="bi bi-shop me-1"></i>ITR-4 · ${_esc(c.presumptiveSection || '44AD')}</span>`;
+
+    const regimeBadge = c.regime === 'Old'
+      ? `<span class="badge bg-warning-subtle text-warning border border-warning-subtle" style="font-size:10px;">Old Regime</span>`
+      : `<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;">New Regime</span>`;
+
+    const tdsTotal = (c.tds && c.tds.totalTDS) || (c.incomeInputs && c.incomeInputs.salaryTds) || 0;
+    const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const deletedDate = c.deletedAt ? new Date(c.deletedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const cleanMobile = (c.mobile || '').replace(/\D/g, '');
+
+    return `
+      <div class="client-card ${isChecked ? 'selected-card' : ''}" id="client-card-${c.id}">
+        <!-- Card Header -->
+        <div class="cc-header">
+          <div class="d-flex align-items-center gap-2">
+            <input type="checkbox" class="form-check-input client-select-chk" value="${_esc(c.id)}" onchange="App.toggleClientSelect('${_esc(c.id)}', this.checked)" ${isChecked ? 'checked' : ''} aria-label="Select client" />
+            <div class="cc-avatar ${isTrash ? 'danger' : statusClass}">${initials}</div>
+          </div>
+          <div class="cc-info">
+            <div class="cc-name" title="${_esc(name)}">${_esc(name)}</div>
+            <div class="d-flex align-items-center gap-1.5 mt-0.5">
+              <code class="client-pan-code">${_esc(c.pan) || '—'}</code>
+              ${c.pan ? `<button type="button" class="btn-copy-pan" onclick="App.copyClientPAN('${_esc(c.pan)}', this)" title="Copy PAN"><i class="bi bi-copy"></i></button>` : ''}
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace py-0.5 px-1.5" style="font-size:10px;">AY ${_esc(c.ay || '2026-27')}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Badges Row -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-2.5">
+          <div class="d-flex align-items-center gap-1">
+            ${formBadge}
+            ${regimeBadge}
+          </div>
+          ${c.father ? `<span class="text-muted small text-truncate" style="font-size:10.5px;max-width:140px;" title="Father: ${_esc(c.father)}">S/o ${_esc(c.father)}</span>` : (c.tradeName ? `<span class="text-muted small text-truncate" style="font-size:10.5px;max-width:140px;" title="${_esc(c.tradeName)}">${_esc(c.tradeName)}</span>` : '')}
+        </div>
+
+        <!-- Financial Highlight Box -->
+        <div class="client-card-finance mb-2.5 p-2.5 rounded-3 d-flex justify-content-between align-items-center" style="background:var(--surface-subtle);border:1px solid var(--border);">
+          <div>
+            <div class="text-muted text-uppercase" style="font-size:9.5px;letter-spacing:0.05em;font-weight:700;">Taxable Total Income</div>
+            <div class="fw-bold fs-6 text-body font-monospace">₹ ${((comp.totalIncome) || 0).toLocaleString('en-IN')}</div>
+            ${comp.grossSalary ? `<div class="text-muted" style="font-size:10px;">Gross: ₹ ${comp.grossSalary.toLocaleString('en-IN')}</div>` : (c.turnover ? `<div class="text-muted" style="font-size:10px;">Turnover: ₹ ${c.turnover.toLocaleString('en-IN')}</div>` : '')}
+          </div>
+          <div class="text-end">
+            ${isTrash ? `
+              <div class="badge bg-danger-subtle text-danger border border-danger-subtle py-1 px-2" style="font-size:11px;">
+                <i class="bi bi-trash3 me-1"></i>Deleted ${deletedDate}
+              </div>
+            ` : `
+              <div class="badge bg-${statusClass}-subtle text-${statusClass} border border-${statusClass}-subtle py-1.5 px-2.5 rounded-pill fw-bold" style="font-size:11.5px;">
+                <i class="bi ${isRefund ? 'bi-arrow-down-left' : isPayable ? 'bi-arrow-up-right' : 'bi-check-circle'} me-1"></i>
+                ${statusLabel} ${statusAmt > 0 ? '₹ ' + statusAmt.toLocaleString('en-IN') : ''}
+              </div>
+              ${tdsTotal > 0 ? `<div class="text-muted mt-0.5" style="font-size:10px;">TDS: ₹ ${tdsTotal.toLocaleString('en-IN')}</div>` : ''}
+            `}
+          </div>
+        </div>
+
+        <!-- Meta Details -->
+        <div class="d-flex align-items-center justify-content-between text-muted small mb-1.5" style="font-size:11px;">
+          <span>
+            ${c.mobile ? `
+              <i class="bi bi-telephone me-1 text-primary"></i>
+              <a href="tel:${cleanMobile}" class="text-body text-decoration-none font-monospace">${_esc(c.mobile)}</a>
+              <a href="https://wa.me/91${cleanMobile}" target="_blank" class="text-success ms-1" title="Chat on WhatsApp"><i class="bi bi-whatsapp"></i></a>
+            ` : '<span>—</span>'}
+          </span>
+          <span><i class="bi bi-calendar3 me-1"></i>${date}</span>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-between text-muted small" style="font-size:11px;">
+          <span class="text-truncate" style="max-width:180px;">
+            <i class="bi bi-shield-check me-1 text-info"></i>Ack:
+            <code class="client-ack-code font-monospace">${_esc(c.ackNo || '—')}</code>
+            ${c.ackNo ? `<button type="button" class="btn-copy-pan" onclick="App.copyClientAckNo('${_esc(c.ackNo)}', this)" title="Copy Ack No"><i class="bi bi-copy"></i></button>` : ''}
+          </span>
+          <span class="badge bg-surface-subtle text-muted border border-border" style="font-size:10px;">u/s ${_esc(c.filing || '139(1)')}</span>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="d-flex align-items-center gap-1.5 mt-3 pt-2 border-top">
+          ${isTrash ? `
+            <button class="btn btn-sm btn-outline-success py-1 px-3 flex-fill d-flex align-items-center justify-content-center gap-1" title="Restore to Active Database" onclick="App.restoreClient('${_esc(c.id)}')">
+              <i class="bi bi-arrow-counterclockwise"></i> Restore
+            </button>
+            <button class="btn btn-sm btn-outline-danger py-1 px-3 flex-fill d-flex align-items-center justify-content-center gap-1" title="Delete Permanently" onclick="App.permanentDeleteClient('${_esc(c.id)}')">
+              <i class="bi bi-trash-fill"></i> Delete Permanently
+            </button>
+          ` : `
+            <button class="btn btn-sm btn-outline-success py-1 px-2 flex-fill" title="Print Tax Computation" onclick="App.printClient('${_esc(c.id)}')">
+              <i class="bi bi-printer-fill me-1"></i>Comp
+            </button>
+            <button class="btn btn-sm btn-outline-primary py-1 px-2 flex-fill" title="Print ITR-V Acknowledgement" onclick="App.printClientAck('${_esc(c.id)}')">
+              <i class="bi bi-file-earmark-check-fill me-1"></i>Ack
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-1 px-1.5" title="Edit Computation" onclick="App.editClient('${_esc(c.id)}')">
+              <i class="bi bi-pencil-fill"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-1 px-1.5" title="Duplicate Client" onclick="App.duplicateClient('${_esc(c.id)}')">
+              <i class="bi bi-copy"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-1 px-1.5" title="Download JSON" onclick="App.downloadClientRecord('${_esc(c.id)}')">
+              <i class="bi bi-download"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger py-1 px-1.5" title="Move to Recycle Bin" onclick="App.deleteClient('${_esc(c.id)}')">
+              <i class="bi bi-trash-fill"></i>
+            </button>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
   function _renderClientTable(data) {
     const isTrash = currentClientTab === 'trash';
     const allActive = DB.all();
@@ -2849,12 +3251,7 @@ Tax & Financial Consultancy Services`);
         : `<i class="bi bi-trash3 me-1"></i>Move to Trash (<span id="bulk-selected-count">${selectedClientIds.size}</span>)`;
     }
 
-    const clients = data || (isTrash ? allTrash : allActive);
-    const grid    = document.getElementById('clientGrid');
-    const noMsg   = document.getElementById('no-clients');
-    const tbody   = document.getElementById('clientTbody');
-
-    // Update stats
+    // Update KPI stat numbers
     const csTotal = document.getElementById('cs-total');
     const csRefund = document.getElementById('cs-refund');
     const csPayable = document.getElementById('cs-payable');
@@ -2864,96 +3261,99 @@ Tax & Financial Consultancy Services`);
     if (csPayable) csPayable.textContent = allActive.filter(c => (c.computation?.taxDue || 0) > 0).length;
     if (csNil) csNil.textContent = allActive.filter(c => (c.computation?.refund || 0) === 0 && (c.computation?.taxDue || 0) === 0).length;
 
+    // Highlight stat cards if status filter matches
+    const curStatus = document.getElementById('clientFilterStatus')?.value || '';
+    const statCards = document.querySelectorAll('.client-stats-row .client-stat-card');
+    if (statCards.length >= 4) {
+      statCards[0].classList.toggle('active-stat-card', curStatus === '');
+      statCards[1].classList.toggle('active-stat-card', curStatus === 'refund');
+      statCards[2].classList.toggle('active-stat-card', curStatus === 'payable');
+      statCards[3].classList.toggle('active-stat-card', curStatus === 'nil');
+    }
+
+    const clients = data || _getFilteredClients();
+    const grid    = document.getElementById('clientGrid');
+    const noMsg   = document.getElementById('no-clients');
+    const tbody   = document.getElementById('clientTbody');
+
+    // Show/hide reset button
+    const hasFilter = (document.getElementById('clientSearch')?.value || '') !== '' ||
+                      (document.getElementById('clientFilterAY')?.value || '') !== '' ||
+                      (document.getElementById('clientFilterStatus')?.value || '') !== '' ||
+                      (document.getElementById('clientFilterType')?.value || '') !== '' ||
+                      (document.getElementById('clientSortBy')?.value || 'date-desc') !== 'date-desc';
+    const resetBtn = document.getElementById('btn-reset-client-filters');
+    if (resetBtn) resetBtn.style.display = hasFilter ? 'inline-block' : 'none';
+
+    // Update filter summary text
+    const summaryEl = document.getElementById('client-filter-summary');
+    if (summaryEl) {
+      const totalIncome = clients.reduce((sum, c) => sum + (c.computation?.totalIncome || 0), 0);
+      const totalRefund = clients.reduce((sum, c) => sum + (c.computation?.refund || 0), 0);
+      summaryEl.textContent = `${clients.length} of ${isTrash ? allTrash.length : allActive.length} Active Clients | Total Income: ₹ ${totalIncome.toLocaleString('en-IN')}${totalRefund > 0 ? ` | Refunds: ₹ ${totalRefund.toLocaleString('en-IN')}` : ''}`;
+    }
+
+    _updateClientViewModeButtons();
+
     if (!clients.length) {
       if (grid) grid.innerHTML = '';
       if (noMsg) {
         noMsg.style.display = 'block';
         const titleEl = noMsg.querySelector('.empty-title');
         const subEl = noMsg.querySelector('.empty-sub');
-        if (titleEl) titleEl.textContent = isTrash ? 'Recycle Bin is empty' : 'No clients found';
-        if (subEl) subEl.textContent = isTrash ? 'Deleted clients will appear here and can be restored' : 'Create your first computation to get started';
+        if (titleEl) titleEl.textContent = isTrash ? 'Recycle Bin is empty' : (hasFilter ? 'No matching clients found' : 'No clients found');
+        if (subEl) subEl.textContent = isTrash ? 'Deleted clients will appear here and can be restored' : (hasFilter ? 'Try clearing or modifying your search / filter criteria' : 'Create your first computation to get started');
         const createBtn = noMsg.querySelector('button');
         if (createBtn) createBtn.style.display = isTrash ? 'none' : 'inline-block';
       }
       if (tbody) tbody.innerHTML = '';
+      _updateBulkSelectionUI(clients);
       return;
     }
     if (noMsg) noMsg.style.display = 'none';
 
-    // Render cards
-    if (grid) {
-      grid.innerHTML = clients.map((c, i) => {
-        const comp = c.computation || {};
-        const name = (c.name || 'C').toUpperCase();
-        const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-        const isRefund = (comp.refund || 0) > 0;
-        const isPayable = (comp.taxDue || 0) > 0;
-        const statusClass = isRefund ? 'success' : isPayable ? 'danger' : 'primary';
-        const statusLabel = isRefund ? 'Refund' : isPayable ? 'Payable' : 'Nil';
-        const statusAmt = isRefund ? comp.refund : isPayable ? comp.taxDue : 0;
-        const compNo = c.compNo || '—';
-        const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-        const deletedDate = c.deletedAt ? new Date(c.deletedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
-        const isChecked = selectedClientIds.has(c.id);
-
-        return `
-          <div class="client-card ${isChecked ? 'selected-card' : ''}" id="client-card-${c.id}">
-            <div class="cc-header">
-              <div class="d-flex align-items-center gap-2">
-                <input type="checkbox" class="form-check-input client-select-chk" value="${_esc(c.id)}" onchange="App.toggleClientSelect('${_esc(c.id)}', this.checked)" ${isChecked ? 'checked' : ''} aria-label="Select client" />
-                <div class="cc-avatar" style="background:${isTrash ? '#ef4444' : 'var(--primary)'};color:#fff">${initials}</div>
-              </div>
-              <div class="cc-info">
-                <div class="cc-name">${_esc(name)}</div>
-                <div class="cc-pan"><code>${_esc(c.pan) || '—'}</code></div>
-              </div>
-              ${isTrash ? `
-                <div class="badge bg-danger">
-                  <i class="bi bi-trash3-fill me-1"></i>Deleted ${deletedDate}
-                </div>
-              ` : `
-                <div class="cc-badge badge-${statusClass}">
-                  <i class="bi ${isRefund ? 'bi-arrow-down-left' : isPayable ? 'bi-arrow-up-right' : 'bi-check-circle'}"></i>
-                  ${statusLabel}
-                  ${statusAmt > 0 ? ' ₹' + statusAmt.toLocaleString('en-IN') : ''}
-                </div>
-              `}
-            </div>
-            <div class="cc-body">
-              <div class="cc-row"><span class="cc-label">AY</span><span class="cc-val">${_esc(c.ay) || '—'}</span></div>
-              <div class="cc-row"><span class="cc-label">Section</span><span class="cc-val">${_esc(c.presumptiveSection || (c.nature ? '44AD' : '—'))}</span></div>
-              <div class="cc-row"><span class="cc-label">Income</span><span class="cc-val">₹ ${((comp.totalIncome)||0).toLocaleString('en-IN')}</span></div>
-              <div class="cc-row"><span class="cc-label">Mobile</span><span class="cc-val">${_esc(c.mobile) || '—'}</span></div>
-              <div class="cc-row"><span class="cc-label">Filed</span><span class="cc-val">${_esc(c.filing) || '139(1)'}</span></div>
-              <div class="cc-row"><span class="cc-label">Ack No</span><span class="cc-val" style="font-size:10px;color:var(--text-muted);font-family:monospace;">${_esc(c.ackNo || '—')}</span></div>
-              <div class="cc-row"><span class="cc-label">Ref No</span><span class="cc-val" style="font-size:10px;color:var(--text-muted)">${_esc(compNo)}</span></div>
-              <div class="cc-row"><span class="cc-label">Date</span><span class="cc-val" style="font-size:10px;color:var(--text-muted)">${date}</span></div>
-            </div>
-            <div class="cc-footer">
-              ${isTrash ? `
-                <button class="btn btn-sm btn-outline-success py-1 px-3 d-flex align-items-center gap-1" title="Restore to Active Database" onclick="App.restoreClient('${_esc(c.id)}')">
-                  <i class="bi bi-arrow-counterclockwise"></i> Restore
-                </button>
-                <button class="btn btn-sm btn-outline-danger py-1 px-3 d-flex align-items-center gap-1" title="Delete Permanently" onclick="App.permanentDeleteClient('${_esc(c.id)}')">
-                  <i class="bi bi-trash-fill"></i> Delete Permanently
-                </button>
-              ` : `
-                <button class="cc-action" title="Edit" onclick="App.editClient('${_esc(c.id)}')"><i class="bi bi-pencil-fill"></i></button>
-                <button class="cc-action" title="Print Computation" onclick="App.printClient('${_esc(c.id)}')"><i class="bi bi-printer-fill"></i></button>
-                <button class="cc-action" title="Print ITR Acknowledgement" onclick="App.printClientAck('${_esc(c.id)}')"><i class="bi bi-file-earmark-check-fill" style="color:var(--primary)"></i></button>
-                <button class="cc-action" title="Download JSON" onclick="App.downloadClientRecord('${_esc(c.id)}')"><i class="bi bi-download"></i></button>
-                <button class="cc-action" title="Duplicate" onclick="App.duplicateClient('${_esc(c.id)}')"><i class="bi bi-copy"></i></button>
-                <button class="cc-action cc-danger" title="Move to Recycle Bin" onclick="App.deleteClient('${_esc(c.id)}')"><i class="bi bi-trash-fill"></i></button>
-              `}
-            </div>
+    // RENDER: Either Dense List/Table View or Card Grid View
+    if (_clientViewMode === 'list') {
+      if (grid) {
+        grid.className = 'client-table-view';
+        grid.style.display = 'block';
+        grid.innerHTML = `
+          <div class="client-table-responsive">
+            <table class="client-table table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width:38px;" class="text-center">
+                    <input type="checkbox" class="form-check-input" id="selectAllClientsHeader" onchange="App.toggleSelectAllClients(this.checked)" aria-label="Select all" />
+                  </th>
+                  <th style="min-width:210px;">Client Name &amp; PAN</th>
+                  <th style="min-width:130px;">AY &amp; Regime</th>
+                  <th style="min-width:140px;">ITR Form &amp; Section</th>
+                  <th class="text-end" style="min-width:130px;">Total Income</th>
+                  <th class="text-center" style="min-width:135px;">Tax Result</th>
+                  <th style="min-width:145px;">Ack No &amp; Filing</th>
+                  <th style="min-width:125px;">Contact</th>
+                  <th class="text-end" style="min-width:160px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${clients.map(c => _renderClientTableRowHtml(c, isTrash)).join('')}
+              </tbody>
+            </table>
           </div>
         `;
-      }).join('');
+      }
+    } else {
+      // Card Grid View
+      if (grid) {
+        grid.className = 'client-grid';
+        grid.style.display = 'grid';
+        grid.innerHTML = clients.map(c => _renderClientCardHtml(c, isTrash)).join('');
+      }
     }
 
     _updateBulkSelectionUI(clients);
 
-    // Keep hidden tbody in sync for compatibility
+    // Keep hidden tbody in sync for data compatibility
     if (tbody) {
       tbody.innerHTML = clients.map((c, i) => {
         const comp = c.computation || {};
@@ -2970,6 +3370,7 @@ Tax & Financial Consultancy Services`);
     const salaryBtn = document.getElementById('tab-clients-salary');
     const trashBtn  = document.getElementById('tab-clients-trash');
     const trashBar  = document.getElementById('trash-actions-bar');
+    const filterPanel = document.getElementById('client-filter-panel');
     const bulkBar   = document.getElementById('client-bulk-bar');
     const clientGrid = document.getElementById('clientGrid');
     const noClients = document.getElementById('no-clients');
@@ -2981,6 +3382,7 @@ Tax & Financial Consultancy Services`);
     if (trashBar)  trashBar.style.display = tab === 'trash' ? 'flex' : 'none';
 
     if (tab === 'salary-slip') {
+      if (filterPanel) filterPanel.style.display = 'none';
       if (bulkBar) bulkBar.style.display = 'none';
       if (clientGrid) clientGrid.style.display = 'none';
       if (noClients) noClients.style.display = 'none';
@@ -2989,9 +3391,10 @@ Tax & Financial Consultancy Services`);
         _renderSalarySlipClientsInMainView();
       }
     } else {
+      if (filterPanel) filterPanel.style.display = 'block';
       if (salaryContainer) salaryContainer.style.display = 'none';
       if (bulkBar) bulkBar.style.display = 'flex';
-      if (clientGrid) clientGrid.style.display = 'grid';
+      if (clientGrid) clientGrid.style.display = 'block';
       _renderClientTable();
     }
   }
@@ -3044,11 +3447,15 @@ Tax & Financial Consultancy Services`);
     if (card) {
       card.classList.toggle('selected-card', isChecked);
     }
+    const row = document.getElementById(`client-row-${id}`);
+    if (row) {
+      row.classList.toggle('selected-row', isChecked);
+    }
     _updateBulkSelectionUI();
   }
 
   function toggleSelectAllClients(checked) {
-    const clients = DB.search(document.getElementById('clientSearch')?.value || '');
+    const clients = _getFilteredClients();
     if (checked) {
       clients.forEach(c => selectedClientIds.add(c.id));
     } else {
@@ -3058,22 +3465,28 @@ Tax & Financial Consultancy Services`);
   }
 
   function _updateBulkSelectionUI(currentClients) {
-    const clients = currentClients || DB.search(document.getElementById('clientSearch')?.value || '');
+    const clients = currentClients || _getFilteredClients();
     const count = selectedClientIds.size;
     const btnBulk = document.getElementById('btn-bulk-delete');
     const badgeCount = document.getElementById('bulk-selected-count');
     const totalBadge = document.getElementById('client-count-badge');
     const selectAllChk = document.getElementById('selectAllClients');
+    const selectAllHeader = document.getElementById('selectAllClientsHeader');
 
     if (btnBulk) btnBulk.style.display = count > 0 ? 'inline-block' : 'none';
     if (badgeCount) badgeCount.textContent = count;
     if (totalBadge) {
-      totalBadge.textContent = count > 0 ? `${count} of ${clients.length} selected` : `${clients.length} clients total`;
+      totalBadge.textContent = count > 0 ? `${count} of ${clients.length} selected` : `${clients.length} Active Clients total`;
     }
     if (selectAllChk && clients.length > 0) {
       const allSelected = clients.every(c => selectedClientIds.has(c.id));
       selectAllChk.checked = allSelected;
       selectAllChk.indeterminate = count > 0 && !allSelected;
+    }
+    if (selectAllHeader && clients.length > 0) {
+      const allSelected = clients.every(c => selectedClientIds.has(c.id));
+      selectAllHeader.checked = allSelected;
+      selectAllHeader.indeterminate = count > 0 && !allSelected;
     }
   }
 
@@ -3120,8 +3533,7 @@ Tax & Financial Consultancy Services`);
       _renderSalarySlipClientsInMainView();
       return;
     }
-    const q = document.getElementById('clientSearch')?.value || '';
-    _renderClientTable(DB.search(q));
+    _renderClientTable();
   }
 
   function editClient(id) {
@@ -8758,7 +9170,8 @@ Tax & Financial Consultancy Services`);
     downloadReportPdf, shareWhatsApp, shareEmail,
     handleAisJsonUpload,
     saveClient,
-    searchClients, editClient, deleteClient, duplicateClient, printClient, printClientAck,
+    searchClients, applyClientFilters, resetClientFilters, filterClientByStat, setClientViewMode, copyClientPAN, copyClientAckNo,
+    editClient, deleteClient, duplicateClient, printClient, printClientAck,
     switchClientDbTab, restoreClient, permanentDeleteClient, restoreSelectedClients, emptyTrash,
     toggleSelectAllClients, toggleClientSelect, bulkDeleteSelectedClients, exportClientsCSV,
     openCommandPalette, handleCommandPaletteSearch, runPaletteAction, openClientFromPalette,
